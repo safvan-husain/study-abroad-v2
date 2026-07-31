@@ -7,6 +7,7 @@
   "type": "module",
   "scripts": {
     "agent:dev": "pnpm --filter @study-abroad/agent-server agent:dev",
+    "agent:clone-thread": "tsx scripts/clone-langsmith-thread.ts",
     "agent:smoke": "tsx scripts/agent-observability.ts",
     "agent:trace:smoke": "LANGSMITH_TRACING=true tsx scripts/agent-observability.ts",
     "agent:test": "pnpm --filter @study-abroad/agent-server test",
