@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "agent:dev": "langgraphjs dev --config langgraph.json --no-browser",
-    "test": "vitest run --root ../.. test/agent-observability.test.ts",
+    "test": "vitest run --root ../.. test/agent-observability.test.ts test/agent-chat.test.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {

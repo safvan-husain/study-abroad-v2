@@ -1,26 +1,49 @@
 import { Annotation, END, START, StateGraph } from "@langchain/langgraph";
+import { randomUUID } from "node:crypto";
+
+import type { ChatMessage } from "./contracts.js";
 
 export const AgentState = Annotation.Root({
-  input: Annotation<string>({
+  input: Annotation<string>({ default: () => "", reducer: (_current, update) => update }),
+  runCount: Annotation<number>({ default: () => 0, reducer: (current, update) => current + update }),
+  output: Annotation<string>({ default: () => "", reducer: (_current, update) => update }),
+  conversationId: Annotation<string>({
     default: () => "",
     reducer: (_current, update) => update,
   }),
-  runCount: Annotation<number>({
-    default: () => 0,
-    reducer: (current, update) => current + update,
+  messages: Annotation<ChatMessage[]>({
+    default: () => [],
+    reducer: (_current, update) => update,
   }),
-  output: Annotation<string>({
-    default: () => "",
+  assistantMessage: Annotation<ChatMessage | undefined>({
+    default: () => undefined,
+    reducer: (_current, update) => update,
+  }),
+  turn: Annotation<number>({
+    default: () => 0,
     reducer: (_current, update) => update,
   }),
 });
 
 function processInput(state: typeof AgentState.State) {
-  const nextRunCount = state.runCount + 1;
+  const lastUserMessage = [...state.messages].reverse().find((message) => message.role === "user");
+  if (!lastUserMessage && state.input) {
+    const nextRunCount = state.runCount + 1;
+    return { runCount: 1, output: `processed:${state.input}:run-${nextRunCount}` };
+  }
+  if (!lastUserMessage) throw new Error("A conversation turn requires at least one user message.");
+  const assistantMessage: ChatMessage = {
+    id: randomUUID(),
+    role: "assistant",
+    content: `I heard: ${lastUserMessage.content}`,
+    conversationId: state.conversationId,
+    createdAt: new Date().toISOString(),
+  };
 
   return {
-    runCount: 1,
-    output: `processed:${state.input}:run-${nextRunCount}`,
+    assistantMessage,
+    messages: [...state.messages, assistantMessage],
+    turn: state.turn + 1,
   };
 }
 

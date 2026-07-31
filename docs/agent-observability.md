@@ -10,7 +10,7 @@ Copy `.env.example` to `.env` at the repository root. Every Phase 1 process read
 
 When `LANGSMITH_TRACING=true`, every run receives the LangSmith-reserved `thread_id` metadata key. The value is the same UUIDv7 used to create the Agent Server thread. The smoke test queries that ID through LangSmith, verifies both root runs are grouped together, and verifies the graph's child runs carry the same thread metadata. Set `LANGSMITH_TRACING=false` to skip LangSmith verification and report `external_trace=not_configured`.
 
-The Agent Server thread and the LangSmith thread are related but separate concerns. Agent Server owns graph state and checkpoints; LangSmith groups traces only when every relevant run has `metadata.thread_id`. A LangSmith thread can reconstruct the trace chart and the inputs/outputs that were recorded for each run, but it does not replace Agent Server state. The current deterministic graph records a small string input and output rather than a conversation, so future chat graphs must include the intended message/context fields in their traced inputs and outputs if those need to be reconstructed in LangSmith.
+The Agent Server thread and the LangSmith thread are related but separate concerns. Agent Server owns graph state and checkpoints; LangSmith groups traces only when every relevant run has `metadata.thread_id`. A LangSmith thread can reconstruct the trace chart and the inputs/outputs that were recorded for each run, but it does not replace Agent Server state. The conversational graph records the ordered message list and assistant message in each run so a complete multi-turn thread can be inspected.
 
 ## Commands
 
@@ -33,6 +33,14 @@ pnpm agent:smoke
 ```
 
 The smoke creates a UUIDv7 thread, executes the configured graph twice through the Agent Server SDK, captures both run IDs, reads the final thread state, prints correlation metadata, and verifies LangSmith thread reconstruction when `LANGSMITH_TRACING=true`. It does not import or execute the graph directly.
+
+Run the multi-turn chat smoke against the same local Agent Server:
+
+```sh
+pnpm agent:chat:smoke
+```
+
+It creates one conversation/thread, sends two structured user turns, and prints the ordered user and assistant messages. The graph is invoked only through Agent Server.
 
 Run the integration test against the already running local Agent Server:
 

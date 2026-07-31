@@ -80,7 +80,7 @@ function readArgument(name: string) {
   return index >= 0 ? process.argv[index + 1] : undefined;
 }
 
-function studioUrl(agentUrl: string, graphId: string, threadId: string, organizationId?: string) {
+export function studioUrl(agentUrl: string, graphId: string, threadId: string, organizationId?: string) {
   const path = organizationId ? `/o/${organizationId}/studio/thread` : "/studio/thread";
   const url = new URL(path, "https://smith.langchain.com");
   url.searchParams.set("baseUrl", agentUrl);
@@ -88,6 +88,15 @@ function studioUrl(agentUrl: string, graphId: string, threadId: string, organiza
   url.searchParams.set("assistantId", graphId);
   url.searchParams.set("mode", "graph");
   return url.toString();
+}
+
+export function createCloneMetadata(sourceThreadId: string, projectName: string, sourceTurnCount: number) {
+  return {
+    clone_source: "langsmith_thread",
+    source_thread_id: sourceThreadId,
+    source_project: projectName,
+    source_turn_count: sourceTurnCount,
+  };
 }
 
 export async function cloneLangSmithThread(options: {
@@ -126,10 +135,7 @@ export async function cloneLangSmithThread(options: {
     graphId: options.graphId,
     supersteps: converted.supersteps,
     metadata: {
-      clone_source: "langsmith_thread",
-      source_thread_id: options.sourceThreadId,
-      source_project: options.projectName,
-      source_turn_count: rootRuns.length,
+      ...createCloneMetadata(options.sourceThreadId, options.projectName, rootRuns.length),
       cloned_at: new Date().toISOString(),
     },
   });
@@ -156,7 +162,7 @@ async function main() {
     projectName: readArgument("--project") ?? process.env.LANGSMITH_PROJECT ?? "study-abroad-v2-agents",
     apiKey,
     langSmithEndpoint: process.env.LANGSMITH_ENDPOINT ?? "https://api.smith.langchain.com",
-    agentUrl: readArgument("--agent-url") ?? process.env.AGENT_SERVER_URL ?? "http://localhost:2025",
+    agentUrl: readArgument("--agent-url") ?? process.env.AGENT_SERVER_URL ?? "http://localhost:2024",
     graphId: readArgument("--graph") ?? process.env.SMOKE_TEST_GRAPH_ID ?? "agent",
     organizationId: readArgument("--organization") ?? process.env.LANGSMITH_ORGANIZATION_ID,
   });

@@ -1,7 +1,7 @@
 import type { Run } from "langsmith";
 import { describe, expect, it } from "vitest";
 
-import { threadRunsToSupersteps } from "../scripts/clone-langsmith-thread.js";
+import { createCloneMetadata, studioUrl, threadRunsToSupersteps } from "../scripts/clone-langsmith-thread.js";
 
 function run(value: Partial<Run> & Pick<Run, "id" | "name">): Run {
   return value as Run;
@@ -54,5 +54,21 @@ describe("threadRunsToSupersteps", () => {
         { updates: [{ values: { runCount: 1, output: "run-2" }, asNode: "process_input" }] },
       ],
     });
+  });
+
+  it("preserves clone provenance and builds an Agent Studio URL", () => {
+    expect(createCloneMetadata("source-thread", "project", 2)).toEqual({
+      clone_source: "langsmith_thread",
+      source_thread_id: "source-thread",
+      source_project: "project",
+      source_turn_count: 2,
+    });
+
+    const url = new URL(studioUrl("http://localhost:2024", "agent", "clone-thread", "org-1"));
+    expect(url.pathname).toBe("/o/org-1/studio/thread");
+    expect(url.searchParams.get("baseUrl")).toBe("http://localhost:2024");
+    expect(url.searchParams.get("assistantId")).toBe("agent");
+    expect(url.searchParams.get("threadId")).toBe("clone-thread");
+    expect(url.searchParams.get("mode")).toBe("graph");
   });
 });

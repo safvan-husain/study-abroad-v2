@@ -8,5 +8,12 @@
     "skipLibCheck": true,
     "types": ["node", "vitest/globals"]
   },
-  "include": ["../../scripts/agent-observability.ts", "../../test/agent-observability.test.ts"]
+  "include": [
+    "../../scripts/agent-observability.ts",
+    "../../scripts/agent-chat-smoke.ts",
+    "../../scripts/clone-langsmith-thread.ts",
+    "../../test/agent-observability.test.ts",
+    "../../test/agent-chat.test.ts",
+    "../../test/clone-langsmith-thread.test.ts"
+  ]
 }
