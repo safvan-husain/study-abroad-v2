@@ -2,3 +2,10 @@
 node_modules/
 dist/
 tmp/
+
+# Riptide artifacts (cloud-synced)
+.humanlayer/tasks/
+
+.env
+.langgraph_api/
+.langgraph/
