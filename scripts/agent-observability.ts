@@ -118,7 +118,7 @@ async function runGraph(
 ) {
   let runId: string | undefined;
   const output = await client.runs.wait(threadId, assistantId, {
-    input: { input },
+    input: { messages: [{ role: "human", content: input }] },
     metadata,
     multitaskStrategy: "reject",
     onRunCreated: (run) => {

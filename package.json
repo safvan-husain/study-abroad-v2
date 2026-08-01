@@ -15,7 +15,7 @@
     "agent:integration:test": "bash scripts/test-python-agent-server.sh",
     "trace:clone:test": "vitest run test/clone-langsmith-thread.test.ts",
     "agent:test": "pnpm --filter @study-abroad/agent-server test",
-    "typecheck": "pnpm --filter @study-abroad/agent-graph typecheck",
+    "typecheck": "pnpm --filter @study-abroad/agent-server typecheck",
     "test": "pnpm agent:python:test && pnpm agent:integration:test"
   },
   "devDependencies": {

@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "agent:dev": "uv run langgraph dev --config langgraph.json --host 127.0.0.1 --port 2024 --no-browser",
-    "test": "vitest run --root ../.. test/agent-chat.test.ts test/clone-langsmith-thread.test.ts",
+    "test": "vitest run --root ../.. test/agent-observability.test.ts test/agent-chat.test.ts test/clone-langsmith-thread.test.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {

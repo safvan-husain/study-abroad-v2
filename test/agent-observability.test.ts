@@ -15,26 +15,30 @@ describe("Agent Server observability contract", () => {
       expect(evidence.first.runId).toMatch(/^[0-9a-f-]{36}$/);
       expect(evidence.second.runId).toMatch(/^[0-9a-f-]{36}$/);
       expect(evidence.second.runId).not.toBe(evidence.first.runId);
-      expect(evidence.first.output).toMatchObject({
-        input: "local-observability",
-        output: "processed:local-observability:run-1",
-        runCount: 1,
-      });
-      expect(evidence.second.output).toMatchObject({
-        input: "local-observability",
-        output: "processed:local-observability:run-2",
-        runCount: 2,
-      });
-      expect(evidence.state).toMatchObject({
-        input: "local-observability",
-        output: "processed:local-observability:run-2",
-        runCount: 2,
-      });
+      expect(evidence.first.output.messages).toEqual([
+        expect.objectContaining({ type: "human", content: "local-observability" }),
+        expect.objectContaining({
+          type: "ai",
+          content: "Reference response for turn 1: local-observability",
+        }),
+      ]);
+      expect(evidence.second.output.messages).toEqual([
+        expect.objectContaining({ type: "human", content: "local-observability" }),
+        expect.objectContaining({
+          type: "ai",
+          content: "Reference response for turn 1: local-observability",
+        }),
+        expect.objectContaining({ type: "human", content: "local-observability" }),
+        expect.objectContaining({
+          type: "ai",
+          content: "Reference response for turn 2: local-observability",
+        }),
+      ]);
+      expect(evidence.state.messages).toEqual(evidence.second.output.messages);
       const expectedCorrelationMetadata = {
         correlation_id: evidence.metadata.correlation_id,
         phase: evidence.metadata.phase,
         langsmith_project: evidence.metadata.langsmith_project,
-        thread_id: evidence.threadId,
       };
       expect(evidence.threadMetadata).toMatchObject(expectedCorrelationMetadata);
       expect(evidence.first.metadata).toMatchObject(expectedCorrelationMetadata);

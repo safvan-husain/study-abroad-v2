@@ -1,8 +1,8 @@
 # Agent Server observability boundary
 
-The active Agent Server runtime is Python under `services/agent-server`. The existing `packages/agent-graph` TypeScript graph remains a preserved spike and is not imported or executed by future workers.
+The active and only Agent Server graph runtime is Python under `services/agent-server`. The earlier TypeScript graph spike was removed after the runtime decision; future workers communicate with the Python graph only through Agent Server HTTP.
 
-Phase 1 proves the graph and Agent Server boundary before application databases or worker infrastructure are introduced. The graph is deterministic on purpose: the first run writes `runCount=1`, the second run on the same thread writes `runCount=2`, and both runs return a stable output shape.
+Phase 1 proves the graph and Agent Server boundary before application databases or worker infrastructure are introduced. The Python graph is deterministic on purpose: each run appends a native AI message, and the second run on the same thread returns the accumulated human/AI message state.
 
 ## Root environment
 
@@ -52,15 +52,15 @@ pnpm agent:clone-thread -- --thread <langsmith-thread-id>
 
 The clone smoke builds the expected transcript and per-turn message checkpoints from the LangSmith root runs, creates the local thread, then reads `threads.get`, `threads.getState`, and `threads.getHistory`. It fails if any message, checkpoint, source turn count, or clone provenance field differs. A successful result prints verification counts and the Agent Studio URL; the URL is only a UI inspection surface after the Agent Server state check passes.
 
-The TypeScript `packages/agent-graph` checks remain available as a baseline; the active Python graph is validated with `pnpm agent:python:test` and the HTTP smoke once `pnpm agent:dev` is running.
+The Python graph is validated with `pnpm agent:python:test` and the HTTP smoke once `pnpm agent:dev` is running. There is no TypeScript graph package: the TypeScript code in this repository is only an Agent Server HTTP client and test harness.
 
 ## Expected evidence
 
 The output includes one thread ID, two different root run IDs, one correlation ID shared by the thread's runs, child run IDs returned from LangSmith, and deterministic results equivalent to:
 
 ```text
-first_output={"input":"local-observability","runCount":1,"output":"processed:local-observability:run-1"}
-second_output={"input":"local-observability","runCount":2,"output":"processed:local-observability:run-2"}
+first_output={"messages":[{"type":"human","content":"local-observability"},{"type":"ai","content":"Reference response for turn 1: local-observability"}]}
+second_output={"messages":[{"type":"human","content":"local-observability"},{"type":"ai","content":"Reference response for turn 1: local-observability"},{"type":"human","content":"local-observability"},{"type":"ai","content":"Reference response for turn 2: local-observability"}]}
 external_thread_run_ids=["<root-run-1>","<root-run-2>","<child-run-1>","<child-run-2>","..."]
 external_trace=verified
 ```
