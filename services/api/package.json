@@ -11,6 +11,7 @@
     "test:e2e": "vitest run --root ../.. services/api/test"
   },
   "dependencies": {
+    "@study-abroad/contracts": "workspace:*",
     "@nestjs/common": "^11.1.0",
     "@nestjs/core": "^11.1.0",
     "@nestjs/platform-express": "^11.1.0",

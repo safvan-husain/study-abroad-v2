@@ -21,7 +21,11 @@
     "trace:clone:test": "vitest run test/clone-langsmith-thread.test.ts",
     "agent:test": "pnpm --filter @study-abroad/agent-server test",
     "typecheck": "pnpm --filter @study-abroad/agent-server typecheck",
-    "test": "pnpm agent:python:test && pnpm agent:integration:test"
+    "test": "pnpm agent:python:test && pnpm agent:integration:test",
+    "coordinator:build": "tsx scripts/spacetime-build.ts",
+    "coordinator:test": "cargo test --manifest-path coordinator/spacetimedb/Cargo.toml",
+    "spacetime:generate": "pnpm --filter @study-abroad/spacetimedb-bindings generate",
+    "coordinator:smoke": "tsx scripts/spacetime-smoke.ts"
   },
   "devDependencies": {
     "@langchain/langgraph-sdk": "^1.9.28",
