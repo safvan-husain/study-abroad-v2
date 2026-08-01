@@ -10,6 +10,7 @@ export interface ChatSmokeResult {
   assistantId: string;
   runIds: string[];
   messages: Array<Record<string, unknown>>;
+  metadata: Record<string, unknown>;
 }
 
 export async function runChatSmoke(): Promise<ChatSmokeResult> {
@@ -28,13 +29,13 @@ export async function runChatSmoke(): Promise<ChatSmokeResult> {
 
   const messages: Array<Record<string, unknown>> = [];
   const runIds: string[] = [];
+  const metadata = { thread_id: conversationId, conversation_id: conversationId, phase: "python-messages-state" };
 
   for (const content of ["Hello", "What did I say first?"]) {
-    messages.push({ id: randomUUID(), role: "user", content, conversationId, createdAt: new Date().toISOString() });
     let runId: string | undefined;
     const output = (await client.runs.wait(thread.thread_id, assistant.assistant_id, {
-      input: { conversationId, messages },
-      metadata: { thread_id: conversationId, conversation_id: conversationId, phase: "phase-2-multi-turn-chat" },
+      input: { messages: [{ role: "human", content }] },
+      metadata,
       multitaskStrategy: "reject",
       onRunCreated: (run) => {
         runId = run.run_id;
@@ -43,12 +44,12 @@ export async function runChatSmoke(): Promise<ChatSmokeResult> {
     if (!runId) throw new Error("Agent Server did not return a run ID for the chat turn.");
     runIds.push(runId);
     messages.splice(0, messages.length, ...(output.messages ?? messages));
-    if (output.turn !== messages.filter((message) => message.role === "assistant").length) {
-      throw new Error("Inconsistent conversation turn.");
+    if (messages.filter((message) => message.type === "human" || message.role === "human").length !== runIds.length) {
+      throw new Error("Agent Server did not accumulate native human messages.");
     }
   }
 
-  return { conversationId, threadId: thread.thread_id, assistantId: assistant.assistant_id, runIds, messages };
+  return { conversationId, threadId: thread.thread_id, assistantId: assistant.assistant_id, runIds, messages, metadata };
 }
 
 async function main() {

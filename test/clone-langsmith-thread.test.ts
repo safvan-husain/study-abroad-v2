@@ -1,7 +1,13 @@
 import type { Run } from "langsmith";
 import { describe, expect, it } from "vitest";
 
-import { createCloneMetadata, studioUrl, threadRunsToSupersteps } from "../scripts/clone-langsmith-thread.js";
+import {
+  buildExpectedThread,
+  createCloneMetadata,
+  studioUrl,
+  threadRunsToSupersteps,
+  verifyClonedThread,
+} from "../scripts/clone-langsmith-thread.js";
 
 function run(value: Partial<Run> & Pick<Run, "id" | "name">): Run {
   return value as Run;
@@ -70,5 +76,75 @@ describe("threadRunsToSupersteps", () => {
     expect(url.searchParams.get("assistantId")).toBe("agent");
     expect(url.searchParams.get("threadId")).toBe("clone-thread");
     expect(url.searchParams.get("mode")).toBe("graph");
+  });
+
+  it("verifies every cloned message and checkpoint against source runs", () => {
+    const roots = [
+      run({
+        id: "turn-1",
+        name: "LangGraph",
+        start_time: "2026-01-01T00:00:00Z",
+        inputs: {
+          conversationId: "conversation-1",
+          messages: [{ id: "u1", role: "user", content: "Hello" }],
+        },
+        outputs: {
+          conversationId: "conversation-1",
+          messages: [
+            { id: "u1", role: "user", content: "Hello" },
+            { id: "a1", role: "assistant", content: "I heard: Hello" },
+          ],
+        },
+      }),
+      run({
+        id: "turn-2",
+        name: "LangGraph",
+        start_time: "2026-01-01T00:00:01Z",
+        inputs: {
+          conversationId: "conversation-1",
+          messages: [
+            { id: "u1", role: "user", content: "Hello" },
+            { id: "a1", role: "assistant", content: "I heard: Hello" },
+            { id: "u2", role: "user", content: "How are you?" },
+          ],
+        },
+        outputs: {
+          conversationId: "conversation-1",
+          messages: [
+            { id: "u1", role: "user", content: "Hello" },
+            { id: "a1", role: "assistant", content: "I heard: Hello" },
+            { id: "u2", role: "user", content: "How are you?" },
+            { id: "a2", role: "assistant", content: "I heard: How are you?" },
+          ],
+        },
+      }),
+    ];
+    const expected = buildExpectedThread(roots);
+
+    const result = verifyClonedThread({
+      expected,
+      sourceThreadId: "source-thread",
+      projectName: "project",
+      threadMetadata: {
+        ...createCloneMetadata("source-thread", "project", 2),
+        graph_id: "agent",
+      },
+      stateValues: { messages: expected.transcript },
+      history: expected.checkpoints.map((messages) => ({ values: { messages } })).reverse(),
+    });
+
+    expect(result).toMatchObject({
+      expectedMessageCount: 4,
+      verifiedMessageCount: 4,
+      expectedCheckpointCount: 5,
+      verifiedCheckpointCount: 5,
+      sourceTurnCount: 2,
+      provenance: {
+        cloneSource: "langsmith_thread",
+        sourceThreadId: "source-thread",
+        sourceProject: "project",
+        sourceTurnCount: 2,
+      },
+    });
   });
 });

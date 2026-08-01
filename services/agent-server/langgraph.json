@@ -1,7 +1,7 @@
 {
-  "dependencies": ["../../packages/agent-graph"],
+  "dependencies": ["."],
   "graphs": {
-    "agent": "../../packages/agent-graph/src/index.ts:graph"
+    "agent": "./agent_server/graph.py:graph"
   },
   "env": "../../.env"
 }

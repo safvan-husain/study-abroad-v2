@@ -11,6 +11,7 @@
     "agent:smoke": "tsx scripts/agent-observability.ts",
     "agent:trace:smoke": "LANGSMITH_TRACING=true tsx scripts/agent-observability.ts",
     "agent:chat:smoke": "tsx scripts/agent-chat-smoke.ts",
+    "agent:python:test": "uv --directory services/agent-server run --extra test pytest",
     "trace:clone:test": "vitest run test/clone-langsmith-thread.test.ts",
     "agent:test": "pnpm --filter @study-abroad/agent-server test",
     "typecheck": "pnpm --filter @study-abroad/agent-graph typecheck",

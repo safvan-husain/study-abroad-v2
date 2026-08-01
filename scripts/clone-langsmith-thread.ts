@@ -17,6 +17,28 @@ type Superstep = {
   updates: StateUpdate[];
 };
 
+type Message = Record<string, unknown>;
+
+export interface ExpectedThread {
+  transcript: Message[];
+  checkpoints: Message[][];
+  sourceTurnCount: number;
+}
+
+export interface CloneVerification {
+  expectedMessageCount: number;
+  verifiedMessageCount: number;
+  expectedCheckpointCount: number;
+  verifiedCheckpointCount: number;
+  sourceTurnCount: number;
+  provenance: {
+    cloneSource: string;
+    sourceThreadId: string;
+    sourceProject: string;
+    sourceTurnCount: number;
+  };
+}
+
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -38,15 +60,158 @@ function node(run: Run) {
   return typeof value === "string" && value ? value : run.name;
 }
 
+function messages(value: unknown): Message[] | undefined {
+  if (Array.isArray(value)) {
+    return value.every((item) => item && typeof item === "object" && !Array.isArray(item))
+      ? (value as Message[])
+      : undefined;
+  }
+
+  const object = record(value);
+  if (Array.isArray(object.messages)) return messages(object.messages);
+  if (object.input !== undefined) return messages(object.input);
+  if (object.output !== undefined) return messages(object.output);
+  return undefined;
+}
+
+function assistantMessage(value: unknown): Message | undefined {
+  const candidate = record(value).assistantMessage;
+  return candidate && typeof candidate === "object" && !Array.isArray(candidate)
+    ? (candidate as Message)
+    : undefined;
+}
+
+function orderedRuns(rootRuns: Run[]) {
+  return [...rootRuns].sort((left, right) =>
+    String(left.start_time ?? left.id).localeCompare(String(right.start_time ?? right.id)),
+  );
+}
+
+function canonical(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonical);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, entry]) => [key, canonical(entry)]),
+    );
+  }
+  return value;
+}
+
+function sameJson(actual: unknown, expected: unknown) {
+  return JSON.stringify(canonical(actual)) === JSON.stringify(canonical(expected));
+}
+
+function assertJsonEqual(context: string, actual: unknown, expected: unknown) {
+  if (!sameJson(actual, expected)) {
+    throw new Error(
+      `${context} mismatch. expected=${JSON.stringify(expected)} actual=${JSON.stringify(actual)}`,
+    );
+  }
+}
+
+export function buildExpectedThread(rootRuns: Run[]): ExpectedThread {
+  const roots = orderedRuns(rootRuns);
+  if (!roots.length) throw new Error("Cannot build an expected thread without LangSmith root runs.");
+
+  const checkpoints: Message[][] = [[]];
+  let transcript: Message[] | undefined;
+
+  for (const [index, run] of roots.entries()) {
+    const inputMessages = messages(run.inputs);
+    const outputMessages = messages(run.outputs) ??
+      (inputMessages && assistantMessage(run.outputs)
+        ? [...inputMessages, assistantMessage(run.outputs)!]
+        : undefined);
+
+    if (!inputMessages) {
+      throw new Error(`LangSmith root run ${run.id} is missing a structured input message list.`);
+    }
+    if (!outputMessages) {
+      throw new Error(`LangSmith root run ${run.id} is missing a structured output message list.`);
+    }
+
+    checkpoints.push(inputMessages, outputMessages);
+    transcript = outputMessages;
+
+    if (index > 0 && outputMessages.length < checkpoints[checkpoints.length - 3].length) {
+      throw new Error(`LangSmith root run ${run.id} returned a transcript shorter than the previous turn.`);
+    }
+  }
+
+  return {
+    transcript: transcript ?? [],
+    checkpoints,
+    sourceTurnCount: roots.length,
+  };
+}
+
+export function verifyClonedThread(options: {
+  expected: ExpectedThread;
+  sourceThreadId: string;
+  projectName: string;
+  threadMetadata: unknown;
+  stateValues: unknown;
+  history: Array<{ values?: unknown }>;
+}): CloneVerification {
+  const threadMetadata = record(options.threadMetadata);
+  const expectedProvenance = createCloneMetadata(
+    options.sourceThreadId,
+    options.projectName,
+    options.expected.sourceTurnCount,
+  );
+
+  assertJsonEqual("clone provenance", {
+    clone_source: threadMetadata.clone_source,
+    source_thread_id: threadMetadata.source_thread_id,
+    source_project: threadMetadata.source_project,
+    source_turn_count: threadMetadata.source_turn_count,
+  }, expectedProvenance);
+
+  const stateMessages = messages(options.stateValues);
+  if (!stateMessages) throw new Error("Cloned Agent Server state is missing its messages list.");
+  assertJsonEqual("cloned final transcript", stateMessages, options.expected.transcript);
+
+  const historyCheckpoints = options.history.map((checkpoint, index) => {
+    const checkpointMessages = messages(checkpoint.values);
+    if (!checkpointMessages) {
+      throw new Error(`Cloned Agent Server checkpoint ${index} is missing its messages list.`);
+    }
+    return checkpointMessages;
+  }).reverse();
+
+  assertJsonEqual("cloned checkpoint count", historyCheckpoints.length, options.expected.checkpoints.length);
+  for (const [index, checkpointMessages] of historyCheckpoints.entries()) {
+    assertJsonEqual(`cloned checkpoint ${index} messages`, checkpointMessages, options.expected.checkpoints[index]);
+  }
+
+  if (historyCheckpoints.length && !sameJson(historyCheckpoints.at(-1), stateMessages)) {
+    throw new Error("Cloned Agent Server getState() does not match the latest getHistory() checkpoint.");
+  }
+
+  return {
+    expectedMessageCount: options.expected.transcript.length,
+    verifiedMessageCount: stateMessages.length,
+    expectedCheckpointCount: options.expected.checkpoints.length,
+    verifiedCheckpointCount: historyCheckpoints.length,
+    sourceTurnCount: options.expected.sourceTurnCount,
+    provenance: {
+      cloneSource: String(threadMetadata.clone_source),
+      sourceThreadId: String(threadMetadata.source_thread_id),
+      sourceProject: String(threadMetadata.source_project),
+      sourceTurnCount: Number(threadMetadata.source_turn_count),
+    },
+  };
+}
+
 export function threadRunsToSupersteps(rootRuns: Run[], childRuns: Run[]): {
   supersteps: Superstep[];
   nodeNames: string[];
 } {
   if (!rootRuns.length) throw new Error("LangSmith returned no root runs for this thread.");
 
-  const roots = [...rootRuns].sort((left, right) =>
-    String(left.start_time ?? left.id).localeCompare(String(right.start_time ?? right.id)),
-  );
+  const roots = orderedRuns(rootRuns);
   const rootOrder = new Map(roots.map((run, index) => [run.id, index]));
   const updates = childRuns
     .filter((run) => rootOrder.has(run.parent_run_id ?? "") && run.outputs !== null && run.outputs !== undefined)
@@ -131,6 +296,7 @@ export async function cloneLangSmithThread(options: {
   const missingNodes = converted.nodeNames.filter((name) => !availableNodes.has(name));
   if (missingNodes.length) throw new Error(`Local graph is missing node(s): ${missingNodes.join(", ")}.`);
 
+  const expected = buildExpectedThread(rootRuns);
   const thread = await agentServer.threads.create({
     graphId: options.graphId,
     supersteps: converted.supersteps,
@@ -139,12 +305,24 @@ export async function cloneLangSmithThread(options: {
       cloned_at: new Date().toISOString(),
     },
   });
+  const clonedThread = await agentServer.threads.get(thread.thread_id);
+  const state = await agentServer.threads.getState(thread.thread_id);
   const history = await agentServer.threads.getHistory(thread.thread_id);
+  const verification = verifyClonedThread({
+    expected,
+    sourceThreadId: options.sourceThreadId,
+    projectName: options.projectName,
+    threadMetadata: clonedThread.metadata,
+    stateValues: state.values,
+    history,
+  });
+
   return {
     threadId: thread.thread_id,
-    sourceTurnCount: rootRuns.length,
+    sourceTurnCount: expected.sourceTurnCount,
     historyLength: history.length,
-    state: history[0]?.values ?? {},
+    state: state.values,
+    verification,
     studioUrl: studioUrl(options.agentUrl, options.graphId, thread.thread_id, options.organizationId),
   };
 }

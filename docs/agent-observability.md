@@ -1,4 +1,6 @@
-# Agent Server observability spike
+# Agent Server observability boundary
+
+The active Agent Server runtime is Python under `services/agent-server`. The existing `packages/agent-graph` TypeScript graph remains a preserved spike and is not imported or executed by future workers.
 
 Phase 1 proves the graph and Agent Server boundary before application databases or worker infrastructure are introduced. The graph is deterministic on purpose: the first run writes `runCount=1`, the second run on the same thread writes `runCount=2`, and both runs return a stable output shape.
 
@@ -20,7 +22,7 @@ Install the workspace and create the lockfile:
 pnpm install
 ```
 
-Run the local development Agent Server from one terminal:
+Run the Python local development Agent Server from one terminal:
 
 ```sh
 pnpm agent:dev
@@ -40,13 +42,17 @@ Run the multi-turn chat smoke against the same local Agent Server:
 pnpm agent:chat:smoke
 ```
 
-It creates one conversation/thread, sends two structured user turns, and prints the ordered user and assistant messages. The graph is invoked only through Agent Server.
+It creates/reuses one stable conversation/thread, sends two sequential native `human` turns over HTTP, and verifies accumulated native `human`/`ai` messages, distinct run IDs, and stable `metadata.thread_id`. The TypeScript client never imports the Python graph.
 
-Run the integration test against the already running local Agent Server:
+Clone and verify a traced LangSmith chat thread against the local Agent Server:
 
 ```sh
-pnpm --filter @study-abroad/agent-server test
+pnpm agent:clone-thread -- --thread <langsmith-thread-id>
 ```
+
+The clone smoke builds the expected transcript and per-turn message checkpoints from the LangSmith root runs, creates the local thread, then reads `threads.get`, `threads.getState`, and `threads.getHistory`. It fails if any message, checkpoint, source turn count, or clone provenance field differs. A successful result prints verification counts and the Agent Studio URL; the URL is only a UI inspection surface after the Agent Server state check passes.
+
+The TypeScript `packages/agent-graph` checks remain available as a baseline; the active Python graph is validated with `pnpm agent:python:test` and the HTTP smoke once `pnpm agent:dev` is running.
 
 ## Expected evidence
 
