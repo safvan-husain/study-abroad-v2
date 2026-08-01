@@ -1,0 +1,10 @@
+{
+  "name": "@study-abroad/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": { "types": "./src/index.ts", "import": "./dist/index.js" } },
+  "scripts": {"build": "esbuild src/index.ts --bundle --format=esm --platform=node --outfile=dist/index.js", "test": "vitest run", "typecheck": "tsc --noEmit"},
+  "devDependencies": {"typescript": "^5.9.3", "vitest": "^4.1.10", "zod": "^4.1.12"},
+  "dependencies": {"zod": "^4.1.12"}
+}

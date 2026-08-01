@@ -1,16 +1,45 @@
 {
   "name": "study-abroad-v2",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
-  "directories": {
-    "doc": "docs"
-  },
+  "version": "0.1.0",
+  "private": true,
+  "description": "Study Abroad architecture spike and application workspace",
+  "packageManager": "pnpm@10.28.1",
+  "type": "module",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev:web": "pnpm --filter @study-abroad/web dev",
+    "dev:api": "USE_LIVE_COORDINATOR=true API_PORT=3101 pnpm --filter @study-abroad/api start:dev",
+    "dev:worker": "pnpm --filter @study-abroad/spacetimedb-bindings build && pnpm --filter @study-abroad/ai-worker exec tsx watch src/runtime.ts",
+    "worker:build": "pnpm --filter @study-abroad/ai-worker build",
+    "build": "pnpm -r build",
+    "typecheck:all": "pnpm -r typecheck",
+    "test:all": "pnpm -r test",
+    "agent:dev": "pnpm --filter @study-abroad/agent-server agent:dev",
+    "agent:clone-thread": "tsx scripts/clone-langsmith-thread.ts",
+    "agent:smoke": "tsx scripts/agent-observability.ts",
+    "agent:trace:smoke": "LANGSMITH_TRACING=true tsx scripts/agent-observability.ts",
+    "agent:chat:smoke": "tsx scripts/agent-chat-smoke.ts",
+    "agent:python:test": "uv --directory services/agent-server run --extra test pytest",
+    "agent:integration:test": "bash scripts/test-python-agent-server.sh",
+    "trace:clone:test": "vitest run test/clone-langsmith-thread.test.ts",
+    "agent:test": "pnpm --filter @study-abroad/agent-server test",
+    "typecheck": "pnpm --filter @study-abroad/agent-server typecheck",
+    "test": "pnpm agent:python:test && pnpm agent:integration:test",
+    "coordinator:build": "tsx scripts/spacetime-build.ts",
+    "coordinator:test": "cargo test --manifest-path coordinator/spacetimedb/Cargo.toml",
+    "spacetime:generate": "pnpm --filter @study-abroad/spacetimedb-bindings generate",
+    "coordinator:smoke": "tsx scripts/spacetime-smoke.ts"
+    ,"worker:smoke": "tsx scripts/worker-smoke.ts",
+    "end-to-end:smoke": "tsx scripts/end-to-end-smoke.ts"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs"
+  "devDependencies": {
+    "@langchain/langgraph-sdk": "^1.9.28",
+    "@types/node": "^26.1.2",
+    "dotenv": "^17.4.2",
+    "langsmith": "^0.8.8",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "tsx": "^4.23.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.10"
+  }
 }

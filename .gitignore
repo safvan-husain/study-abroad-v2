@@ -1,4 +1,18 @@
 
 node_modules/
+.next/
 dist/
+target/
 tmp/
+
+# Riptide artifacts (cloud-synced)
+.humanlayer/tasks/
+
+.env
+.langgraph_api/
+.langgraph/
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/

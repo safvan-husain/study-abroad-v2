@@ -1,0 +1,23 @@
+{
+  "name": "@study-abroad/agent-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "agent:dev": "uv run langgraph dev --config langgraph.json --host 127.0.0.1 --port 2025 --no-browser",
+    "test": "vitest run --root ../.. test/agent-observability.test.ts test/agent-chat.test.ts test/clone-langsmith-thread.test.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@langchain/langgraph-sdk": "^1.9.28"
+  },
+  "devDependencies": {
+    "@langchain/langgraph-cli": "^1.4.3",
+    "@types/node": "^26.1.2",
+    "dotenv": "^17.4.2",
+    "langsmith": "^0.8.8",
+    "tsx": "^4.23.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.10"
+  }
+}

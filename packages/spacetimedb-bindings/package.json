@@ -1,0 +1,22 @@
+{
+  "name": "@study-abroad/spacetimedb-bindings",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": { "types": "./src/index.ts", "import": "./dist/index.js" } },
+  "scripts": {
+    "generate": "tsx scripts/generate.ts",
+    "generate:check": "tsx scripts/generate.ts --check",
+    "build": "esbuild src/index.ts --bundle --format=esm --platform=node --outfile=dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "spacetimedb": "2.0.3"
+  },
+  "devDependencies": {
+    "tsx": "^4.23.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.10"
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "name": "@study-abroad/ai-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "prebuild": "pnpm --filter @study-abroad/contracts build && pnpm --filter @study-abroad/spacetimedb-bindings build",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/runtime.js",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@langchain/langgraph-sdk": "^1.9.28",
+    "@study-abroad/contracts": "workspace:*",
+    "@study-abroad/spacetimedb-bindings": "workspace:*",
+    "dotenv": "^17.4.2",
+    "mongodb": "^7.5.0",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.2",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.10"
+  }
+}
