@@ -390,7 +390,7 @@ async function main() {
     projectName: readArgument("--project") ?? process.env.LANGSMITH_PROJECT ?? "study-abroad-v2-agents",
     apiKey,
     langSmithEndpoint: process.env.LANGSMITH_ENDPOINT ?? "https://api.smith.langchain.com",
-    agentUrl: readArgument("--agent-url") ?? process.env.AGENT_SERVER_URL ?? "http://localhost:2024",
+    agentUrl: readArgument("--agent-url") ?? process.env.AGENT_SERVER_URL ?? "http://localhost:2025",
     graphId: readArgument("--graph") ?? process.env.SMOKE_TEST_GRAPH_ID ?? "agent",
     organizationId: readArgument("--organization") ?? process.env.LANGSMITH_ORGANIZATION_ID,
   });

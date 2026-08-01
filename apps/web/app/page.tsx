@@ -1,5 +1,6 @@
 import { ArchitecturePreview } from "../components/landing/ArchitecturePreview";
 import { StatusPanel } from "../components/shared/StatusPanel";
+import { ChatPanel } from "../components/chat/ChatPanel";
 
 function NavLink({
   href,
@@ -55,6 +56,7 @@ export default function Home() {
       </header>
 
       <main>
+        <ChatPanel />
         <section className="bg-dark px-5 py-16 text-white sm:px-6 sm:py-24">
           <div className="mx-auto grid max-w-[1200px] items-center gap-9 sm:grid-cols-[1.05fr_0.95fr] sm:gap-16">
             <div>

@@ -1,0 +1,3 @@
+import type { TurnStatus } from './api-client';
+export interface CoordinatorSubscription { subscribe(conversationId: string, turnId: string, onStatus: (status: TurnStatus) => void): () => void; }
+export const pollingCoordinator: CoordinatorSubscription = { subscribe(conversationId, turnId, onStatus) { const timer = setInterval(async () => { const r = await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? '/api'}/conversations/${conversationId}/turns/${turnId}`); if (r.ok) { const status = await r.json(); onStatus(status); if (status.status !== 'pending') clearInterval(timer); } }, 1000); return () => clearInterval(timer); } };

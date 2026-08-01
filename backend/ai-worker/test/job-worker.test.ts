@@ -67,4 +67,25 @@ describe('AI worker chat turn', () => {
     expect(coordinator.renew).toHaveBeenCalled();
     vi.useRealTimers();
   });
+
+  it('does not crash when a coordinator claim fails', async () => {
+    const coordinator = { claim: vi.fn().mockRejectedValue(new Error('coordinator offline')), complete: vi.fn(), retry: vi.fn() };
+    const agent = { run: vi.fn() };
+    const store = new InMemoryMongoMessageStore();
+
+    await expect(processChatTurn({ conversationId: 'c5', turnId: 't5', correlationId: 'x', workerId: 'w' }, store, agent, coordinator)).resolves.toBeUndefined();
+    expect(agent.run).not.toHaveBeenCalled();
+    expect(coordinator.retry).not.toHaveBeenCalled();
+  });
+
+  it('fails permanent transcript errors instead of retrying forever', async () => {
+    const store = new InMemoryMongoMessageStore();
+    const coordinator = { claim: vi.fn().mockResolvedValue(true), complete: vi.fn(), retry: vi.fn(), fail: vi.fn() };
+    const agent = { run: vi.fn() };
+
+    await processChatTurn({ conversationId: 'c6', turnId: 't6', correlationId: 'x', workerId: 'w' }, store, agent, coordinator);
+
+    expect(coordinator.fail).toHaveBeenCalledWith('t6', 'Error');
+    expect(coordinator.retry).not.toHaveBeenCalled();
+  });
 });

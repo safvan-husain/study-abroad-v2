@@ -1,0 +1,9 @@
+.git
+.env
+node_modules
+**/node_modules
+**/.next
+**/dist
+**/__pycache__
+**/.pytest_cache
+coordinator/spacetimedb/target

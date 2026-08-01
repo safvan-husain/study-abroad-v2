@@ -3,12 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "exports": {
-    ".": "./src/index.ts"
-  },
+  "exports": { ".": { "types": "./src/index.ts", "import": "./dist/index.js" } },
   "scripts": {
     "generate": "tsx scripts/generate.ts",
     "generate:check": "tsx scripts/generate.ts --check",
+    "build": "esbuild src/index.ts --bundle --format=esm --platform=node --outfile=dist/index.js",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },

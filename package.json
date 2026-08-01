@@ -7,7 +7,9 @@
   "type": "module",
   "scripts": {
     "dev:web": "pnpm --filter @study-abroad/web dev",
-    "dev:api": "pnpm --filter @study-abroad/api start:dev",
+    "dev:api": "USE_LIVE_COORDINATOR=true API_PORT=3101 pnpm --filter @study-abroad/api start:dev",
+    "dev:worker": "pnpm --filter @study-abroad/spacetimedb-bindings build && pnpm --filter @study-abroad/ai-worker exec tsx watch src/runtime.ts",
+    "worker:build": "pnpm --filter @study-abroad/ai-worker build",
     "build": "pnpm -r build",
     "typecheck:all": "pnpm -r typecheck",
     "test:all": "pnpm -r test",
@@ -26,7 +28,8 @@
     "coordinator:test": "cargo test --manifest-path coordinator/spacetimedb/Cargo.toml",
     "spacetime:generate": "pnpm --filter @study-abroad/spacetimedb-bindings generate",
     "coordinator:smoke": "tsx scripts/spacetime-smoke.ts"
-    ,"worker:smoke": "tsx scripts/worker-smoke.ts"
+    ,"worker:smoke": "tsx scripts/worker-smoke.ts",
+    "end-to-end:smoke": "tsx scripts/end-to-end-smoke.ts"
   },
   "devDependencies": {
     "@langchain/langgraph-sdk": "^1.9.28",

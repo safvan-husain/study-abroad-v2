@@ -14,7 +14,7 @@ export interface ChatSmokeResult {
 }
 
 export async function runChatSmoke(): Promise<ChatSmokeResult> {
-  const agentUrl = process.env.AGENT_SERVER_URL ?? "http://localhost:2024";
+  const agentUrl = process.env.AGENT_SERVER_URL ?? "http://localhost:2025";
   const graphId = process.env.SMOKE_TEST_GRAPH_ID ?? "agent";
   const conversationId = randomUUID();
   const client = new Client({ apiUrl: agentUrl });

@@ -54,7 +54,7 @@ export function loadSmokeTestConfig(): SmokeTestConfig {
   const langSmithApiKey = process.env.LANGSMITH_API_KEY || process.env.LANGCHAIN_API_KEY || undefined;
   const langSmithTracing = parseBoolean(process.env.LANGSMITH_TRACING ?? process.env.LANGCHAIN_TRACING_V2);
   const config: SmokeTestConfig = {
-    agentServerUrl: process.env.AGENT_SERVER_URL ?? "http://localhost:2024",
+    agentServerUrl: process.env.AGENT_SERVER_URL ?? "http://localhost:2025",
     smokeTestGraphId: process.env.SMOKE_TEST_GRAPH_ID ?? "agent",
     langSmithProject: process.env.LANGSMITH_PROJECT ?? "study-abroad-v2-agents",
     langSmithApiKey,
