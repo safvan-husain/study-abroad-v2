@@ -1,0 +1,44 @@
+@import "tailwindcss";
+
+@theme {
+  --color-blue: #0052ff;
+  --color-blue-active: #003ecc;
+  --color-ink: #0a0b0d;
+  --color-body: #5b616e;
+  --color-muted: #7c828a;
+  --color-muted-soft: #a8acb3;
+  --color-line: #dee1e6;
+  --color-soft: #f7f7f7;
+  --color-dark: #0a0b0d;
+  --color-dark-card: #16181c;
+  --color-hairline-soft: #eef0f3;
+  --font-sans: Inter, ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
+
+@layer base {
+  *,
+  ::after,
+  ::before {
+    box-sizing: border-box;
+  }
+
+  html,
+  body {
+    margin: 0;
+    min-height: 100%;
+  }
+
+  body {
+    @apply bg-white text-ink font-sans antialiased;
+  }
+
+  button,
+  a {
+    font: inherit;
+  }
+
+  a {
+    @apply text-inherit no-underline;
+  }
+}
