@@ -2,6 +2,7 @@ FROM node:22-alpine AS build
 WORKDIR /app
 RUN corepack enable
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
+COPY docker/.npmrc .npmrc
 COPY apps/web/package.json apps/web/package.json
 COPY packages/contracts packages/contracts
 RUN pnpm install --frozen-lockfile

@@ -7,17 +7,23 @@ services:
     healthcheck: { test: [CMD, mongosh, --quiet, --eval, "db.adminCommand('ping').ok"], interval: 5s, timeout: 5s, retries: 20 }
   spacetimedb:
     image: clockworklabs/spacetime:v2.0.3
-    command: ["/opt/spacetime/spacetimedb-standalone", "start", "--listen-addr", "0.0.0.0:3000", "--data-dir", "/stdb/data", "--non-interactive"]
+    user: "0:0"
+    entrypoint: ["/bin/sh", "/docker/spacetimedb-start.sh"]
     restart: unless-stopped
-    volumes: [spacetimedb-data:/stdb/data]
-    healthcheck: { test: [CMD, /opt/spacetime/spacetimedb-cli, server, list, --server, http://localhost:3000], interval: 5s, timeout: 5s, retries: 30 }
+    volumes:
+      - spacetimedb-data:/home/spacetime/data
+      - spacetime-config:/home/spacetime/.config/spacetime
+      - ./docker/spacetimedb-start.sh:/docker/spacetimedb-start.sh:ro
+    healthcheck: { test: [CMD, /opt/spacetime/spacetimedb-cli, server, ping, http://localhost:3000], interval: 5s, timeout: 5s, retries: 30 }
   coordinator-publisher:
     image: clockworklabs/spacetime:v2.0.3
     depends_on: { spacetimedb: { condition: service_healthy } }
     build: { context: ., dockerfile: coordinator/Dockerfile }
     working_dir: /workspace
-    entrypoint: ["/bin/sh", "-c"]
-    command: ["/opt/spacetime/spacetimedb-cli publish --server http://spacetimedb:3000 --module-path /workspace/coordinator/spacetimedb --anonymous --yes study-abroad-coordinator"]
+    volumes:
+      - ./docker/coordinator-publish.sh:/docker/coordinator-publish.sh:ro
+      - spacetime-config:/home/spacetime/.config/spacetime
+    entrypoint: ["/bin/sh", "/docker/coordinator-publish.sh"]
   api:
     build: { context: ., dockerfile: services/api/Dockerfile }
     environment: { API_PORT: "3001", MONGODB_URI: mongodb://mongo:27017, MONGODB_DATABASE: study_abroad, SPACETIME_URL: http://spacetimedb:3000, SPACETIME_DATABASE: study-abroad-coordinator, USE_LIVE_COORDINATOR: "true" }
@@ -35,7 +41,8 @@ services:
     build: { context: ., dockerfile: apps/web/Dockerfile }
     environment: { API_INTERNAL_URL: http://api:3001 }
     depends_on: { api: { condition: service_healthy } }
-    ports: ["3000:3000"]
+    ports: ["3010:3000"]
 volumes:
   mongo-data:
   spacetimedb-data:
+  spacetime-config:
