@@ -103,6 +103,10 @@ function sameJson(actual: unknown, expected: unknown) {
   return JSON.stringify(canonical(actual)) === JSON.stringify(canonical(expected));
 }
 
+function startsWithMessages(messages: Message[], prefix: Message[]) {
+  return prefix.length <= messages.length && prefix.every((message, index) => sameJson(message, messages[index]));
+}
+
 function assertJsonEqual(context: string, actual: unknown, expected: unknown) {
   if (!sameJson(actual, expected)) {
     throw new Error(
@@ -111,12 +115,37 @@ function assertJsonEqual(context: string, actual: unknown, expected: unknown) {
   }
 }
 
+function compact(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    const entries = value.map(compact).filter((entry) => entry !== undefined);
+    return entries.length ? entries : undefined;
+  }
+  if (value && typeof value === "object") {
+    const entries = Object.entries(value)
+      .filter(([key]) => key !== "id" && key !== "name")
+      .map(([key, entry]) => [key, compact(entry)] as const)
+      .filter(([, entry]) => entry !== undefined && entry !== null);
+    return entries.length ? Object.fromEntries(entries) : undefined;
+  }
+  return value;
+}
+
+function comparableMessages(value: Message[]) {
+  return value.map((message) => {
+    const kind = message.type ?? message.role;
+    const normalizedKind = kind === "user" ? "human" : kind === "assistant" ? "ai" : kind;
+    const normalized: Message = { ...message, type: normalizedKind };
+    delete normalized.role;
+    return compact(normalized);
+  });
+}
+
 export function buildExpectedThread(rootRuns: Run[]): ExpectedThread {
   const roots = orderedRuns(rootRuns);
   if (!roots.length) throw new Error("Cannot build an expected thread without LangSmith root runs.");
 
   const checkpoints: Message[][] = [[]];
-  let transcript: Message[] | undefined;
+  let transcript: Message[] = [];
 
   for (const [index, run] of roots.entries()) {
     const inputMessages = messages(run.inputs);
@@ -132,16 +161,19 @@ export function buildExpectedThread(rootRuns: Run[]): ExpectedThread {
       throw new Error(`LangSmith root run ${run.id} is missing a structured output message list.`);
     }
 
-    checkpoints.push(inputMessages, outputMessages);
+    const inputCheckpoint = startsWithMessages(inputMessages, transcript)
+      ? inputMessages
+      : [...transcript, ...inputMessages];
+    checkpoints.push(inputCheckpoint, outputMessages);
     transcript = outputMessages;
 
-    if (index > 0 && outputMessages.length < checkpoints[checkpoints.length - 3].length) {
+    if (index > 0 && outputMessages.length < inputCheckpoint.length) {
       throw new Error(`LangSmith root run ${run.id} returned a transcript shorter than the previous turn.`);
     }
   }
 
   return {
-    transcript: transcript ?? [],
+    transcript,
     checkpoints,
     sourceTurnCount: roots.length,
   };
@@ -171,7 +203,11 @@ export function verifyClonedThread(options: {
 
   const stateMessages = messages(options.stateValues);
   if (!stateMessages) throw new Error("Cloned Agent Server state is missing its messages list.");
-  assertJsonEqual("cloned final transcript", stateMessages, options.expected.transcript);
+  assertJsonEqual(
+    "cloned final transcript",
+    comparableMessages(stateMessages),
+    comparableMessages(options.expected.transcript),
+  );
 
   const historyCheckpoints = options.history.map((checkpoint, index) => {
     const checkpointMessages = messages(checkpoint.values);
@@ -183,10 +219,17 @@ export function verifyClonedThread(options: {
 
   assertJsonEqual("cloned checkpoint count", historyCheckpoints.length, options.expected.checkpoints.length);
   for (const [index, checkpointMessages] of historyCheckpoints.entries()) {
-    assertJsonEqual(`cloned checkpoint ${index} messages`, checkpointMessages, options.expected.checkpoints[index]);
+    assertJsonEqual(
+      `cloned checkpoint ${index} messages`,
+      comparableMessages(checkpointMessages),
+      comparableMessages(options.expected.checkpoints[index]),
+    );
   }
 
-  if (historyCheckpoints.length && !sameJson(historyCheckpoints.at(-1), stateMessages)) {
+  if (historyCheckpoints.length && !sameJson(
+    comparableMessages(historyCheckpoints.at(-1)!),
+    comparableMessages(stateMessages),
+  )) {
     throw new Error("Cloned Agent Server getState() does not match the latest getHistory() checkpoint.");
   }
 
@@ -215,6 +258,7 @@ export function threadRunsToSupersteps(rootRuns: Run[], childRuns: Run[]): {
   const rootOrder = new Map(roots.map((run, index) => [run.id, index]));
   const updates = childRuns
     .filter((run) => rootOrder.has(run.parent_run_id ?? "") && run.outputs !== null && run.outputs !== undefined)
+    .filter((run) => !node(run).startsWith("__"))
     .sort((left, right) => {
       const turnDifference = rootOrder.get(left.parent_run_id ?? "")! - rootOrder.get(right.parent_run_id ?? "")!;
       return turnDifference || step(left) - step(right) || String(left.id).localeCompare(String(right.id));
@@ -223,14 +267,20 @@ export function threadRunsToSupersteps(rootRuns: Run[], childRuns: Run[]): {
   if (!updates.length) throw new Error("LangSmith returned no reconstructable LangGraph node runs.");
 
   const supersteps: Superstep[] = [{ updates: [{ values: {}, asNode: "__input__" }] }];
-  let currentSourceStep: number | undefined;
-  for (const run of updates) {
-    const currentStep = step(run);
-    const update = { values: record(run.outputs), asNode: node(run) };
-    if (currentSourceStep === currentStep) supersteps.at(-1)!.updates.push(update);
-    else {
-      supersteps.push({ updates: [update] });
-      currentSourceStep = currentStep;
+  for (const root of roots) {
+    const input = record(root.inputs);
+    if (!messages(input)) throw new Error(`LangSmith root run ${root.id} is missing a structured input message list.`);
+    supersteps.push({ updates: [{ values: input, asNode: "__start__" }] });
+
+    let currentSourceStep: number | undefined;
+    for (const run of updates.filter((candidate) => candidate.parent_run_id === root.id)) {
+      const currentStep = step(run);
+      const update = { values: record(run.outputs), asNode: node(run) };
+      if (currentSourceStep === currentStep) supersteps.at(-1)!.updates.push(update);
+      else {
+        supersteps.push({ updates: [update] });
+        currentSourceStep = currentStep;
+      }
     }
   }
 

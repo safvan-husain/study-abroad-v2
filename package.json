@@ -12,10 +12,11 @@
     "agent:trace:smoke": "LANGSMITH_TRACING=true tsx scripts/agent-observability.ts",
     "agent:chat:smoke": "tsx scripts/agent-chat-smoke.ts",
     "agent:python:test": "uv --directory services/agent-server run --extra test pytest",
+    "agent:integration:test": "bash scripts/test-python-agent-server.sh",
     "trace:clone:test": "vitest run test/clone-langsmith-thread.test.ts",
     "agent:test": "pnpm --filter @study-abroad/agent-server test",
     "typecheck": "pnpm --filter @study-abroad/agent-graph typecheck",
-    "test": "pnpm agent:test"
+    "test": "pnpm agent:python:test && pnpm agent:integration:test"
   },
   "devDependencies": {
     "@langchain/langgraph-sdk": "^1.9.28",

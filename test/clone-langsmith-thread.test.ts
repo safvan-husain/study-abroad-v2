@@ -16,8 +16,8 @@ function run(value: Partial<Run> & Pick<Run, "id" | "name">): Run {
 describe("threadRunsToSupersteps", () => {
   it("reconstructs every turn in checkpoint order", () => {
     const roots = [
-      run({ id: "turn-1", name: "LangGraph", start_time: "2026-01-01T00:00:00Z" }),
-      run({ id: "turn-2", name: "LangGraph", start_time: "2026-01-01T00:00:01Z" }),
+      run({ id: "turn-1", name: "LangGraph", start_time: "2026-01-01T00:00:00Z", inputs: { messages: [{ role: "human", content: "Hello" }] } }),
+      run({ id: "turn-2", name: "LangGraph", start_time: "2026-01-01T00:00:01Z", inputs: { messages: [{ role: "human", content: "Second turn" }] } }),
     ];
     const children = [
       run({
@@ -54,9 +54,9 @@ describe("threadRunsToSupersteps", () => {
       nodeNames: ["process_input"],
       supersteps: [
         { updates: [{ values: {}, asNode: "__input__" }] },
-        { updates: [{ values: { input: "hello" }, asNode: "__start__" }] },
+        { updates: [{ values: { messages: [{ role: "human", content: "Hello" }] }, asNode: "__start__" }] },
         { updates: [{ values: { runCount: 1, output: "run-1" }, asNode: "process_input" }] },
-        { updates: [{ values: { input: "hello" }, asNode: "__start__" }] },
+        { updates: [{ values: { messages: [{ role: "human", content: "Second turn" }] }, asNode: "__start__" }] },
         { updates: [{ values: { runCount: 1, output: "run-2" }, asNode: "process_input" }] },
       ],
     });
@@ -102,11 +102,7 @@ describe("threadRunsToSupersteps", () => {
         start_time: "2026-01-01T00:00:01Z",
         inputs: {
           conversationId: "conversation-1",
-          messages: [
-            { id: "u1", role: "user", content: "Hello" },
-            { id: "a1", role: "assistant", content: "I heard: Hello" },
-            { id: "u2", role: "user", content: "How are you?" },
-          ],
+          messages: [{ id: "u2", role: "user", content: "How are you?" }],
         },
         outputs: {
           conversationId: "conversation-1",
@@ -129,8 +125,10 @@ describe("threadRunsToSupersteps", () => {
         ...createCloneMetadata("source-thread", "project", 2),
         graph_id: "agent",
       },
-      stateValues: { messages: expected.transcript },
-      history: expected.checkpoints.map((messages) => ({ values: { messages } })).reverse(),
+      stateValues: { messages: expected.transcript.map((message) => ({ ...message, id: `local-${message.id}` })) },
+      history: expected.checkpoints.map((messages) => ({
+        values: { messages: messages.map((message) => ({ ...message, id: `local-${message.id}` })) },
+      })).reverse(),
     });
 
     expect(result).toMatchObject({
