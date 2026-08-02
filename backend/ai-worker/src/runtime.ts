@@ -3,6 +3,8 @@ import type { ChatTurn } from './services/process-chat-turn.js';
 import { loadConfig } from './config.js';
 import { createWorker } from './index.js';
 import { SpacetimeCoordinatorAdapter, type PendingJobSource } from './services/coordinator-adapter.js';
+import type { PendingWorkItemSource } from './services/coordinator-adapter.js';
+import type { WorkspaceWorkItem } from './services/process-work-item.js';
 
 type WorkerPendingTurnRow = {
   conversationId: string;
@@ -15,6 +17,21 @@ type WorkerPendingTurnRow = {
   leaseUntilMicros: bigint | null;
   attempt: number;
   baseUiRevision: bigint;
+};
+
+type WorkerPendingWorkItemRow = {
+  workItemId: string;
+  workSetId: string;
+  conversationId: string;
+  entityType: string;
+  entityId: string;
+  kind: string;
+  inputJson: string;
+  status: string;
+  leaseUntilMicros: bigint | null;
+  attempt: number;
+  expectedContextRevision: bigint;
+  expectedUiRevision: bigint;
 };
 
 function rowToTurn(row: WorkerPendingTurnRow): ChatTurn | undefined {
@@ -49,7 +66,7 @@ async function connect(config: ReturnType<typeof loadConfig>): Promise<DbConnect
                 settled = true;
                 resolve(connection);
               }
-            }).subscribe('SELECT * FROM worker_pending_turns');
+            }).subscribe(['SELECT * FROM worker_pending_turns', 'SELECT * FROM worker_pending_work_items']);
           })
           .catch((error: unknown) => {
             if (!settled) {
@@ -66,6 +83,50 @@ async function connect(config: ReturnType<typeof loadConfig>): Promise<DbConnect
       });
     builder.build();
   });
+}
+
+function rowToWorkItem(row: WorkerPendingWorkItemRow): WorkspaceWorkItem | undefined {
+  const claimedLeaseExpired = row.status === 'claimed'
+    && row.leaseUntilMicros !== null
+    && row.leaseUntilMicros <= BigInt(Date.now()) * 1_000n;
+  if (row.status !== 'pending' && row.status !== 'retrying' && !claimedLeaseExpired) return undefined;
+  return {
+    workItemId: row.workItemId,
+    workSetId: row.workSetId,
+    conversationId: row.conversationId,
+    entityType: row.entityType,
+    entityId: row.entityId,
+    kind: row.kind,
+    inputJson: row.inputJson,
+    attempt: row.attempt,
+    expectedContextRevision: row.expectedContextRevision,
+    expectedUiRevision: row.expectedUiRevision,
+  };
+}
+
+function createPendingWorkItemSource(connection: DbConnection): PendingWorkItemSource {
+  const table = connection.db.worker_pending_work_items as any;
+  let listener: ((item: WorkspaceWorkItem) => void) | undefined;
+  const publish = (row: WorkerPendingWorkItemRow) => {
+    const item = rowToWorkItem(row);
+    if (item) listener?.(item);
+  };
+  return {
+    subscribe(callback) {
+      listener = callback;
+      const onInsert = (_context: unknown, row: WorkerPendingWorkItemRow) => publish(row);
+      table.onInsert(onInsert);
+      return () => {
+        table.removeOnInsert(onInsert);
+        listener = undefined;
+      };
+    },
+    async poll() {
+      return [...table.iter()]
+        .map((row: WorkerPendingWorkItemRow) => rowToWorkItem(row))
+        .filter((item: WorkspaceWorkItem | undefined): item is WorkspaceWorkItem => Boolean(item));
+    },
+  };
 }
 
 function createPendingJobSource(connection: DbConnection): PendingJobSource {
@@ -98,8 +159,9 @@ function createPendingJobSource(connection: DbConnection): PendingJobSource {
 const config = loadConfig();
 const connection = await connect(config);
 const jobs = createPendingJobSource(connection);
-const coordinator = new SpacetimeCoordinatorAdapter(connection as any, jobs, config.WORKER_LEASE_SECONDS);
-const worker = createWorker({ coordinator, jobs }, config);
+const workItems = createPendingWorkItemSource(connection);
+const coordinator = new SpacetimeCoordinatorAdapter(connection as any, jobs, workItems, config.WORKER_LEASE_SECONDS);
+const worker = createWorker({ coordinator, jobs, workItems }, config);
 
 worker.start();
 console.log(`AI worker started: ${config.WORKER_ID}`);

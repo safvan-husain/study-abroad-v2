@@ -6,6 +6,18 @@ import { DbConnection } from "@study-abroad/spacetimedb-bindings";
 
 dotenv.config({ path: resolve(import.meta.dirname, "../.env") });
 
+if (!Promise.withResolvers) {
+  Promise.withResolvers = function withResolvers<T>() {
+    let resolvePromise!: (value: T | PromiseLike<T>) => void;
+    let rejectPromise!: (reason?: unknown) => void;
+    const promise = new Promise<T>((resolve, reject) => {
+      resolvePromise = resolve;
+      rejectPromise = reject;
+    });
+    return { promise, resolve: resolvePromise, reject: rejectPromise };
+  };
+}
+
 const server = process.env.SPACETIME_URL;
 
 if (!server) {
@@ -88,7 +100,7 @@ async function connectWorker() {
                 settled = true;
                 resolve(connection);
               }
-            }).subscribe("SELECT * FROM worker_pending_turns");
+            }).subscribe(["SELECT * FROM worker_pending_turns", "SELECT * FROM worker_pending_work_items"]);
           })
           .catch((error: unknown) => {
             if (!settled) {
@@ -113,6 +125,10 @@ const studentQueries = [
   "SELECT * FROM my_message_parts",
   "SELECT * FROM my_turns",
   "SELECT * FROM my_active_directives",
+  "SELECT * FROM my_workspace_work_sets",
+  "SELECT * FROM my_workspace_work_items",
+  "SELECT * FROM my_workspace_results",
+  "SELECT * FROM my_user_actions",
 ];
 const studentOne = await connect(studentQueries);
 const studentTwo = await connect(studentQueries);
@@ -200,6 +216,11 @@ try {
     directiveUiRevision: 1n,
     directiveType: "discovery",
     directiveAwareness: "I am ready to learn about your study-abroad goals.",
+    workKind: "discovery_guidance",
+    workItems: [
+      { entityType: "discovery_topic", entityId: "background", kind: "advisor_prompt", inputJson: '{"title":"Background"}' },
+      { entityType: "discovery_topic", entityId: "ambition", kind: "advisor_prompt", inputJson: '{"title":"Ambition"}' },
+    ],
   });
   const completedTurn = await waitFor(
     () => [...studentOneTables.my_turns.iter()].find((row: any) => row.turnId === turnId && row.status === "completed"),
@@ -210,6 +231,48 @@ try {
   }
   if ([...studentTwoTables.my_messages.iter()].some((row: any) => row.turnId === turnId)) {
     throw new Error("Second student observed the assistant completion");
+  }
+
+  const workSet = await waitFor(
+    () => [...studentOneTables.my_workspace_work_sets.iter()].find((row: any) => row.sourceTurnId === turnId),
+    "the atomic child work set",
+  );
+  const workerItems = await waitFor(
+    () => {
+      const rows = [...workerTables.worker_pending_work_items.iter()].filter((row: any) => row.workSetId === workSet.workSetId);
+      return rows.length === 2 ? rows : undefined;
+    },
+    "two worker-visible child items",
+  );
+  const [firstItem, secondItem] = workerItems;
+  await worker.reducers.claimWorkItem({ workItemId: secondItem.workItemId, expectedAttempt: 0, leaseSeconds: 30n });
+  await worker.reducers.completeWorkItem({ workItemId: secondItem.workItemId, attempt: 1, resultJson: '{"title":"Ambition","detail":"Completed second."}', runId: undefined });
+  await waitFor(
+    () => [...studentOneTables.my_workspace_results.iter()].find((row: any) => row.workItemId === secondItem.workItemId),
+    "the independently completed second child",
+  );
+  if ([...studentOneTables.my_workspace_results.iter()].some((row: any) => row.workItemId === firstItem.workItemId)) {
+    throw new Error("First child appeared before its independent completion");
+  }
+  const partialSet = [...studentOneTables.my_workspace_work_sets.iter()].find((row: any) => row.workSetId === workSet.workSetId);
+  if (partialSet?.status !== "partial") throw new Error(`Expected partial work set, received ${partialSet?.status}`);
+
+  let duplicateWasRejected = false;
+  try {
+    await worker.reducers.completeWorkItem({ workItemId: secondItem.workItemId, attempt: 1, resultJson: '{"title":"Duplicate"}', runId: undefined });
+  } catch {
+    duplicateWasRejected = true;
+  }
+  if (!duplicateWasRejected) throw new Error("Duplicate child completion was accepted");
+
+  await worker.reducers.claimWorkItem({ workItemId: firstItem.workItemId, expectedAttempt: 0, leaseSeconds: 30n });
+  await worker.reducers.completeWorkItem({ workItemId: firstItem.workItemId, attempt: 1, resultJson: '{"title":"Background","detail":"Completed first."}', runId: undefined });
+  await waitFor(
+    () => [...studentOneTables.my_workspace_work_sets.iter()].find((row: any) => row.workSetId === workSet.workSetId && row.status === "completed"),
+    "the completed reverse-order work set",
+  );
+  if ([...studentTwoTables.my_workspace_results.iter()].some((row: any) => row.workSetId === workSet.workSetId)) {
+    throw new Error("Second student observed the first student's child results");
   }
 
   studentOneTables.my_turns.removeOnInsert(onTurnInsert);

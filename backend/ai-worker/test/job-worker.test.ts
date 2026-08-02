@@ -30,12 +30,13 @@ describe('AI worker chat turn', () => {
     await processChatTurn(turn(), agent, coordinator);
     expect(agent.run).toHaveBeenCalledWith([expect.objectContaining({ messageId: 't1', content: 'Hello', role: 'user' })], expect.objectContaining({ conversationId: 'c1', turnId: 't1' }));
     expect(coordinator.complete).toHaveBeenCalledWith('t1', 1, expect.objectContaining({
-      assistantContent: 'Hi there',
+      assistantContent: expect.stringContaining('planning space'),
       runId: 'r1',
       agentThreadId: 'c1',
       directiveSchemaVersion: 1,
       directiveUiRevision: 1n,
       directiveType: 'discovery',
+      workItems: expect.arrayContaining([expect.objectContaining({ entityId: 'academic-background' }), expect.objectContaining({ entityId: 'study-ambition' })]),
     }));
     expect(coordinator.complete.mock.invocationCallOrder[0]).toBeGreaterThan(agent.run.mock.invocationCallOrder[0]);
   });
@@ -102,5 +103,21 @@ describe('AI worker chat turn', () => {
     await processChatTurn(turn({ conversationId: 'c6', turnId: 't6', correlationId: 'x', agentThreadId: 'c6', userMessageId: 't6', attempt: 3 }), agent, coordinator);
 
     expect(coordinator.retry).toHaveBeenCalledWith('t6', 4, 'Error');
+  });
+
+  it('processes child work independently without invoking the parent agent', async () => {
+    let deliverWorkItem: ((item: any) => void) | undefined;
+    const coordinator = {
+      claim: vi.fn(), complete: vi.fn(), retry: vi.fn(),
+      claimWorkItem: vi.fn().mockResolvedValue(1), completeWorkItem: vi.fn(), retryWorkItem: vi.fn(),
+    };
+    const agent = { run: vi.fn() };
+    const worker = new JobWorker({ agent, coordinator, subscribeWorkItems: callback => { deliverWorkItem = callback; return () => { deliverWorkItem = undefined; }; } });
+    worker.start();
+    deliverWorkItem!({ workItemId: 'item-1', workSetId: 'set-1', conversationId: 'c1', entityType: 'topic', entityId: 'goals', kind: 'prompt', inputJson: '{"title":"Goals","detail":"Share them."}', attempt: 0, expectedContextRevision: 0n, expectedUiRevision: 1n });
+    await worker.stop();
+
+    expect(agent.run).not.toHaveBeenCalled();
+    expect(coordinator.completeWorkItem).toHaveBeenCalledWith('item-1', 1, expect.stringContaining('Share them.'));
   });
 });

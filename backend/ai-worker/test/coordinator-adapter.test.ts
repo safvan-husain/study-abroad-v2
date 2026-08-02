@@ -5,7 +5,7 @@ describe('SpacetimeCoordinatorAdapter', () => {
   it('serializes lease fences and u64 durations for generated reducers', async () => {
     const claim = vi.fn().mockResolvedValue(undefined);
     const jobs = { subscribe: () => () => undefined, poll: async () => [] };
-    const adapter = new SpacetimeCoordinatorAdapter({ reducers: { claim }, db: {} }, jobs, 60);
+    const adapter = new SpacetimeCoordinatorAdapter({ reducers: { claim }, db: {} }, jobs, undefined, 60);
 
     const attempt = await adapter.claim({
       conversationId: 'conversation-1',
@@ -35,6 +35,8 @@ describe('SpacetimeCoordinatorAdapter', () => {
       directiveUiRevision: 5n,
       directiveType: 'discovery',
       directiveAwareness: 'I am ready to learn about your goals.',
+      workKind: 'discovery_guidance',
+      workItems: [{ entityType: 'discovery_topic', entityId: 'goals', kind: 'advisor_prompt', inputJson: '{}' }],
     });
 
     expect(completeTurn).toHaveBeenCalledWith({
@@ -47,6 +49,22 @@ describe('SpacetimeCoordinatorAdapter', () => {
       directiveUiRevision: 5n,
       directiveType: 'discovery',
       directiveAwareness: 'I am ready to learn about your goals.',
+      workKind: 'discovery_guidance',
+      workItems: [{ entityType: 'discovery_topic', entityId: 'goals', kind: 'advisor_prompt', inputJson: '{}' }],
     });
+  });
+
+  it('serializes independently fenced child completion reducers', async () => {
+    const claimWorkItem = vi.fn().mockResolvedValue(undefined);
+    const completeWorkItem = vi.fn().mockResolvedValue(undefined);
+    const jobs = { subscribe: () => () => undefined, poll: async () => [] };
+    const adapter = new SpacetimeCoordinatorAdapter({ reducers: { claimWorkItem, completeWorkItem }, db: {} }, jobs);
+    const item = { workItemId: 'work-1', workSetId: 'set-1', conversationId: 'c1', entityType: 'topic', entityId: 'goals', kind: 'prompt', inputJson: '{}', attempt: 2, expectedContextRevision: 0n, expectedUiRevision: 1n };
+
+    expect(await adapter.claimWorkItem(item)).toBe(3);
+    await adapter.completeWorkItem('work-1', 3, '{"ready":true}');
+
+    expect(claimWorkItem).toHaveBeenCalledWith({ workItemId: 'work-1', expectedAttempt: 2, leaseSeconds: 60n });
+    expect(completeWorkItem).toHaveBeenCalledWith({ workItemId: 'work-1', attempt: 3, resultJson: '{"ready":true}', runId: undefined });
   });
 });

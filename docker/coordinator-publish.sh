@@ -6,9 +6,8 @@ MODULE=/workspace/coordinator/spacetimedb
 NAME=study-abroad-coordinator
 CLI=/opt/spacetime/spacetimedb-cli
 
-if "$CLI" describe "$NAME" --server "$SERVER" --anonymous --json >/dev/null 2>&1; then
-  echo "Database $NAME already exists; leaving the published module unchanged."
-  exit 0
+if ! "$CLI" login show >/dev/null 2>&1; then
+  "$CLI" login --server-issued-login "$SERVER"
 fi
 
-exec "$CLI" publish "$NAME" --server "$SERVER" --module-path "$MODULE" --anonymous --yes --delete-data=on-conflict
+exec "$CLI" publish "$NAME" --server "$SERVER" --module-path "$MODULE" --yes --delete-data=on-conflict

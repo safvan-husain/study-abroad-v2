@@ -16,5 +16,6 @@ export default __t.row({
   agentThreadId: __t.string().name("agent_thread_id"),
   nextSequence: __t.u64().name("next_sequence"),
   uiRevision: __t.u64().name("ui_revision"),
+  contextRevision: __t.u64().name("context_revision"),
   createdAtMicros: __t.i64().name("created_at_micros"),
 });

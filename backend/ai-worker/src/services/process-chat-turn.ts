@@ -26,6 +26,14 @@ export interface TurnCompletion {
   directiveUiRevision: bigint;
   directiveType: string;
   directiveAwareness: string;
+  workKind: string;
+  workItems: WorkItemSpec[];
+}
+export interface WorkItemSpec {
+  entityType: string;
+  entityId: string;
+  kind: string;
+  inputJson: string;
 }
 
 export async function processChatTurn(
@@ -49,13 +57,34 @@ export async function processChatTurn(
     };
     const result = await agent.run([userMessage], turn);
     await coordinator.complete(turn.turnId, attempt, {
-      assistantContent: result.content,
+      assistantContent: 'I have opened a planning space so we can shape your study-abroad direction together.',
       runId: result.runId,
       agentThreadId: result.threadId,
       directiveSchemaVersion: 1,
       directiveUiRevision: turn.baseUiRevision + 1n,
       directiveType: 'discovery',
       directiveAwareness: 'I am ready to learn about your study-abroad goals.',
+      workKind: 'discovery_guidance',
+      workItems: [
+        {
+          entityType: 'discovery_topic',
+          entityId: 'academic-background',
+          kind: 'advisor_prompt',
+          inputJson: JSON.stringify({
+            title: 'Academic starting point',
+            detail: 'Share your current qualification, subject area, and recent grades.',
+          }),
+        },
+        {
+          entityType: 'discovery_topic',
+          entityId: 'study-ambition',
+          kind: 'advisor_prompt',
+          inputJson: JSON.stringify({
+            title: 'Study ambition',
+            detail: 'Tell me which subjects, careers, or destinations you are considering.',
+          }),
+        },
+      ],
     });
   } catch (error) {
     const errorCode = error instanceof Error ? error.name : 'worker_error';

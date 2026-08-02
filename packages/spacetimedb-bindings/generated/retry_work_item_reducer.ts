@@ -10,22 +10,8 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
-import {
-  WorkItemSpec,
-} from "./types";
-
 export default {
-  turnId: __t.string(),
+  workItemId: __t.string(),
   attempt: __t.u32(),
-  assistantContent: __t.string(),
-  runId: __t.string(),
-  agentThreadId: __t.string(),
-  directiveSchemaVersion: __t.u32(),
-  directiveUiRevision: __t.u64(),
-  directiveType: __t.string(),
-  directiveAwareness: __t.string(),
-  workKind: __t.string(),
-  get workItems() {
-    return __t.array(WorkItemSpec);
-  },
+  errorCode: __t.string(),
 };

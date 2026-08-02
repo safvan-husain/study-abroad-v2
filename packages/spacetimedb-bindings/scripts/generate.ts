@@ -15,9 +15,7 @@ if (!existsSync(join(modulePath, "Cargo.toml"))) {
 }
 
 function generate(outputPath: string) {
-  execFileSync(
-    spacetime,
-    [
+  const args = [
       "generate",
       "--lang",
       "typescript",
@@ -26,9 +24,20 @@ function generate(outputPath: string) {
       "--module-path",
       modulePath,
       "--yes",
-    ],
-    { cwd: repositoryRoot, stdio: "inherit" },
-  );
+    ];
+  try {
+    execFileSync(spacetime, args, { cwd: repositoryRoot, stdio: "inherit" });
+  } catch (error) {
+    if (!(error instanceof Error && "code" in error && error.code === "ENOENT") || process.env.SPACETIME_BIN) throw error;
+    execFileSync("docker", [
+      "run", "--rm", "--user", "0",
+      "-v", `${repositoryRoot}:${repositoryRoot}`,
+      "-v", `${tmpdir()}:${tmpdir()}`,
+      "-w", repositoryRoot,
+      "clockworklabs/spacetime:v2.0.3",
+      ...args,
+    ], { cwd: repositoryRoot, stdio: "inherit" });
+  }
 }
 
 function filesAt(directory: string, base = directory): string[] {

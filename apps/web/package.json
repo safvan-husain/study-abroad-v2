@@ -4,13 +4,15 @@
   "private": true,
   "scripts": {
     "dev": "next dev --port 3100",
+    "prebuild": "pnpm --filter @study-abroad/spacetimedb-bindings build",
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --root ../.. test/web-shell.test.tsx test/chat-ui.test.tsx"
+    "test": "vitest run --root ../.. test/web-shell.test.tsx test/chat-ui.test.tsx test/advisor-workspace-ui.test.tsx"
   },
   "dependencies": {
     "@study-abroad/contracts": "workspace:*",
+    "@study-abroad/spacetimedb-bindings": "workspace:*",
     "next": "^15.5.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"

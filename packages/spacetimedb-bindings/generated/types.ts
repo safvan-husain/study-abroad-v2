@@ -15,6 +15,7 @@ export const ActiveDirective = __t.object("ActiveDirective", {
   schemaVersion: __t.u32(),
   uiRevision: __t.u64(),
   sourceTurnId: __t.option(__t.string()),
+  workSetId: __t.option(__t.string()),
   viewType: __t.string(),
   awareness: __t.string(),
   updatedAtMicros: __t.i64(),
@@ -55,6 +56,7 @@ export const Conversation = __t.object("Conversation", {
   agentThreadId: __t.string(),
   nextSequence: __t.u64(),
   uiRevision: __t.u64(),
+  contextRevision: __t.u64(),
   createdAtMicros: __t.i64(),
 });
 export type Conversation = __Infer<typeof Conversation>;
@@ -109,6 +111,25 @@ export const TurnJob = __t.object("TurnJob", {
 });
 export type TurnJob = __Infer<typeof TurnJob>;
 
+export const UserAction = __t.object("UserAction", {
+  actionId: __t.string(),
+  principalId: __t.string(),
+  conversationId: __t.string(),
+  kind: __t.string(),
+  entityRef: __t.option(__t.string()),
+  resultingContextRevision: __t.u64(),
+  createdAtMicros: __t.i64(),
+});
+export type UserAction = __Infer<typeof UserAction>;
+
+export const WorkItemSpec = __t.object("WorkItemSpec", {
+  entityType: __t.string(),
+  entityId: __t.string(),
+  kind: __t.string(),
+  inputJson: __t.string(),
+});
+export type WorkItemSpec = __Infer<typeof WorkItemSpec>;
+
 export const WorkerPendingTurn = __t.object("WorkerPendingTurn", {
   turnId: __t.string(),
   conversationId: __t.string(),
@@ -123,10 +144,67 @@ export const WorkerPendingTurn = __t.object("WorkerPendingTurn", {
 });
 export type WorkerPendingTurn = __Infer<typeof WorkerPendingTurn>;
 
+export const WorkerPendingWorkItem = __t.object("WorkerPendingWorkItem", {
+  workItemId: __t.string(),
+  workSetId: __t.string(),
+  conversationId: __t.string(),
+  entityType: __t.string(),
+  entityId: __t.string(),
+  kind: __t.string(),
+  inputJson: __t.string(),
+  status: __t.string(),
+  leaseUntilMicros: __t.option(__t.i64()),
+  attempt: __t.u32(),
+  expectedContextRevision: __t.u64(),
+  expectedUiRevision: __t.u64(),
+});
+export type WorkerPendingWorkItem = __Infer<typeof WorkerPendingWorkItem>;
+
 export const WorkerPrincipal = __t.object("WorkerPrincipal", {
   workerId: __t.string(),
   label: __t.string(),
   registeredAtMicros: __t.i64(),
 });
 export type WorkerPrincipal = __Infer<typeof WorkerPrincipal>;
+
+export const WorkspaceResult = __t.object("WorkspaceResult", {
+  workItemId: __t.string(),
+  workSetId: __t.string(),
+  conversationId: __t.string(),
+  resultRevision: __t.u64(),
+  resultJson: __t.string(),
+  runId: __t.option(__t.string()),
+  completedAtMicros: __t.i64(),
+});
+export type WorkspaceResult = __Infer<typeof WorkspaceResult>;
+
+export const WorkspaceWorkItem = __t.object("WorkspaceWorkItem", {
+  workItemId: __t.string(),
+  workSetId: __t.string(),
+  conversationId: __t.string(),
+  entityType: __t.string(),
+  entityId: __t.string(),
+  kind: __t.string(),
+  inputJson: __t.string(),
+  status: __t.string(),
+  workerId: __t.option(__t.string()),
+  leaseUntilMicros: __t.option(__t.i64()),
+  attempt: __t.u32(),
+  expectedContextRevision: __t.u64(),
+  expectedUiRevision: __t.u64(),
+  errorCode: __t.option(__t.string()),
+});
+export type WorkspaceWorkItem = __Infer<typeof WorkspaceWorkItem>;
+
+export const WorkspaceWorkSet = __t.object("WorkspaceWorkSet", {
+  workSetId: __t.string(),
+  conversationId: __t.string(),
+  sourceTurnId: __t.string(),
+  kind: __t.string(),
+  status: __t.string(),
+  expectedContextRevision: __t.u64(),
+  expectedUiRevision: __t.u64(),
+  createdAtMicros: __t.i64(),
+});
+export type WorkspaceWorkSet = __Infer<typeof WorkspaceWorkSet>;
 

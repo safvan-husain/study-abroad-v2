@@ -35,13 +35,18 @@ import {
 
 // Import all reducer arg schemas
 import ClaimReducer from "./claim_reducer";
+import ClaimWorkItemReducer from "./claim_work_item_reducer";
 import CompleteTurnReducer from "./complete_turn_reducer";
+import CompleteWorkItemReducer from "./complete_work_item_reducer";
 import EnsureGuestJourneyReducer from "./ensure_guest_journey_reducer";
 import FailReducer from "./fail_reducer";
+import FailWorkItemReducer from "./fail_work_item_reducer";
 import LoginReducer from "./login_reducer";
 import RegisterWorkerReducer from "./register_worker_reducer";
 import RenewReducer from "./renew_reducer";
+import RenewWorkItemReducer from "./renew_work_item_reducer";
 import RetryReducer from "./retry_reducer";
+import RetryWorkItemReducer from "./retry_work_item_reducer";
 import SendMessageReducer from "./send_message_reducer";
 
 // Import all procedure arg schemas
@@ -52,7 +57,12 @@ import MyConversationsRow from "./my_conversations_table";
 import MyMessagePartsRow from "./my_message_parts_table";
 import MyMessagesRow from "./my_messages_table";
 import MyTurnsRow from "./my_turns_table";
+import MyUserActionsRow from "./my_user_actions_table";
+import MyWorkspaceResultsRow from "./my_workspace_results_table";
+import MyWorkspaceWorkItemsRow from "./my_workspace_work_items_table";
+import MyWorkspaceWorkSetsRow from "./my_workspace_work_sets_table";
 import WorkerPendingTurnsRow from "./worker_pending_turns_table";
+import WorkerPendingWorkItemsRow from "./worker_pending_work_items_table";
 
 /** Type-only namespace exports for generated type groups. */
 
@@ -93,6 +103,34 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, MyTurnsRow),
+  my_user_actions: __table({
+    name: 'my_user_actions',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyUserActionsRow),
+  my_workspace_results: __table({
+    name: 'my_workspace_results',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyWorkspaceResultsRow),
+  my_workspace_work_items: __table({
+    name: 'my_workspace_work_items',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyWorkspaceWorkItemsRow),
+  my_workspace_work_sets: __table({
+    name: 'my_workspace_work_sets',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyWorkspaceWorkSetsRow),
   worker_pending_turns: __table({
     name: 'worker_pending_turns',
     indexes: [
@@ -100,18 +138,30 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, WorkerPendingTurnsRow),
+  worker_pending_work_items: __table({
+    name: 'worker_pending_work_items',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, WorkerPendingWorkItemsRow),
 });
 
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
 const reducersSchema = __reducers(
   __reducerSchema("claim", ClaimReducer),
+  __reducerSchema("claim_work_item", ClaimWorkItemReducer),
   __reducerSchema("complete_turn", CompleteTurnReducer),
+  __reducerSchema("complete_work_item", CompleteWorkItemReducer),
   __reducerSchema("ensure_guest_journey", EnsureGuestJourneyReducer),
   __reducerSchema("fail", FailReducer),
+  __reducerSchema("fail_work_item", FailWorkItemReducer),
   __reducerSchema("login", LoginReducer),
   __reducerSchema("register_worker", RegisterWorkerReducer),
   __reducerSchema("renew", RenewReducer),
+  __reducerSchema("renew_work_item", RenewWorkItemReducer),
   __reducerSchema("retry", RetryReducer),
+  __reducerSchema("retry_work_item", RetryWorkItemReducer),
   __reducerSchema("send_message", SendMessageReducer),
 );
 

@@ -6,6 +6,9 @@ pub const MAX_MESSAGE_LENGTH: usize = 16_000;
 pub const MAX_AWARENESS_LENGTH: usize = 512;
 pub const MAX_ERROR_LENGTH: usize = 512;
 pub const MAX_WORKER_LABEL_LENGTH: usize = 128;
+pub const MAX_WORK_KIND_LENGTH: usize = 64;
+pub const MAX_WORK_PAYLOAD_LENGTH: usize = 4_096;
+pub const MAX_WORK_ITEMS: usize = 8;
 pub const MAX_LEASE_SECONDS: u64 = 3_600;
 pub const DIRECTIVE_SCHEMA_VERSION: u32 = 1;
 pub const DISCOVERY_VIEW: &str = "discovery";
@@ -61,6 +64,7 @@ pub struct Conversation {
     pub agent_thread_id: String,
     pub next_sequence: u64,
     pub ui_revision: u64,
+    pub context_revision: u64,
     pub created_at_micros: i64,
 }
 
@@ -129,9 +133,74 @@ pub struct ActiveDirective {
     pub schema_version: u32,
     pub ui_revision: u64,
     pub source_turn_id: Option<String>,
+    pub work_set_id: Option<String>,
     pub view_type: String,
     pub awareness: String,
     pub updated_at_micros: i64,
+}
+
+#[spacetimedb::table(accessor = workspace_work_set)]
+pub struct WorkspaceWorkSet {
+    #[primary_key]
+    pub work_set_id: String,
+    #[index(btree)]
+    pub conversation_id: String,
+    pub source_turn_id: String,
+    pub kind: String,
+    pub status: String,
+    pub expected_context_revision: u64,
+    pub expected_ui_revision: u64,
+    pub created_at_micros: i64,
+}
+
+#[spacetimedb::table(accessor = workspace_work_item)]
+pub struct WorkspaceWorkItem {
+    #[primary_key]
+    pub work_item_id: String,
+    #[index(btree)]
+    pub work_set_id: String,
+    #[index(btree)]
+    pub conversation_id: String,
+    pub entity_type: String,
+    pub entity_id: String,
+    pub kind: String,
+    pub input_json: String,
+    #[index(btree)]
+    pub status: String,
+    pub worker_id: Option<String>,
+    pub lease_until_micros: Option<i64>,
+    pub attempt: u32,
+    pub expected_context_revision: u64,
+    pub expected_ui_revision: u64,
+    pub error_code: Option<String>,
+}
+
+#[spacetimedb::table(accessor = workspace_result)]
+pub struct WorkspaceResult {
+    #[primary_key]
+    pub work_item_id: String,
+    #[index(btree)]
+    pub work_set_id: String,
+    #[index(btree)]
+    pub conversation_id: String,
+    pub result_revision: u64,
+    pub result_json: String,
+    pub run_id: Option<String>,
+    pub completed_at_micros: i64,
+}
+
+#[spacetimedb::table(accessor = user_action)]
+pub struct UserAction {
+    #[primary_key]
+    pub action_id: String,
+    #[index(btree)]
+    pub principal_id: String,
+    #[index(btree)]
+    pub conversation_id: String,
+    pub kind: String,
+    pub entity_ref: Option<String>,
+    pub resulting_context_revision: u64,
+    pub created_at_micros: i64,
 }
 
 #[spacetimedb::table(accessor = worker_principal)]
@@ -154,6 +223,30 @@ pub struct WorkerPendingTurn {
     pub lease_until_micros: Option<i64>,
     pub attempt: u32,
     pub base_ui_revision: u64,
+}
+
+#[derive(SpacetimeType)]
+pub struct WorkItemSpec {
+    pub entity_type: String,
+    pub entity_id: String,
+    pub kind: String,
+    pub input_json: String,
+}
+
+#[derive(SpacetimeType)]
+pub struct WorkerPendingWorkItem {
+    pub work_item_id: String,
+    pub work_set_id: String,
+    pub conversation_id: String,
+    pub entity_type: String,
+    pub entity_id: String,
+    pub kind: String,
+    pub input_json: String,
+    pub status: String,
+    pub lease_until_micros: Option<i64>,
+    pub attempt: u32,
+    pub expected_context_revision: u64,
+    pub expected_ui_revision: u64,
 }
 
 fn caller(ctx: &ReducerContext) -> String {
@@ -261,6 +354,18 @@ pub fn validate_error_code(error_code: &str) -> Result<(), &'static str> {
     Ok(())
 }
 
+pub fn validate_work_item_spec(spec: &WorkItemSpec) -> Result<(), &'static str> {
+    validate_identifier(&spec.entity_type, "invalid work entity type")?;
+    validate_identifier(&spec.entity_id, "invalid work entity identifier")?;
+    if spec.kind.is_empty() || spec.kind.len() > MAX_WORK_KIND_LENGTH {
+        return Err("invalid work item kind");
+    }
+    if spec.input_json.len() > MAX_WORK_PAYLOAD_LENGTH {
+        return Err("work item input is outside the payload bound");
+    }
+    Ok(())
+}
+
 pub fn validate_directive(
     schema_version: u32,
     view_type: &str,
@@ -303,6 +408,29 @@ pub fn lease_owner_matches(job: &TurnJob, worker_id: &str, attempt: u32, now: i6
         && !lease_is_expired(job, now)
 }
 
+pub fn work_item_lease_is_expired(item: &WorkspaceWorkItem, now: i64) -> bool {
+    item.lease_until_micros.unwrap_or_default() <= now
+}
+
+pub fn work_item_lease_owner_matches(
+    item: &WorkspaceWorkItem,
+    worker_id: &str,
+    attempt: u32,
+    now: i64,
+) -> bool {
+    item.status == "claimed"
+        && item.worker_id.as_deref() == Some(worker_id)
+        && item.attempt == attempt
+        && !work_item_lease_is_expired(item, now)
+}
+
+fn work_item_is_claimable(item: &WorkspaceWorkItem, expected_attempt: u32, now: i64) -> bool {
+    item.attempt == expected_attempt
+        && (item.status == "pending"
+            || item.status == "retrying"
+            || (item.status == "claimed" && work_item_lease_is_expired(item, now)))
+}
+
 fn turn_is_claimable(job: &TurnJob, expected_attempt: u32, now: i64) -> bool {
     job.attempt == expected_attempt
         && (job.status == "pending"
@@ -312,6 +440,46 @@ fn turn_is_claimable(job: &TurnJob, expected_attempt: u32, now: i64) -> bool {
 
 fn assistant_message_id(turn_id: &str) -> String {
     format!("{turn_id}-assistant")
+}
+
+fn work_set_id(turn_id: &str) -> String {
+    format!("{turn_id}-work")
+}
+
+fn work_item_id(work_set_id: &str, index: usize) -> String {
+    format!("{work_set_id}-{index}")
+}
+
+fn refresh_work_set_status(ctx: &ReducerContext, work_set_id: &str) {
+    let mut work_set = ctx
+        .db
+        .workspace_work_set()
+        .work_set_id()
+        .find(work_set_id.to_owned())
+        .expect("work set not found");
+    let items: Vec<_> = ctx
+        .db
+        .workspace_work_item()
+        .work_set_id()
+        .filter(work_set_id)
+        .collect();
+    let completed = items.iter().filter(|item| item.status == "completed").count();
+    let failed = items
+        .iter()
+        .filter(|item| item.status == "failed" || item.status == "obsolete")
+        .count();
+    let active = items.len().saturating_sub(completed + failed);
+    work_set.status = if active > 0 && completed > 0 {
+        "partial"
+    } else if active > 0 {
+        "pending"
+    } else if failed > 0 {
+        "completed_with_errors"
+    } else {
+        "completed"
+    }
+    .into();
+    ctx.db.workspace_work_set().work_set_id().update(work_set);
 }
 
 fn directive_part_payload(schema_version: u32, ui_revision: u64, view_type: &str) -> String {
@@ -399,6 +567,7 @@ pub fn ensure_guest_journey(ctx: &ReducerContext, conversation_id: String) {
         agent_thread_id: conversation_id.clone(),
         next_sequence: 1,
         ui_revision: 0,
+        context_revision: 0,
         created_at_micros: now,
     });
     ctx.db.conversation_membership().insert(ConversationMembership {
@@ -594,6 +763,8 @@ pub fn complete_turn(
     directive_ui_revision: u64,
     directive_type: String,
     directive_awareness: String,
+    work_kind: String,
+    work_items: Vec<WorkItemSpec>,
 ) {
     ensure_registered_worker(ctx);
     validate_message_content(&assistant_content).unwrap_or_else(|error| panic!("{error}"));
@@ -606,6 +777,15 @@ pub fn complete_turn(
         &directive_awareness,
     )
     .unwrap_or_else(|error| panic!("{error}"));
+    if work_items.len() > MAX_WORK_ITEMS {
+        panic!("too many work items");
+    }
+    if !work_items.is_empty() && (work_kind.is_empty() || work_kind.len() > MAX_WORK_KIND_LENGTH) {
+        panic!("invalid work set kind");
+    }
+    for spec in &work_items {
+        validate_work_item_spec(spec).unwrap_or_else(|error| panic!("{error}"));
+    }
 
     let now = now_micros(ctx);
     let mut job = ctx
@@ -673,11 +853,46 @@ pub fn complete_turn(
             &directive_type,
         ),
     });
+    let created_work_set_id = (!work_items.is_empty()).then(|| work_set_id(&turn_id));
+    if let Some(ref set_id) = created_work_set_id {
+        if ctx.db.workspace_work_set().work_set_id().find(set_id).is_some() {
+            panic!("work set already exists");
+        }
+        ctx.db.workspace_work_set().insert(WorkspaceWorkSet {
+            work_set_id: set_id.clone(),
+            conversation_id: job.conversation_id.clone(),
+            source_turn_id: turn_id.clone(),
+            kind: work_kind,
+            status: "pending".into(),
+            expected_context_revision: conversation.context_revision,
+            expected_ui_revision: directive_ui_revision,
+            created_at_micros: now,
+        });
+        for (index, spec) in work_items.into_iter().enumerate() {
+            ctx.db.workspace_work_item().insert(WorkspaceWorkItem {
+                work_item_id: work_item_id(set_id, index),
+                work_set_id: set_id.clone(),
+                conversation_id: job.conversation_id.clone(),
+                entity_type: spec.entity_type,
+                entity_id: spec.entity_id,
+                kind: spec.kind,
+                input_json: spec.input_json,
+                status: "pending".into(),
+                worker_id: None,
+                lease_until_micros: None,
+                attempt: 0,
+                expected_context_revision: conversation.context_revision,
+                expected_ui_revision: directive_ui_revision,
+                error_code: None,
+            });
+        }
+    }
     let directive = ActiveDirective {
         conversation_id: job.conversation_id.clone(),
         schema_version: directive_schema_version,
         ui_revision: directive_ui_revision,
         source_turn_id: Some(turn_id.clone()),
+        work_set_id: created_work_set_id,
         view_type: directive_type,
         awareness: directive_awareness,
         updated_at_micros: now,
@@ -709,6 +924,169 @@ pub fn retry(ctx: &ReducerContext, turn_id: String, attempt: u32, error_code: St
 #[spacetimedb::reducer]
 pub fn fail(ctx: &ReducerContext, turn_id: String, attempt: u32, error_code: String) {
     finish_with_error(ctx, turn_id, attempt, "failed", error_code);
+}
+
+#[spacetimedb::reducer]
+pub fn claim_work_item(
+    ctx: &ReducerContext,
+    work_item_id: String,
+    expected_attempt: u32,
+    lease_seconds: u64,
+) {
+    ensure_registered_worker(ctx);
+    if lease_seconds == 0 || lease_seconds > MAX_LEASE_SECONDS {
+        panic!("lease duration is outside the allowed bound");
+    }
+    let now = now_micros(ctx);
+    let mut item = ctx
+        .db
+        .workspace_work_item()
+        .work_item_id()
+        .find(&work_item_id)
+        .expect("work item not found");
+    if !work_item_is_claimable(&item, expected_attempt, now) {
+        panic!("work item is not claimable");
+    }
+    item.status = "claimed".into();
+    item.worker_id = Some(caller(ctx));
+    item.lease_until_micros = Some(now + (lease_seconds * 1_000_000) as i64);
+    item.attempt = item.attempt.checked_add(1).expect("work item attempt exhausted");
+    item.error_code = None;
+    ctx.db.workspace_work_item().work_item_id().update(item);
+}
+
+#[spacetimedb::reducer]
+pub fn renew_work_item(
+    ctx: &ReducerContext,
+    work_item_id: String,
+    attempt: u32,
+    lease_seconds: u64,
+) {
+    ensure_registered_worker(ctx);
+    if lease_seconds == 0 || lease_seconds > MAX_LEASE_SECONDS {
+        panic!("lease duration is outside the allowed bound");
+    }
+    let now = now_micros(ctx);
+    let mut item = ctx
+        .db
+        .workspace_work_item()
+        .work_item_id()
+        .find(&work_item_id)
+        .expect("work item not found");
+    if !work_item_lease_owner_matches(&item, &caller(ctx), attempt, now) {
+        panic!("stale or unauthorized work item attempt");
+    }
+    item.lease_until_micros = Some(now + (lease_seconds * 1_000_000) as i64);
+    ctx.db.workspace_work_item().work_item_id().update(item);
+}
+
+fn finish_work_item_with_error(
+    ctx: &ReducerContext,
+    work_item_id: String,
+    attempt: u32,
+    status: &str,
+    error_code: String,
+) {
+    ensure_registered_worker(ctx);
+    validate_error_code(&error_code).unwrap_or_else(|error| panic!("{error}"));
+    let now = now_micros(ctx);
+    let mut item = ctx
+        .db
+        .workspace_work_item()
+        .work_item_id()
+        .find(&work_item_id)
+        .expect("work item not found");
+    if !work_item_lease_owner_matches(&item, &caller(ctx), attempt, now) {
+        panic!("stale or unauthorized work item attempt");
+    }
+    let set_id = item.work_set_id.clone();
+    item.status = status.into();
+    item.lease_until_micros = None;
+    item.error_code = Some(error_code);
+    ctx.db.workspace_work_item().work_item_id().update(item);
+    refresh_work_set_status(ctx, &set_id);
+}
+
+#[spacetimedb::reducer]
+pub fn retry_work_item(
+    ctx: &ReducerContext,
+    work_item_id: String,
+    attempt: u32,
+    error_code: String,
+) {
+    finish_work_item_with_error(ctx, work_item_id, attempt, "retrying", error_code);
+}
+
+#[spacetimedb::reducer]
+pub fn fail_work_item(
+    ctx: &ReducerContext,
+    work_item_id: String,
+    attempt: u32,
+    error_code: String,
+) {
+    finish_work_item_with_error(ctx, work_item_id, attempt, "failed", error_code);
+}
+
+#[spacetimedb::reducer]
+pub fn complete_work_item(
+    ctx: &ReducerContext,
+    work_item_id: String,
+    attempt: u32,
+    result_json: String,
+    run_id: Option<String>,
+) {
+    ensure_registered_worker(ctx);
+    if result_json.is_empty() || result_json.len() > MAX_WORK_PAYLOAD_LENGTH {
+        panic!("work result is outside the payload bound");
+    }
+    if let Some(ref value) = run_id {
+        validate_identifier(value, "invalid run identifier").unwrap_or_else(|error| panic!("{error}"));
+    }
+    let now = now_micros(ctx);
+    let mut item = ctx
+        .db
+        .workspace_work_item()
+        .work_item_id()
+        .find(&work_item_id)
+        .expect("work item not found");
+    if !work_item_lease_owner_matches(&item, &caller(ctx), attempt, now) {
+        panic!("stale or unauthorized work item attempt");
+    }
+    let conversation = ctx
+        .db
+        .conversation()
+        .conversation_id()
+        .find(&item.conversation_id)
+        .expect("conversation not found");
+    let directive = ctx
+        .db
+        .active_directive()
+        .conversation_id()
+        .find(&item.conversation_id)
+        .expect("active directive not found");
+    let applicable = conversation.context_revision == item.expected_context_revision
+        && conversation.ui_revision == item.expected_ui_revision
+        && directive.ui_revision == item.expected_ui_revision
+        && directive.work_set_id.as_deref() == Some(item.work_set_id.as_str());
+    let set_id = item.work_set_id.clone();
+    if applicable {
+        ctx.db.workspace_result().insert(WorkspaceResult {
+            work_item_id: item.work_item_id.clone(),
+            work_set_id: set_id.clone(),
+            conversation_id: item.conversation_id.clone(),
+            result_revision: 1,
+            result_json,
+            run_id,
+            completed_at_micros: now,
+        });
+        item.status = "completed".into();
+    } else {
+        item.status = "obsolete".into();
+        item.error_code = Some("stale_context".into());
+    }
+    item.lease_until_micros = None;
+    ctx.db.workspace_work_item().work_item_id().update(item);
+    refresh_work_set_status(ctx, &set_id);
 }
 
 fn caller_conversation_ids(ctx: &ViewContext) -> Vec<String> {
@@ -784,24 +1162,81 @@ fn my_active_directives(ctx: &ViewContext) -> Vec<ActiveDirective> {
         .collect()
 }
 
-#[spacetimedb::view(accessor = worker_pending_turns, public)]
-fn worker_pending_turns(ctx: &ViewContext) -> Vec<WorkerPendingTurn> {
+#[spacetimedb::view(accessor = my_workspace_work_sets, public)]
+fn my_workspace_work_sets(ctx: &ViewContext) -> Vec<WorkspaceWorkSet> {
+    caller_conversation_ids(ctx)
+        .into_iter()
+        .flat_map(|conversation_id| {
+            ctx.db
+                .workspace_work_set()
+                .conversation_id()
+                .filter(&conversation_id)
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
+#[spacetimedb::view(accessor = my_workspace_work_items, public)]
+fn my_workspace_work_items(ctx: &ViewContext) -> Vec<WorkspaceWorkItem> {
+    caller_conversation_ids(ctx)
+        .into_iter()
+        .flat_map(|conversation_id| {
+            ctx.db
+                .workspace_work_item()
+                .conversation_id()
+                .filter(&conversation_id)
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
+#[spacetimedb::view(accessor = my_workspace_results, public)]
+fn my_workspace_results(ctx: &ViewContext) -> Vec<WorkspaceResult> {
+    caller_conversation_ids(ctx)
+        .into_iter()
+        .flat_map(|conversation_id| {
+            ctx.db
+                .workspace_result()
+                .conversation_id()
+                .filter(&conversation_id)
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
+#[spacetimedb::view(accessor = my_user_actions, public)]
+fn my_user_actions(ctx: &ViewContext) -> Vec<UserAction> {
+    caller_conversation_ids(ctx)
+        .into_iter()
+        .flat_map(|conversation_id| {
+            ctx.db
+                .user_action()
+                .conversation_id()
+                .filter(&conversation_id)
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
+fn is_registered_worker_view(ctx: &ViewContext) -> bool {
     let session = match ctx.db.auth_session().identity().find(ctx.sender()) {
         Some(session) => session,
-        None => return vec![],
+        None => return false,
     };
     match ctx.db.app_user().user_id().find(session.user_id) {
         Some(user) if user.active && user.role == ROLE_AI_AGENT => {}
-        _ => return vec![],
+        _ => return false,
     }
-    let worker_id = ctx.sender().to_string();
-    if ctx
-        .db
+    ctx.db
         .worker_principal()
         .worker_id()
-        .find(&worker_id)
-        .is_none()
-    {
+        .find(&ctx.sender().to_string())
+        .is_some()
+}
+
+#[spacetimedb::view(accessor = worker_pending_turns, public)]
+fn worker_pending_turns(ctx: &ViewContext) -> Vec<WorkerPendingTurn> {
+    if !is_registered_worker_view(ctx) {
         return vec![];
     }
 
@@ -829,12 +1264,39 @@ fn worker_pending_turns(ctx: &ViewContext) -> Vec<WorkerPendingTurn> {
         .collect()
 }
 
+#[spacetimedb::view(accessor = worker_pending_work_items, public)]
+fn worker_pending_work_items(ctx: &ViewContext) -> Vec<WorkerPendingWorkItem> {
+    if !is_registered_worker_view(ctx) {
+        return vec![];
+    }
+    ["pending", "retrying", "claimed"]
+        .into_iter()
+        .flat_map(|status| ctx.db.workspace_work_item().status().filter(status))
+        .map(|item| WorkerPendingWorkItem {
+            work_item_id: item.work_item_id,
+            work_set_id: item.work_set_id,
+            conversation_id: item.conversation_id,
+            entity_type: item.entity_type,
+            entity_id: item.entity_id,
+            kind: item.kind,
+            input_json: item.input_json,
+            status: item.status,
+            lease_until_micros: item.lease_until_micros,
+            attempt: item.attempt,
+            expected_context_revision: item.expected_context_revision,
+            expected_ui_revision: item.expected_ui_revision,
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        DISCOVERY_VIEW, TurnJob, lease_is_expired, lease_owner_matches, turn_is_claimable,
+        DISCOVERY_VIEW, TurnJob, WorkItemSpec, WorkspaceWorkItem, lease_is_expired,
+        lease_owner_matches, turn_is_claimable,
         validate_command_id, validate_conversation_id, validate_directive,
         validate_directive_revision, validate_error_code, validate_message_content,
+        validate_work_item_spec, work_item_is_claimable, work_item_lease_owner_matches,
     };
 
     fn turn(status: &str, worker_id: Option<&str>, lease_until_micros: Option<i64>, attempt: u32) -> TurnJob {
@@ -854,6 +1316,25 @@ mod tests {
         }
     }
 
+    fn work_item(status: &str, worker_id: Option<&str>, lease_until_micros: Option<i64>, attempt: u32) -> WorkspaceWorkItem {
+        WorkspaceWorkItem {
+            work_item_id: "turn-1-work-0".into(),
+            work_set_id: "turn-1-work".into(),
+            conversation_id: "conversation-1".into(),
+            entity_type: "discovery_topic".into(),
+            entity_id: "goals".into(),
+            kind: "advisor_prompt".into(),
+            input_json: "{}".into(),
+            status: status.into(),
+            worker_id: worker_id.map(str::to_owned),
+            lease_until_micros,
+            attempt,
+            expected_context_revision: 0,
+            expected_ui_revision: 1,
+            error_code: None,
+        }
+    }
+
     #[test]
     fn validates_sender_supplied_ids_and_payloads() {
         assert!(validate_conversation_id("conversation-1").is_ok());
@@ -865,6 +1346,12 @@ mod tests {
         assert!(validate_message_content(&"x".repeat(16_001)).is_err());
         assert!(validate_error_code("agent_unavailable").is_ok());
         assert!(validate_error_code(&"x".repeat(513)).is_err());
+        assert!(validate_work_item_spec(&WorkItemSpec {
+            entity_type: "discovery_topic".into(),
+            entity_id: "goals".into(),
+            kind: "advisor_prompt".into(),
+            input_json: "{}".into(),
+        }).is_ok());
     }
 
     #[test]
@@ -895,5 +1382,14 @@ mod tests {
         assert!(!turn_is_claimable(&active, 2, 100));
         assert!(turn_is_claimable(&expired, 2, 100));
         assert!(turn_is_claimable(&turn("retrying", None, None, 2), 2, 100));
+
+        let item = work_item("claimed", Some("worker-1"), Some(101), 2);
+        assert!(work_item_lease_owner_matches(&item, "worker-1", 2, 100));
+        assert!(!work_item_lease_owner_matches(&item, "worker-2", 2, 100));
+        assert!(work_item_is_claimable(
+            &work_item("claimed", Some("worker-1"), Some(99), 2),
+            2,
+            100,
+        ));
     }
 }

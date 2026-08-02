@@ -11,12 +11,12 @@ import {
 } from "spacetimedb";
 
 export default __t.row({
+  workSetId: __t.string().name("work_set_id"),
   conversationId: __t.string().name("conversation_id"),
-  schemaVersion: __t.u32().name("schema_version"),
-  uiRevision: __t.u64().name("ui_revision"),
-  sourceTurnId: __t.option(__t.string()).name("source_turn_id"),
-  workSetId: __t.option(__t.string()).name("work_set_id"),
-  viewType: __t.string().name("view_type"),
-  awareness: __t.string(),
-  updatedAtMicros: __t.i64().name("updated_at_micros"),
+  sourceTurnId: __t.string().name("source_turn_id"),
+  kind: __t.string(),
+  status: __t.string(),
+  expectedContextRevision: __t.u64().name("expected_context_revision"),
+  expectedUiRevision: __t.u64().name("expected_ui_revision"),
+  createdAtMicros: __t.i64().name("created_at_micros"),
 });
