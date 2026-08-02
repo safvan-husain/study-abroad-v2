@@ -13,7 +13,7 @@ export class CoordinatorController {
     if (!userId) throw new UnauthorizedException('conversation access denied');
     if (!UUID_RE.test(conversationId)) throw new BadRequestException('conversationId must be a UUID');
   }
-  @Get(':conversationId/messages') messages(@Headers('x-user-id') userId: string | undefined, @Param('conversationId') conversationId: string) { this.authorize(userId, conversationId); return this.store.list(conversationId); }
+  @Get(':conversationId/messages') messages(@Headers('x-user-id') userId: string | undefined, @Param('conversationId') conversationId: string) { this.authorize(userId, conversationId); return this.service.getHistory(conversationId); }
   @Post(':conversationId/messages') async send(@Headers('x-user-id') userId: string | undefined, @Param('conversationId') conversationId: string, @Body() body: { content?: string; idempotencyKey?: string }) {
     this.authorize(userId, conversationId);
     if (!body.content?.trim() || !body.idempotencyKey?.trim()) throw new BadRequestException('content and idempotencyKey are required');

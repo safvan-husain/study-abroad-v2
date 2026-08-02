@@ -1,4 +1,5 @@
 import { DbConnection } from '@study-abroad/spacetimedb-bindings';
+import type { ChatMessage } from '@study-abroad/contracts';
 import type { CoordinatorPort, TurnStatus } from './coordinator.service.js';
 
 type TurnRow = {
@@ -7,6 +8,27 @@ type TurnRow = {
   status: string;
   errorCode: string | null;
 };
+
+type MessageRow = {
+  messageId: string;
+  conversationId: string;
+  turnId: string;
+  sequence: bigint;
+  role: 'user' | 'assistant';
+  content: string;
+  createdAtMicros: bigint;
+};
+
+export function toChatMessage(row: MessageRow): ChatMessage {
+  return {
+    messageId: row.messageId,
+    conversationId: row.conversationId,
+    turnId: row.turnId,
+    role: row.role,
+    content: row.content,
+    createdAt: new Date(Number(row.createdAtMicros / 1_000n)).toISOString(),
+  };
+}
 
 /** Browser-facing coordinator port backed by the published SpacetimeDB module. */
 export class SpacetimeCoordinatorPort implements CoordinatorPort {
@@ -29,7 +51,7 @@ export class SpacetimeCoordinatorPort implements CoordinatorPort {
               settled = true;
               resolve(connection);
             }
-          }).subscribe('SELECT * FROM my_turns');
+          }).subscribe(['SELECT * FROM my_turns', 'SELECT * FROM my_messages']);
         })
         .onConnectError((_context, error) => {
           if (!settled) {
@@ -56,6 +78,14 @@ export class SpacetimeCoordinatorPort implements CoordinatorPort {
       ...input,
       status: 'pending',
     };
+  }
+
+  async history(conversationId: string): Promise<ChatMessage[]> {
+    const connection = await this.connect();
+    return [...(connection.db.my_messages as any).iter()]
+      .filter((row: MessageRow) => row.conversationId === conversationId)
+      .sort((left: MessageRow, right: MessageRow) => Number(left.sequence - right.sequence))
+      .map((row: MessageRow) => toChatMessage(row));
   }
 
   async status(conversationId: string, turnId: string): Promise<TurnStatus> {
