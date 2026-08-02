@@ -1,11 +1,11 @@
 import { DbConnection } from '@study-abroad/spacetimedb-bindings';
 import type { CoordinatorPort, TurnStatus } from './coordinator.service.js';
 
-type JobRow = {
+type TurnRow = {
   conversationId: string;
   turnId: string;
   status: string;
-  result: string | null;
+  errorCode: string | null;
 };
 
 /** Browser-facing coordinator port backed by the published SpacetimeDB module. */
@@ -29,7 +29,7 @@ export class SpacetimeCoordinatorPort implements CoordinatorPort {
               settled = true;
               resolve(connection);
             }
-          }).subscribe('SELECT * FROM job');
+          }).subscribe('SELECT * FROM my_turns');
         })
         .onConnectError((_context, error) => {
           if (!settled) {
@@ -43,14 +43,14 @@ export class SpacetimeCoordinatorPort implements CoordinatorPort {
     return this.connection;
   }
 
-  async enqueue(input: { conversationId: string; turnId: string; correlationId: string }): Promise<TurnStatus> {
+  async enqueue(input: { conversationId: string; turnId: string; correlationId: string; content: string }): Promise<TurnStatus> {
     const connection = await this.connect();
     this.correlations.set(`${input.conversationId}:${input.turnId}`, input.correlationId);
-    await connection.reducers.enqueue({
+    await connection.reducers.ensureGuestJourney({ conversationId: input.conversationId });
+    await connection.reducers.sendMessage({
       conversationId: input.conversationId,
-      turnId: input.turnId,
-      agentThreadId: input.conversationId,
-      idempotencyKey: input.turnId,
+      clientCommandId: input.turnId,
+      content: input.content,
     });
     return {
       ...input,
@@ -60,15 +60,15 @@ export class SpacetimeCoordinatorPort implements CoordinatorPort {
 
   async status(conversationId: string, turnId: string): Promise<TurnStatus> {
     const connection = await this.connect();
-    const row = [...(connection.db.job as any).iter()].find((candidate: JobRow) =>
+    const row = [...(connection.db.my_turns as any).iter()].find((candidate: TurnRow) =>
       candidate.conversationId === conversationId && candidate.turnId === turnId,
-    ) as JobRow | undefined;
+    ) as TurnRow | undefined;
     if (!row) throw new Error('coordinator turn not found');
 
     const status = row.status === 'completed' ? 'completed' : row.status === 'failed' ? 'failed' : 'pending';
     let error: string | undefined;
-    if (status === 'failed' && row.result) {
-      error = row.result.slice(0, 128);
+    if (status === 'failed' && row.errorCode) {
+      error = row.errorCode.slice(0, 128);
     }
     return {
       conversationId,

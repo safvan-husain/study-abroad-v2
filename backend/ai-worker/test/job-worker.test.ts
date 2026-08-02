@@ -1,45 +1,65 @@
 import { describe, expect, it, vi } from 'vitest';
-import { InMemoryMongoMessageStore } from '../src/services/mongo-message-store.js';
 import { processChatTurn } from '../src/services/process-chat-turn.js';
 import { JobWorker } from '../src/services/job-worker.js';
 
+const turn = (overrides: Partial<{
+  conversationId: string;
+  turnId: string;
+  correlationId: string;
+  agentThreadId: string;
+  userMessageId: string;
+  userContent: string;
+  attempt: number;
+  baseUiRevision: bigint;
+}> = {}) => ({
+  conversationId: 'c1',
+  turnId: 't1',
+  correlationId: 'corr1',
+  agentThreadId: 'c1',
+  userMessageId: 't1',
+  userContent: 'Hello',
+  attempt: 0,
+  baseUiRevision: 0n,
+  ...overrides,
+});
+
 describe('AI worker chat turn', () => {
-  it('writes MongoDB before completing the coordinator turn and deduplicates claims', async () => {
-    const store = new InMemoryMongoMessageStore();
-    await store.append({ messageId: 'm1', conversationId: 'c1', turnId: 't1', role: 'user', content: 'Hello', idempotencyKey: 'm1' });
-    const coordinator = { claim: vi.fn().mockResolvedValue(true), complete: vi.fn(), retry: vi.fn() };
+  it('reads the subscribed user row and atomically completes the assistant turn', async () => {
+    const coordinator = { claim: vi.fn().mockResolvedValue(1), complete: vi.fn(), retry: vi.fn() };
     const agent = { run: vi.fn().mockResolvedValue({ threadId: 'c1', runId: 'r1', content: 'Hi there', metadata: {} }) };
-    await processChatTurn({ conversationId: 'c1', turnId: 't1', correlationId: 'corr1', workerId: 'w1' }, store, agent, coordinator);
-    expect((await store.list('c1')).map(message => message.role)).toEqual(['user', 'assistant']);
-    expect(coordinator.complete).toHaveBeenCalledWith('t1', expect.objectContaining({ messageId: 't1-assistant', runId: 'r1', correlationId: 'corr1' }));
+    await processChatTurn(turn(), agent, coordinator);
+    expect(agent.run).toHaveBeenCalledWith([expect.objectContaining({ messageId: 't1', content: 'Hello', role: 'user' })], expect.objectContaining({ conversationId: 'c1', turnId: 't1' }));
+    expect(coordinator.complete).toHaveBeenCalledWith('t1', 1, expect.objectContaining({
+      assistantContent: 'Hi there',
+      runId: 'r1',
+      agentThreadId: 'c1',
+      directiveSchemaVersion: 1,
+      directiveUiRevision: 1n,
+      directiveType: 'discovery',
+    }));
     expect(coordinator.complete.mock.invocationCallOrder[0]).toBeGreaterThan(agent.run.mock.invocationCallOrder[0]);
   });
 
   it('subscribes, deduplicates delivery, renews leases, and stops cleanly', async () => {
     let deliver: ((turn: any) => void) | undefined;
-    const coordinator = { claim: vi.fn().mockResolvedValue(true), renew: vi.fn().mockResolvedValue(true), complete: vi.fn(), retry: vi.fn() };
-    const store = new InMemoryMongoMessageStore();
-    await store.append({ messageId: 'm2', conversationId: 'c2', turnId: 't2', role: 'user', content: 'Hi', idempotencyKey: 'm2' });
+    const coordinator = { claim: vi.fn().mockResolvedValue(1), renew: vi.fn().mockResolvedValue(undefined), complete: vi.fn(), retry: vi.fn() };
     const agent = { run: vi.fn().mockImplementation(() => new Promise(resolve => setTimeout(() => resolve({ threadId: 'c2', runId: 'r2', content: 'Hello', metadata: {} }), 30))) };
-    const worker = new JobWorker({ store, agent, coordinator, leaseSeconds: 1, subscribe: callback => { deliver = callback; return () => { deliver = undefined; }; } });
+    const worker = new JobWorker({ agent, coordinator, leaseSeconds: 1, subscribe: callback => { deliver = callback; return () => { deliver = undefined; }; } });
     worker.start();
-    const turn = { conversationId: 'c2', turnId: 't2', correlationId: 'x', workerId: 'w' };
-    deliver!(turn); deliver!(turn);
+    const pending = turn({ conversationId: 'c2', turnId: 't2', correlationId: 'x', agentThreadId: 'c2', userMessageId: 't2', userContent: 'Hi' });
+    deliver!(pending); deliver!(pending);
     await worker.stop();
     expect(agent.run).toHaveBeenCalledTimes(1);
     expect(coordinator.complete).toHaveBeenCalledTimes(1);
   });
 
   it('waits for an in-flight turn before resolving stop', async () => {
-    const store = new InMemoryMongoMessageStore();
-    await store.append({ messageId: 'm3', conversationId: 'c3', turnId: 't3', role: 'user', content: 'Hi', idempotencyKey: 'm3' });
     let finish!: () => void;
-    const coordinator = { claim: vi.fn().mockResolvedValue(true), complete: vi.fn(), retry: vi.fn() };
+    const coordinator = { claim: vi.fn().mockResolvedValue(1), complete: vi.fn(), retry: vi.fn() };
     const agent = { run: vi.fn().mockImplementation(() => new Promise(resolve => { finish = () => resolve({ threadId: 'c3', runId: 'r3', content: 'Done', metadata: {} }); })) };
-    const worker = new JobWorker({ store, agent, coordinator });
+    const worker = new JobWorker({ agent, coordinator });
     worker.start();
-    const turn = { conversationId: 'c3', turnId: 't3', correlationId: 'x', workerId: 'w' };
-    const running = worker.handle(turn);
+    const running = worker.handle(turn({ conversationId: 'c3', turnId: 't3', correlationId: 'x', agentThreadId: 'c3', userMessageId: 't3' }));
     let stopped = false;
     const stopping = worker.stop().then(() => { stopped = true; });
     await new Promise(resolve => setTimeout(resolve, 0));
@@ -51,14 +71,12 @@ describe('AI worker chat turn', () => {
 
   it('routes renewal failures to a swallowed background error', async () => {
     vi.useFakeTimers();
-    const store = new InMemoryMongoMessageStore();
-    await store.append({ messageId: 'm4', conversationId: 'c4', turnId: 't4', role: 'user', content: 'Hi', idempotencyKey: 'm4' });
-    const coordinator = { claim: vi.fn().mockResolvedValue(true), renew: vi.fn().mockRejectedValue(new Error('offline')), complete: vi.fn(), retry: vi.fn() };
+    const coordinator = { claim: vi.fn().mockResolvedValue(1), renew: vi.fn().mockRejectedValue(new Error('offline')), complete: vi.fn(), retry: vi.fn() };
     let finish!: () => void;
     const agent = { run: vi.fn().mockImplementation(() => new Promise(resolve => { finish = () => resolve({ threadId: 'c4', runId: 'r4', content: 'Done', metadata: {} }); })) };
-    const worker = new JobWorker({ store, agent, coordinator, leaseSeconds: 1 });
+    const worker = new JobWorker({ agent, coordinator, leaseSeconds: 1 });
     worker.start();
-    const task = worker.handle({ conversationId: 'c4', turnId: 't4', correlationId: 'x', workerId: 'w' });
+    const task = worker.handle(turn({ conversationId: 'c4', turnId: 't4', correlationId: 'x', agentThreadId: 'c4', userMessageId: 't4' }));
     await vi.advanceTimersByTimeAsync(500);
     await vi.advanceTimersByTimeAsync(500);
     finish();
@@ -71,21 +89,18 @@ describe('AI worker chat turn', () => {
   it('does not crash when a coordinator claim fails', async () => {
     const coordinator = { claim: vi.fn().mockRejectedValue(new Error('coordinator offline')), complete: vi.fn(), retry: vi.fn() };
     const agent = { run: vi.fn() };
-    const store = new InMemoryMongoMessageStore();
 
-    await expect(processChatTurn({ conversationId: 'c5', turnId: 't5', correlationId: 'x', workerId: 'w' }, store, agent, coordinator)).resolves.toBeUndefined();
+    await expect(processChatTurn(turn({ conversationId: 'c5', turnId: 't5', correlationId: 'x', agentThreadId: 'c5', userMessageId: 't5' }), agent, coordinator)).resolves.toBeUndefined();
     expect(agent.run).not.toHaveBeenCalled();
     expect(coordinator.retry).not.toHaveBeenCalled();
   });
 
-  it('fails permanent transcript errors instead of retrying forever', async () => {
-    const store = new InMemoryMongoMessageStore();
-    const coordinator = { claim: vi.fn().mockResolvedValue(true), complete: vi.fn(), retry: vi.fn(), fail: vi.fn() };
-    const agent = { run: vi.fn() };
+  it('retries an agent failure using the claimed lease fence', async () => {
+    const coordinator = { claim: vi.fn().mockResolvedValue(4), complete: vi.fn(), retry: vi.fn() };
+    const agent = { run: vi.fn().mockRejectedValue(new Error('Agent unavailable')) };
 
-    await processChatTurn({ conversationId: 'c6', turnId: 't6', correlationId: 'x', workerId: 'w' }, store, agent, coordinator);
+    await processChatTurn(turn({ conversationId: 'c6', turnId: 't6', correlationId: 'x', agentThreadId: 'c6', userMessageId: 't6', attempt: 3 }), agent, coordinator);
 
-    expect(coordinator.fail).toHaveBeenCalledWith('t6', 'Error');
-    expect(coordinator.retry).not.toHaveBeenCalled();
+    expect(coordinator.retry).toHaveBeenCalledWith('t6', 4, 'Error');
   });
 });

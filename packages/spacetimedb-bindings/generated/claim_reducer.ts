@@ -12,5 +12,6 @@ import {
 
 export default {
   turnId: __t.string(),
+  expectedAttempt: __t.u32(),
   leaseSeconds: __t.u64(),
 };

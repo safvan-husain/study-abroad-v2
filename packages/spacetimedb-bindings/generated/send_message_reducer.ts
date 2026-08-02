@@ -11,7 +11,7 @@ import {
 } from "spacetimedb";
 
 export default {
-  turnId: __t.string(),
-  attempt: __t.u32(),
-  errorCode: __t.string(),
+  conversationId: __t.string(),
+  clientCommandId: __t.string(),
+  content: __t.string(),
 };

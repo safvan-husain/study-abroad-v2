@@ -9,6 +9,8 @@ const configSchema = z.object({
   COORDINATOR_URL: z.string().url().optional(),
   SPACETIME_URL: z.string().url().default('http://localhost:3010'),
   SPACETIME_DATABASE: z.string().min(1).default('study-abroad-coordinator'),
+  AGENT_USERNAME: z.string().min(1).default('study_abroad_agent'),
+  AGENT_PASSWORD: z.string().min(1).default('study-agent-dev'),
   MONGODB_URI: z.string().url().default('mongodb://localhost:27017'),
   MONGODB_DATABASE: z.string().min(1).default('study_abroad'),
   AGENT_SERVER_URL: z.string().url().default('http://localhost:2025'),

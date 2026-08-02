@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 
@@ -58,6 +58,13 @@ if (checkOnly) {
     rmSync(temporaryRoot, { recursive: true, force: true });
   }
 } else {
-  rmSync(generatedPath, { recursive: true, force: true });
-  generate(generatedPath);
+  const temporaryRoot = mkdtempSync(join(packageRoot, ".generated-"));
+  const temporaryOutput = join(temporaryRoot, "generated");
+  try {
+    generate(temporaryOutput);
+    rmSync(generatedPath, { recursive: true, force: true });
+    renameSync(temporaryOutput, generatedPath);
+  } finally {
+    rmSync(temporaryRoot, { recursive: true, force: true });
+  }
 }

@@ -3,21 +3,34 @@ import type { ChatTurn } from './services/process-chat-turn.js';
 import { loadConfig } from './config.js';
 import { createWorker } from './index.js';
 import { SpacetimeCoordinatorAdapter, type PendingJobSource } from './services/coordinator-adapter.js';
-import { MongoMessageStore } from './services/mongo-message-store.js';
 
-type JobRow = {
+type WorkerPendingTurnRow = {
   conversationId: string;
   turnId: string;
+  agentThreadId: string;
+  correlationId: string;
+  userMessageId: string;
+  userContent: string;
   status: string;
+  leaseUntilMicros: bigint | null;
+  attempt: number;
+  baseUiRevision: bigint;
 };
 
-function rowToTurn(row: JobRow, workerId: string): ChatTurn | undefined {
-  if (row.status !== 'pending' && row.status !== 'retrying') return undefined;
+function rowToTurn(row: WorkerPendingTurnRow): ChatTurn | undefined {
+  const claimedLeaseExpired = row.status === 'claimed'
+    && row.leaseUntilMicros !== null
+    && row.leaseUntilMicros <= BigInt(Date.now()) * 1_000n;
+  if (row.status !== 'pending' && row.status !== 'retrying' && !claimedLeaseExpired) return undefined;
   return {
     conversationId: row.conversationId,
     turnId: row.turnId,
-    correlationId: row.turnId,
-    workerId,
+    correlationId: row.correlationId,
+    agentThreadId: row.agentThreadId,
+    userMessageId: row.userMessageId,
+    userContent: row.userContent,
+    attempt: row.attempt,
+    baseUiRevision: row.baseUiRevision,
   };
 }
 
@@ -28,12 +41,22 @@ async function connect(config: ReturnType<typeof loadConfig>): Promise<DbConnect
       .withUri(config.SPACETIME_URL.replace(/^http/, 'ws'))
       .withDatabaseName(config.SPACETIME_DATABASE)
       .onConnect((connection) => {
-        connection.subscriptionBuilder().onApplied(() => {
-          if (!settled) {
-            settled = true;
-            resolve(connection);
-          }
-        }).subscribe('SELECT * FROM job');
+        void connection.reducers.login({ username: config.AGENT_USERNAME, password: config.AGENT_PASSWORD })
+          .then(() => connection.reducers.registerWorker({ workerLabel: config.WORKER_ID }))
+          .then(() => {
+            connection.subscriptionBuilder().onApplied(() => {
+              if (!settled) {
+                settled = true;
+                resolve(connection);
+              }
+            }).subscribe('SELECT * FROM worker_pending_turns');
+          })
+          .catch((error: unknown) => {
+            if (!settled) {
+              settled = true;
+              reject(error);
+            }
+          });
       })
       .onConnectError((_context, error) => {
         if (!settled) {
@@ -45,31 +68,28 @@ async function connect(config: ReturnType<typeof loadConfig>): Promise<DbConnect
   });
 }
 
-function createPendingJobSource(connection: DbConnection, workerId: string): PendingJobSource {
-  const table = connection.db.job as any;
+function createPendingJobSource(connection: DbConnection): PendingJobSource {
+  const table = connection.db.worker_pending_turns as any;
   let listener: ((turn: ChatTurn) => void) | undefined;
 
-  const publish = (row: JobRow) => {
-    const turn = rowToTurn(row, workerId);
+  const publish = (row: WorkerPendingTurnRow) => {
+    const turn = rowToTurn(row);
     if (turn) listener?.(turn);
   };
 
   return {
     subscribe(callback) {
       listener = callback;
-      const onInsert = (_context: unknown, row: JobRow) => publish(row);
-      const onUpdate = (_context: unknown, _oldRow: JobRow, row: JobRow) => publish(row);
+      const onInsert = (_context: unknown, row: WorkerPendingTurnRow) => publish(row);
       table.onInsert(onInsert);
-      table.onUpdate(onUpdate);
       return () => {
         table.removeOnInsert(onInsert);
-        table.removeOnUpdate(onUpdate);
         listener = undefined;
       };
     },
     async poll() {
       return [...table.iter()]
-        .map((row: JobRow) => rowToTurn(row, workerId))
+        .map((row: WorkerPendingTurnRow) => rowToTurn(row))
         .filter((turn: ChatTurn | undefined): turn is ChatTurn => Boolean(turn));
     },
   };
@@ -77,9 +97,9 @@ function createPendingJobSource(connection: DbConnection, workerId: string): Pen
 
 const config = loadConfig();
 const connection = await connect(config);
-const jobs = createPendingJobSource(connection, config.WORKER_ID);
+const jobs = createPendingJobSource(connection);
 const coordinator = new SpacetimeCoordinatorAdapter(connection as any, jobs, config.WORKER_LEASE_SECONDS);
-const worker = createWorker({ store: new MongoMessageStore(), coordinator, jobs }, config);
+const worker = createWorker({ coordinator, jobs }, config);
 
 worker.start();
 console.log(`AI worker started: ${config.WORKER_ID}`);

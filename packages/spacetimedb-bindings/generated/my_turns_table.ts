@@ -11,14 +11,16 @@ import {
 } from "spacetimedb";
 
 export default __t.row({
-  turnId: __t.string().primaryKey().name("turn_id"),
-  idempotencyKey: __t.string().name("idempotency_key"),
+  turnId: __t.string().name("turn_id"),
   conversationId: __t.string().name("conversation_id"),
+  userMessageId: __t.string().name("user_message_id"),
   agentThreadId: __t.string().name("agent_thread_id"),
+  correlationId: __t.string().name("correlation_id"),
   status: __t.string(),
   workerId: __t.option(__t.string()).name("worker_id"),
-  leaseUntil: __t.option(__t.i64()).name("lease_until"),
+  leaseUntilMicros: __t.option(__t.i64()).name("lease_until_micros"),
   attempt: __t.u32(),
+  baseUiRevision: __t.u64().name("base_ui_revision"),
   runId: __t.option(__t.string()).name("run_id"),
-  result: __t.option(__t.string()),
+  errorCode: __t.option(__t.string()).name("error_code"),
 });

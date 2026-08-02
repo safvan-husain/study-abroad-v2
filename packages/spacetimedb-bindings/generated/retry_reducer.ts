@@ -12,5 +12,6 @@ import {
 
 export default {
   turnId: __t.string(),
-  result: __t.string(),
+  attempt: __t.u32(),
+  errorCode: __t.string(),
 };

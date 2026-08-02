@@ -20,7 +20,7 @@ export class CoordinatorController {
     const prior = await this.store.findByIdempotencyKey(body.idempotencyKey);
     const turnId = prior?.turnId ?? randomUUID().replaceAll('-', ''), messageId = prior?.messageId ?? randomUUID().replaceAll('-', ''), correlationId = prior?.turnId ?? randomUUID();
     const message = await this.store.append({ messageId, conversationId, turnId, role: 'user', content: body.content, idempotencyKey: body.idempotencyKey });
-    const status = await this.service.createTurn({ conversationId, turnId, correlationId });
+    const status = await this.service.createTurn({ conversationId, turnId, correlationId, content: body.content });
     return { message, status };
   }
   @Get(':conversationId/turns/:turnId') status(@Param('conversationId') c: string, @Param('turnId') t: string) { return this.service.getStatus(c, t); }

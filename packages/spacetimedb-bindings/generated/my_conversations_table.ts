@@ -11,7 +11,10 @@ import {
 } from "spacetimedb";
 
 export default __t.row({
-  hostId: __t.string().primaryKey().name("host_id"),
-  displayName: __t.string().name("display_name"),
-  enabled: __t.bool(),
+  conversationId: __t.string().name("conversation_id"),
+  ownerPrincipalId: __t.string().name("owner_principal_id"),
+  agentThreadId: __t.string().name("agent_thread_id"),
+  nextSequence: __t.u64().name("next_sequence"),
+  uiRevision: __t.u64().name("ui_revision"),
+  createdAtMicros: __t.i64().name("created_at_micros"),
 });

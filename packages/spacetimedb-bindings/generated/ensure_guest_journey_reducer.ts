@@ -12,7 +12,4 @@ import {
 
 export default {
   conversationId: __t.string(),
-  turnId: __t.string(),
-  agentThreadId: __t.string(),
-  idempotencyKey: __t.string(),
 };

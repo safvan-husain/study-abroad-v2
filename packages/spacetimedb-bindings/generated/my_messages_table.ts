@@ -10,8 +10,12 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
-export default {
-  turnId: __t.string(),
-  attempt: __t.u32(),
-  errorCode: __t.string(),
-};
+export default __t.row({
+  messageId: __t.string().name("message_id"),
+  conversationId: __t.string().name("conversation_id"),
+  turnId: __t.string().name("turn_id"),
+  sequence: __t.u64(),
+  role: __t.string(),
+  content: __t.string(),
+  createdAtMicros: __t.i64().name("created_at_micros"),
+});

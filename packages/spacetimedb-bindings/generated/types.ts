@@ -10,32 +10,123 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
-export const AccessFact = __t.object("AccessFact", {
-  factId: __t.string(),
-  subjectId: __t.string(),
+export const ActiveDirective = __t.object("ActiveDirective", {
   conversationId: __t.string(),
-  canRead: __t.bool(),
+  schemaVersion: __t.u32(),
+  uiRevision: __t.u64(),
+  sourceTurnId: __t.option(__t.string()),
+  viewType: __t.string(),
+  awareness: __t.string(),
+  updatedAtMicros: __t.i64(),
 });
-export type AccessFact = __Infer<typeof AccessFact>;
+export type ActiveDirective = __Infer<typeof ActiveDirective>;
 
-export const HostCatalog = __t.object("HostCatalog", {
-  hostId: __t.string(),
-  displayName: __t.string(),
-  enabled: __t.bool(),
+export const AppUser = __t.object("AppUser", {
+  userId: __t.u32(),
+  username: __t.string(),
+  passwordHash: __t.string(),
+  role: __t.u8(),
+  active: __t.bool(),
+  createdAtMicros: __t.i64(),
 });
-export type HostCatalog = __Infer<typeof HostCatalog>;
+export type AppUser = __Infer<typeof AppUser>;
 
-export const Job = __t.object("Job", {
+export const AuthSession = __t.object("AuthSession", {
+  identity: __t.identity(),
+  userId: __t.u32(),
+  username: __t.string(),
+  loggedInAtMicros: __t.i64(),
+});
+export type AuthSession = __Infer<typeof AuthSession>;
+
+export const Command = __t.object("Command", {
+  commandId: __t.string(),
+  principalId: __t.string(),
+  conversationId: __t.string(),
   turnId: __t.string(),
-  idempotencyKey: __t.string(),
+  kind: __t.string(),
+  createdAtMicros: __t.i64(),
+});
+export type Command = __Infer<typeof Command>;
+
+export const Conversation = __t.object("Conversation", {
   conversationId: __t.string(),
+  ownerPrincipalId: __t.string(),
   agentThreadId: __t.string(),
+  nextSequence: __t.u64(),
+  uiRevision: __t.u64(),
+  createdAtMicros: __t.i64(),
+});
+export type Conversation = __Infer<typeof Conversation>;
+
+export const ConversationMembership = __t.object("ConversationMembership", {
+  membershipId: __t.string(),
+  conversationId: __t.string(),
+  principalId: __t.string(),
+});
+export type ConversationMembership = __Infer<typeof ConversationMembership>;
+
+export const Message = __t.object("Message", {
+  messageId: __t.string(),
+  conversationId: __t.string(),
+  turnId: __t.string(),
+  sequence: __t.u64(),
+  role: __t.string(),
+  content: __t.string(),
+  createdAtMicros: __t.i64(),
+});
+export type Message = __Infer<typeof Message>;
+
+export const MessagePart = __t.object("MessagePart", {
+  partId: __t.string(),
+  conversationId: __t.string(),
+  messageId: __t.string(),
+  kind: __t.string(),
+  payloadJson: __t.string(),
+});
+export type MessagePart = __Infer<typeof MessagePart>;
+
+export const Principal = __t.object("Principal", {
+  principalId: __t.string(),
+  kind: __t.string(),
+  createdAtMicros: __t.i64(),
+});
+export type Principal = __Infer<typeof Principal>;
+
+export const TurnJob = __t.object("TurnJob", {
+  turnId: __t.string(),
+  conversationId: __t.string(),
+  userMessageId: __t.string(),
+  agentThreadId: __t.string(),
+  correlationId: __t.string(),
   status: __t.string(),
   workerId: __t.option(__t.string()),
-  leaseUntil: __t.option(__t.i64()),
+  leaseUntilMicros: __t.option(__t.i64()),
   attempt: __t.u32(),
+  baseUiRevision: __t.u64(),
   runId: __t.option(__t.string()),
-  result: __t.option(__t.string()),
+  errorCode: __t.option(__t.string()),
 });
-export type Job = __Infer<typeof Job>;
+export type TurnJob = __Infer<typeof TurnJob>;
+
+export const WorkerPendingTurn = __t.object("WorkerPendingTurn", {
+  turnId: __t.string(),
+  conversationId: __t.string(),
+  agentThreadId: __t.string(),
+  correlationId: __t.string(),
+  userMessageId: __t.string(),
+  userContent: __t.string(),
+  status: __t.string(),
+  leaseUntilMicros: __t.option(__t.i64()),
+  attempt: __t.u32(),
+  baseUiRevision: __t.u64(),
+});
+export type WorkerPendingTurn = __Infer<typeof WorkerPendingTurn>;
+
+export const WorkerPrincipal = __t.object("WorkerPrincipal", {
+  workerId: __t.string(),
+  label: __t.string(),
+  registeredAtMicros: __t.i64(),
+});
+export type WorkerPrincipal = __Infer<typeof WorkerPrincipal>;
 

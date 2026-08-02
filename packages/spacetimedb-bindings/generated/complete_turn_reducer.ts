@@ -13,5 +13,11 @@ import {
 export default {
   turnId: __t.string(),
   attempt: __t.u32(),
-  errorCode: __t.string(),
+  assistantContent: __t.string(),
+  runId: __t.string(),
+  agentThreadId: __t.string(),
+  directiveSchemaVersion: __t.u32(),
+  directiveUiRevision: __t.u64(),
+  directiveType: __t.string(),
+  directiveAwareness: __t.string(),
 };

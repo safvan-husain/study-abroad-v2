@@ -7,16 +7,22 @@ import { type Infer as __Infer } from "spacetimedb";
 
 // Import all reducer arg schemas
 import ClaimReducer from "../claim_reducer";
-import CompleteReducer from "../complete_reducer";
-import EnqueueReducer from "../enqueue_reducer";
+import CompleteTurnReducer from "../complete_turn_reducer";
+import EnsureGuestJourneyReducer from "../ensure_guest_journey_reducer";
 import FailReducer from "../fail_reducer";
+import LoginReducer from "../login_reducer";
+import RegisterWorkerReducer from "../register_worker_reducer";
 import RenewReducer from "../renew_reducer";
 import RetryReducer from "../retry_reducer";
+import SendMessageReducer from "../send_message_reducer";
 
 export type ClaimParams = __Infer<typeof ClaimReducer>;
-export type CompleteParams = __Infer<typeof CompleteReducer>;
-export type EnqueueParams = __Infer<typeof EnqueueReducer>;
+export type CompleteTurnParams = __Infer<typeof CompleteTurnReducer>;
+export type EnsureGuestJourneyParams = __Infer<typeof EnsureGuestJourneyReducer>;
 export type FailParams = __Infer<typeof FailReducer>;
+export type LoginParams = __Infer<typeof LoginReducer>;
+export type RegisterWorkerParams = __Infer<typeof RegisterWorkerReducer>;
 export type RenewParams = __Infer<typeof RenewReducer>;
 export type RetryParams = __Infer<typeof RetryReducer>;
+export type SendMessageParams = __Infer<typeof SendMessageReducer>;
 
