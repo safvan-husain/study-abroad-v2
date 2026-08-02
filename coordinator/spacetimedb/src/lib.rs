@@ -12,6 +12,14 @@ pub const MAX_WORK_ITEMS: usize = 8;
 pub const MAX_LEASE_SECONDS: u64 = 3_600;
 pub const DIRECTIVE_SCHEMA_VERSION: u32 = 1;
 pub const DISCOVERY_VIEW: &str = "discovery";
+pub const CATALOG_VIEW: &str = "catalog";
+pub const MAX_PROFILE_FIELD_LENGTH: usize = 1_024;
+pub const MAX_STUDENT_PHRASE_LENGTH: usize = 256;
+pub const MAX_TURN_UPDATE_KIND_LENGTH: usize = 64;
+pub const MAX_TURN_UPDATE_PAYLOAD_LENGTH: usize = 4_096;
+pub const MAX_TURN_UPDATES_PER_CONVERSATION: usize = 32;
+pub const MAX_CATALOG_AREA_LENGTH: usize = 64;
+pub const MAX_CATALOG_NAME_LENGTH: usize = 256;
 const ROLE_AI_AGENT: u8 = 2;
 const AGENT_USERNAME: &str = "study_abroad_agent";
 const AGENT_PASSWORD: &str = "study-agent-dev";
@@ -211,6 +219,80 @@ pub struct WorkerPrincipal {
     pub registered_at_micros: i64,
 }
 
+#[spacetimedb::table(accessor = catalog_institution, public)]
+pub struct CatalogInstitution {
+    #[primary_key]
+    pub institution_id: String,
+    pub name: String,
+    pub country: String,
+    pub city: String,
+    pub active: bool,
+}
+
+#[spacetimedb::table(accessor = catalog_course, public)]
+pub struct CatalogCourse {
+    #[primary_key]
+    pub course_id: String,
+    #[index(btree)]
+    pub institution_id: String,
+    pub institution_name: String,
+    pub country: String,
+    pub city: String,
+    pub name: String,
+    #[index(btree)]
+    pub area: String,
+    pub level: String,
+    pub tuition_band: String,
+    pub english_bar: String,
+    pub active: bool,
+}
+
+#[spacetimedb::table(accessor = conversation_profile)]
+pub struct ConversationProfile {
+    #[primary_key]
+    pub conversation_id: String,
+    #[index(btree)]
+    pub profile_queue_key: u32,
+    pub background: String,
+    pub course_interests: String,
+    pub ambitions: String,
+    pub primary_area: String,
+    pub candidate_areas_json: String,
+    pub student_phrase: String,
+    pub constraints_text: String,
+    pub updated_at_micros: i64,
+}
+
+#[spacetimedb::table(accessor = turn_update)]
+pub struct TurnUpdate {
+    #[primary_key]
+    #[auto_inc]
+    pub update_id: u64,
+    #[index(btree)]
+    pub turn_id: String,
+    #[index(btree)]
+    pub conversation_id: String,
+    pub attempt: u32,
+    pub sequence: u32,
+    pub kind: String,
+    pub payload_json: String,
+    pub created_at_micros: i64,
+}
+
+#[derive(SpacetimeType, Clone)]
+pub struct CatalogCourseSeed {
+    pub course_id: String,
+    pub institution_id: String,
+    pub institution_name: String,
+    pub country: String,
+    pub city: String,
+    pub name: String,
+    pub area: String,
+    pub level: String,
+    pub tuition_band: String,
+    pub english_bar: String,
+}
+
 #[derive(SpacetimeType)]
 pub struct WorkerPendingTurn {
     pub turn_id: String,
@@ -374,11 +456,63 @@ pub fn validate_directive(
     if schema_version != DIRECTIVE_SCHEMA_VERSION {
         return Err("unsupported directive schema version");
     }
-    if view_type != DISCOVERY_VIEW {
+    if view_type != DISCOVERY_VIEW && view_type != CATALOG_VIEW {
         return Err("unsupported directive view type");
     }
     if awareness.len() > MAX_AWARENESS_LENGTH {
         return Err("directive awareness is outside the payload bound");
+    }
+    Ok(())
+}
+
+pub fn validate_profile_field(value: &str) -> Result<(), &'static str> {
+    if value.len() > MAX_PROFILE_FIELD_LENGTH {
+        return Err("profile field is outside the payload bound");
+    }
+    Ok(())
+}
+
+pub fn validate_student_phrase(value: &str) -> Result<(), &'static str> {
+    if value.len() > MAX_STUDENT_PHRASE_LENGTH {
+        return Err("student phrase is outside the payload bound");
+    }
+    Ok(())
+}
+
+pub fn validate_turn_update(kind: &str, payload_json: &str) -> Result<(), &'static str> {
+    if kind.is_empty() || kind.len() > MAX_TURN_UPDATE_KIND_LENGTH {
+        return Err("invalid turn update kind");
+    }
+    if payload_json.is_empty() || payload_json.len() > MAX_TURN_UPDATE_PAYLOAD_LENGTH {
+        return Err("turn update payload is outside the payload bound");
+    }
+    match kind {
+        "turn_started" | "course_search_started" | "course_search_results_ready" => Ok(()),
+        _ => Err("unsupported turn update kind"),
+    }
+}
+
+pub fn validate_catalog_course_seed(course: &CatalogCourseSeed) -> Result<(), &'static str> {
+    validate_identifier(&course.course_id, "invalid course identifier")?;
+    validate_identifier(&course.institution_id, "invalid institution identifier")?;
+    if course.institution_name.is_empty() || course.institution_name.len() > MAX_CATALOG_NAME_LENGTH {
+        return Err("invalid institution name");
+    }
+    if course.name.is_empty() || course.name.len() > MAX_CATALOG_NAME_LENGTH {
+        return Err("invalid course name");
+    }
+    if course.area.is_empty() || course.area.len() > MAX_CATALOG_AREA_LENGTH {
+        return Err("invalid course area");
+    }
+    if course.country.is_empty() || course.country.len() > MAX_CATALOG_AREA_LENGTH {
+        return Err("invalid country");
+    }
+    if course.city.len() > MAX_CATALOG_NAME_LENGTH
+        || course.level.len() > MAX_CATALOG_AREA_LENGTH
+        || course.tuition_band.len() > MAX_CATALOG_AREA_LENGTH
+        || course.english_bar.len() > MAX_CATALOG_AREA_LENGTH
+    {
+        return Err("catalog course field is outside the payload bound");
     }
     Ok(())
 }
@@ -572,8 +706,20 @@ pub fn ensure_guest_journey(ctx: &ReducerContext, conversation_id: String) {
     });
     ctx.db.conversation_membership().insert(ConversationMembership {
         membership_id: conversation_id.clone(),
-        conversation_id,
+        conversation_id: conversation_id.clone(),
         principal_id,
+    });
+    ctx.db.conversation_profile().insert(ConversationProfile {
+        conversation_id,
+        profile_queue_key: 1,
+        background: String::new(),
+        course_interests: String::new(),
+        ambitions: String::new(),
+        primary_area: String::new(),
+        candidate_areas_json: "[]".into(),
+        student_phrase: String::new(),
+        constraints_text: String::new(),
+        updated_at_micros: now,
     });
 }
 
@@ -912,8 +1058,22 @@ pub fn complete_turn(
     job.lease_until_micros = None;
     job.run_id = Some(run_id);
     job.error_code = None;
+    let conversation_id_for_cleanup = job.conversation_id.clone();
+    let completed_turn_id = turn_id.clone();
     ctx.db.turn_job().turn_id().update(job);
     ctx.db.conversation().conversation_id().update(conversation);
+    let stale_updates: Vec<_> = ctx
+        .db
+        .turn_update()
+        .conversation_id()
+        .filter(&conversation_id_for_cleanup)
+        .collect::<Vec<_>>()
+        .into_iter()
+        .filter(|row| row.turn_id != completed_turn_id)
+        .collect();
+    for update in stale_updates {
+        ctx.db.turn_update().update_id().delete(&update.update_id);
+    }
 }
 
 #[spacetimedb::reducer]
@@ -924,6 +1084,281 @@ pub fn retry(ctx: &ReducerContext, turn_id: String, attempt: u32, error_code: St
 #[spacetimedb::reducer]
 pub fn fail(ctx: &ReducerContext, turn_id: String, attempt: u32, error_code: String) {
     finish_with_error(ctx, turn_id, attempt, "failed", error_code);
+}
+
+#[spacetimedb::reducer]
+pub fn publish_turn_update(
+    ctx: &ReducerContext,
+    turn_id: String,
+    attempt: u32,
+    sequence: u32,
+    kind: String,
+    payload_json: String,
+) {
+    ensure_registered_worker(ctx);
+    validate_turn_update(&kind, &payload_json).unwrap_or_else(|error| panic!("{error}"));
+    let now = now_micros(ctx);
+    let job = ctx
+        .db
+        .turn_job()
+        .turn_id()
+        .find(&turn_id)
+        .expect("turn not found");
+    if !lease_owner_matches(&job, &caller(ctx), attempt, now) {
+        panic!("stale or unauthorized turn attempt");
+    }
+    let existing = ctx
+        .db
+        .turn_update()
+        .turn_id()
+        .filter(&turn_id)
+        .find(|row| row.attempt == attempt && row.sequence == sequence);
+    if let Some(row) = existing {
+        if row.kind == kind && row.payload_json == payload_json {
+            return;
+        }
+        panic!("conflicting turn update for sequence");
+    }
+    ctx.db.turn_update().insert(TurnUpdate {
+        update_id: 0,
+        turn_id,
+        conversation_id: job.conversation_id,
+        attempt,
+        sequence,
+        kind,
+        payload_json,
+        created_at_micros: now,
+    });
+}
+
+#[spacetimedb::reducer]
+pub fn upsert_conversation_profile(
+    ctx: &ReducerContext,
+    conversation_id: String,
+    background: String,
+    course_interests: String,
+    ambitions: String,
+    primary_area: String,
+    candidate_areas_json: String,
+    student_phrase: String,
+    constraints_text: String,
+) {
+    ensure_registered_worker(ctx);
+    validate_conversation_id(&conversation_id).unwrap_or_else(|error| panic!("{error}"));
+    for field in [
+        &background,
+        &course_interests,
+        &ambitions,
+        &primary_area,
+        &candidate_areas_json,
+        &constraints_text,
+    ] {
+        validate_profile_field(field).unwrap_or_else(|error| panic!("{error}"));
+    }
+    validate_student_phrase(&student_phrase).unwrap_or_else(|error| panic!("{error}"));
+    if ctx.db.conversation().conversation_id().find(&conversation_id).is_none() {
+        panic!("conversation not found");
+    }
+    let now = now_micros(ctx);
+    let profile = ConversationProfile {
+        conversation_id: conversation_id.clone(),
+        profile_queue_key: 1,
+        background,
+        course_interests,
+        ambitions,
+        primary_area,
+        candidate_areas_json,
+        student_phrase,
+        constraints_text,
+        updated_at_micros: now,
+    };
+    if ctx
+        .db
+        .conversation_profile()
+        .conversation_id()
+        .find(&conversation_id)
+        .is_some()
+    {
+        ctx.db
+            .conversation_profile()
+            .conversation_id()
+            .update(profile);
+    } else {
+        ctx.db.conversation_profile().insert(profile);
+    }
+}
+
+#[spacetimedb::reducer]
+pub fn update_discovery_profile(
+    ctx: &ReducerContext,
+    conversation_id: String,
+    client_command_id: String,
+    background: String,
+    course_interests: String,
+    ambitions: String,
+    primary_area: String,
+    candidate_areas_json: String,
+    student_phrase: String,
+    constraints_text: String,
+) {
+    validate_conversation_id(&conversation_id).unwrap_or_else(|error| panic!("{error}"));
+    validate_command_id(&client_command_id).unwrap_or_else(|error| panic!("{error}"));
+    ensure_member(ctx, &conversation_id);
+    for field in [
+        &background,
+        &course_interests,
+        &ambitions,
+        &primary_area,
+        &candidate_areas_json,
+        &constraints_text,
+    ] {
+        validate_profile_field(field).unwrap_or_else(|error| panic!("{error}"));
+    }
+    validate_student_phrase(&student_phrase).unwrap_or_else(|error| panic!("{error}"));
+    if ctx.db.command().command_id().find(&client_command_id).is_some() {
+        return;
+    }
+    let now = now_micros(ctx);
+    let mut conversation = ctx
+        .db
+        .conversation()
+        .conversation_id()
+        .find(&conversation_id)
+        .expect("conversation not found");
+    conversation.context_revision = conversation
+        .context_revision
+        .checked_add(1)
+        .expect("context revision exhausted");
+    let resulting_context_revision = conversation.context_revision;
+    ctx.db.conversation().conversation_id().update(conversation);
+    ctx.db.command().insert(Command {
+        command_id: client_command_id.clone(),
+        principal_id: caller(ctx),
+        conversation_id: conversation_id.clone(),
+        turn_id: client_command_id.clone(),
+        kind: "update_discovery_profile".into(),
+        created_at_micros: now,
+    });
+    ctx.db.user_action().insert(UserAction {
+        action_id: client_command_id,
+        principal_id: caller(ctx),
+        conversation_id: conversation_id.clone(),
+        kind: "update_discovery_profile".into(),
+        entity_ref: Some(conversation_id.clone()),
+        resulting_context_revision,
+        created_at_micros: now,
+    });
+    let profile = ConversationProfile {
+        conversation_id: conversation_id.clone(),
+        profile_queue_key: 1,
+        background,
+        course_interests,
+        ambitions,
+        primary_area,
+        candidate_areas_json,
+        student_phrase,
+        constraints_text,
+        updated_at_micros: now,
+    };
+    if ctx
+        .db
+        .conversation_profile()
+        .conversation_id()
+        .find(&conversation_id)
+        .is_some()
+    {
+        ctx.db
+            .conversation_profile()
+            .conversation_id()
+            .update(profile);
+    } else {
+        ctx.db.conversation_profile().insert(profile);
+    }
+}
+
+#[spacetimedb::reducer]
+pub fn replace_catalog(ctx: &ReducerContext, courses: Vec<CatalogCourseSeed>) {
+    ensure_worker_auth(ctx);
+    if courses.len() > 500 {
+        panic!("catalog seed exceeds bound");
+    }
+    for course in &courses {
+        validate_catalog_course_seed(course).unwrap_or_else(|error| panic!("{error}"));
+    }
+    let mut seen_course_ids = std::collections::HashSet::new();
+    let mut institutions = std::collections::HashMap::<String, (String, String, String)>::new();
+    for course in &courses {
+        if !seen_course_ids.insert(course.course_id.clone()) {
+            panic!("duplicate catalog course_id: {}", course.course_id);
+        }
+        match institutions.get(&course.institution_id) {
+            Some((name, country, city))
+                if name != &course.institution_name
+                    || country != &course.country
+                    || city != &course.city =>
+            {
+                panic!(
+                    "conflicting institution metadata for {}: {}",
+                    course.institution_id, course.course_id
+                );
+            }
+            Some(_) => {}
+            None => {
+                institutions.insert(
+                    course.institution_id.clone(),
+                    (
+                        course.institution_name.clone(),
+                        course.country.clone(),
+                        course.city.clone(),
+                    ),
+                );
+            }
+        }
+    }
+    let existing_courses: Vec<_> = ctx.db.catalog_course().iter().collect();
+    for course in existing_courses {
+        ctx.db
+            .catalog_course()
+            .course_id()
+            .delete(&course.course_id);
+    }
+    let existing_institutions: Vec<_> = ctx.db.catalog_institution().iter().collect();
+    for institution in existing_institutions {
+        ctx.db
+            .catalog_institution()
+            .institution_id()
+            .delete(&institution.institution_id);
+    }
+    for course in courses {
+        if ctx
+            .db
+            .catalog_institution()
+            .institution_id()
+            .find(&course.institution_id)
+            .is_none()
+        {
+            ctx.db.catalog_institution().insert(CatalogInstitution {
+                institution_id: course.institution_id.clone(),
+                name: course.institution_name.clone(),
+                country: course.country.clone(),
+                city: course.city.clone(),
+                active: true,
+            });
+        }
+        ctx.db.catalog_course().insert(CatalogCourse {
+            course_id: course.course_id,
+            institution_id: course.institution_id,
+            institution_name: course.institution_name,
+            country: course.country,
+            city: course.city,
+            name: course.name,
+            area: course.area,
+            level: course.level,
+            tuition_band: course.tuition_band,
+            english_bar: course.english_bar,
+            active: true,
+        });
+    }
 }
 
 #[spacetimedb::reducer]
@@ -1218,6 +1653,37 @@ fn my_user_actions(ctx: &ViewContext) -> Vec<UserAction> {
         .collect()
 }
 
+#[spacetimedb::view(accessor = my_conversation_profiles, public)]
+fn my_conversation_profiles(ctx: &ViewContext) -> Vec<ConversationProfile> {
+    caller_conversation_ids(ctx)
+        .into_iter()
+        .filter_map(|conversation_id| {
+            ctx.db
+                .conversation_profile()
+                .conversation_id()
+                .find(&conversation_id)
+        })
+        .collect()
+}
+
+#[spacetimedb::view(accessor = my_turn_updates, public)]
+fn my_turn_updates(ctx: &ViewContext) -> Vec<TurnUpdate> {
+    caller_conversation_ids(ctx)
+        .into_iter()
+        .flat_map(|conversation_id| {
+            let mut rows: Vec<_> = ctx
+                .db
+                .turn_update()
+                .conversation_id()
+                .filter(&conversation_id)
+                .collect();
+            rows.sort_by(|left, right| right.update_id.cmp(&left.update_id));
+            rows.truncate(MAX_TURN_UPDATES_PER_CONVERSATION);
+            rows
+        })
+        .collect()
+}
+
 fn is_registered_worker_view(ctx: &ViewContext) -> bool {
     let session = match ctx.db.auth_session().identity().find(ctx.sender()) {
         Some(session) => session,
@@ -1289,14 +1755,39 @@ fn worker_pending_work_items(ctx: &ViewContext) -> Vec<WorkerPendingWorkItem> {
         .collect()
 }
 
+#[spacetimedb::view(accessor = worker_conversation_profiles, public)]
+fn worker_conversation_profiles(ctx: &ViewContext) -> Vec<ConversationProfile> {
+    if !is_registered_worker_view(ctx) {
+        return vec![];
+    }
+    let mut conversation_ids = std::collections::HashSet::new();
+    for status in ["pending", "retrying", "claimed"] {
+        for job in ctx.db.turn_job().status().filter(status) {
+            conversation_ids.insert(job.conversation_id);
+        }
+        for item in ctx.db.workspace_work_item().status().filter(status) {
+            conversation_ids.insert(item.conversation_id);
+        }
+    }
+    conversation_ids
+        .into_iter()
+        .filter_map(|conversation_id| {
+            ctx.db
+                .conversation_profile()
+                .conversation_id()
+                .find(&conversation_id)
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        DISCOVERY_VIEW, TurnJob, WorkItemSpec, WorkspaceWorkItem, lease_is_expired,
-        lease_owner_matches, turn_is_claimable,
-        validate_command_id, validate_conversation_id, validate_directive,
-        validate_directive_revision, validate_error_code, validate_message_content,
-        validate_work_item_spec, work_item_is_claimable, work_item_lease_owner_matches,
+        CATALOG_VIEW, DISCOVERY_VIEW, TurnJob, WorkItemSpec, WorkspaceWorkItem, lease_is_expired,
+        lease_owner_matches, turn_is_claimable, validate_command_id, validate_conversation_id,
+        validate_directive, validate_directive_revision, validate_error_code,
+        validate_message_content, validate_turn_update, validate_work_item_spec,
+        work_item_is_claimable, work_item_lease_owner_matches,
     };
 
     fn turn(status: &str, worker_id: Option<&str>, lease_until_micros: Option<i64>, attempt: u32) -> TurnJob {
@@ -1355,11 +1846,15 @@ mod tests {
     }
 
     #[test]
-    fn accepts_only_the_initial_typed_directive_contract() {
+    fn accepts_discovery_and_catalog_directive_contracts() {
         assert!(validate_directive(1, DISCOVERY_VIEW, "Ready to help.").is_ok());
+        assert!(validate_directive(1, CATALOG_VIEW, "Showing courses related to programming.").is_ok());
         assert!(validate_directive(2, DISCOVERY_VIEW, "Ready").is_err());
-        assert!(validate_directive(1, "catalog", "Ready").is_err());
+        assert!(validate_directive(1, "compare", "Ready").is_err());
         assert!(validate_directive(1, DISCOVERY_VIEW, &"x".repeat(513)).is_err());
+        assert!(validate_turn_update("turn_started", "{}").is_ok());
+        assert!(validate_turn_update("course_search_started", r#"{"studentPhrase":"programming"}"#).is_ok());
+        assert!(validate_turn_update("unknown", "{}").is_err());
     }
 
     #[test]

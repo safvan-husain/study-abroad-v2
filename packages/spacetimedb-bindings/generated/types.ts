@@ -40,6 +40,44 @@ export const AuthSession = __t.object("AuthSession", {
 });
 export type AuthSession = __Infer<typeof AuthSession>;
 
+export const CatalogCourse = __t.object("CatalogCourse", {
+  courseId: __t.string(),
+  institutionId: __t.string(),
+  institutionName: __t.string(),
+  country: __t.string(),
+  city: __t.string(),
+  name: __t.string(),
+  area: __t.string(),
+  level: __t.string(),
+  tuitionBand: __t.string(),
+  englishBar: __t.string(),
+  active: __t.bool(),
+});
+export type CatalogCourse = __Infer<typeof CatalogCourse>;
+
+export const CatalogCourseSeed = __t.object("CatalogCourseSeed", {
+  courseId: __t.string(),
+  institutionId: __t.string(),
+  institutionName: __t.string(),
+  country: __t.string(),
+  city: __t.string(),
+  name: __t.string(),
+  area: __t.string(),
+  level: __t.string(),
+  tuitionBand: __t.string(),
+  englishBar: __t.string(),
+});
+export type CatalogCourseSeed = __Infer<typeof CatalogCourseSeed>;
+
+export const CatalogInstitution = __t.object("CatalogInstitution", {
+  institutionId: __t.string(),
+  name: __t.string(),
+  country: __t.string(),
+  city: __t.string(),
+  active: __t.bool(),
+});
+export type CatalogInstitution = __Infer<typeof CatalogInstitution>;
+
 export const Command = __t.object("Command", {
   commandId: __t.string(),
   principalId: __t.string(),
@@ -67,6 +105,20 @@ export const ConversationMembership = __t.object("ConversationMembership", {
   principalId: __t.string(),
 });
 export type ConversationMembership = __Infer<typeof ConversationMembership>;
+
+export const ConversationProfile = __t.object("ConversationProfile", {
+  conversationId: __t.string(),
+  profileQueueKey: __t.u32(),
+  background: __t.string(),
+  courseInterests: __t.string(),
+  ambitions: __t.string(),
+  primaryArea: __t.string(),
+  candidateAreasJson: __t.string(),
+  studentPhrase: __t.string(),
+  constraintsText: __t.string(),
+  updatedAtMicros: __t.i64(),
+});
+export type ConversationProfile = __Infer<typeof ConversationProfile>;
 
 export const Message = __t.object("Message", {
   messageId: __t.string(),
@@ -110,6 +162,18 @@ export const TurnJob = __t.object("TurnJob", {
   errorCode: __t.option(__t.string()),
 });
 export type TurnJob = __Infer<typeof TurnJob>;
+
+export const TurnUpdate = __t.object("TurnUpdate", {
+  updateId: __t.u64(),
+  turnId: __t.string(),
+  conversationId: __t.string(),
+  attempt: __t.u32(),
+  sequence: __t.u32(),
+  kind: __t.string(),
+  payloadJson: __t.string(),
+  createdAtMicros: __t.i64(),
+});
+export type TurnUpdate = __Infer<typeof TurnUpdate>;
 
 export const UserAction = __t.object("UserAction", {
   actionId: __t.string(),

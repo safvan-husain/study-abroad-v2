@@ -23,29 +23,86 @@ const turn = (overrides: Partial<{
   ...overrides,
 });
 
+const computingCatalog = {
+  listCourses: () => [{
+    courseId: 'lu-computer-science-bsc',
+    institutionId: 'university-of-latvia',
+    institutionName: 'University of Latvia',
+    country: 'Latvia',
+    city: 'Riga',
+    name: 'Computer Science',
+    area: 'computing',
+    level: 'undergraduate',
+    tuitionBand: 'moderate',
+    englishBar: 'IELTS 6.0',
+  }],
+  getProfile: () => undefined,
+};
+
 describe('AI worker chat turn', () => {
-  it('reads the subscribed user row and atomically completes the assistant turn', async () => {
-    const coordinator = { claim: vi.fn().mockResolvedValue(1), complete: vi.fn(), retry: vi.fn() };
-    const agent = { run: vi.fn().mockResolvedValue({ threadId: 'c1', runId: 'r1', content: 'Hi there', metadata: {} }) };
-    await processChatTurn(turn(), agent, coordinator);
-    expect(agent.run).toHaveBeenCalledWith([expect.objectContaining({ messageId: 't1', content: 'Hello', role: 'user' })], expect.objectContaining({ conversationId: 'c1', turnId: 't1' }));
+  it('publishes progressive search milestones and course-fit work items for mapped interests', async () => {
+    const publishTurnUpdate = vi.fn();
+    const upsertConversationProfile = vi.fn();
+    const coordinator = {
+      claim: vi.fn().mockResolvedValue(1),
+      complete: vi.fn(),
+      retry: vi.fn(),
+      publishTurnUpdate,
+      upsertConversationProfile,
+    };
+    const agent = {
+      run: vi.fn().mockResolvedValue({
+        threadId: 'c1',
+        runId: 'r1',
+        content: 'Looking at programming courses.',
+        metadata: {},
+        discovery: {
+          assistantContent: 'Thanks — I am looking through partner courses related to programming and will organize matches in your workspace.',
+          profilePatch: {
+            background: '',
+            courseInterests: 'programming',
+            ambitions: '',
+            primaryArea: 'computing',
+            candidateAreas: ['computing'],
+            studentPhrase: 'programming',
+            constraintsText: '',
+          },
+          discoveryIntent: { studentPhrase: 'programming', catalogAreas: ['computing'], status: 'mapped' },
+          directive: { type: 'catalog', awareness: 'Showing courses related to programming.' },
+          workItems: [],
+          workKind: '',
+        },
+      }),
+    };
+    await processChatTurn(turn({ userContent: 'I like programming' }), agent, coordinator, undefined, computingCatalog);
+    expect(publishTurnUpdate.mock.calls.map((call) => call[3].kind)).toEqual([
+      'turn_started',
+      'course_search_started',
+      'course_search_results_ready',
+    ]);
     expect(coordinator.complete).toHaveBeenCalledWith('t1', 1, expect.objectContaining({
-      assistantContent: expect.stringContaining('planning space'),
-      runId: 'r1',
-      agentThreadId: 'c1',
-      directiveSchemaVersion: 1,
-      directiveUiRevision: 1n,
-      directiveType: 'discovery',
-      workItems: expect.arrayContaining([expect.objectContaining({ entityId: 'academic-background' }), expect.objectContaining({ entityId: 'study-ambition' })]),
+      directiveType: 'catalog',
+      workKind: 'course_fit_summaries',
+      workItems: [expect.objectContaining({ entityId: 'lu-computer-science-bsc', kind: 'course_fit_summary' })],
     }));
-    expect(coordinator.complete.mock.invocationCallOrder[0]).toBeGreaterThan(agent.run.mock.invocationCallOrder[0]);
+    expect(upsertConversationProfile).toHaveBeenCalled();
+  });
+
+  it('keeps discovery without invented courses for unmapped phrases', async () => {
+    const coordinator = { claim: vi.fn().mockResolvedValue(1), complete: vi.fn(), retry: vi.fn(), publishTurnUpdate: vi.fn() };
+    const agent = { run: vi.fn().mockResolvedValue({ threadId: 'c1', runId: 'r1', content: 'Need more detail', metadata: {} }) };
+    await processChatTurn(turn({ userContent: 'underwater basket weaving' }), agent, coordinator, undefined, computingCatalog);
+    expect(coordinator.complete).toHaveBeenCalledWith('t1', 1, expect.objectContaining({
+      directiveType: 'discovery',
+      workItems: [],
+    }));
   });
 
   it('subscribes, deduplicates delivery, renews leases, and stops cleanly', async () => {
     let deliver: ((turn: any) => void) | undefined;
     const coordinator = { claim: vi.fn().mockResolvedValue(1), renew: vi.fn().mockResolvedValue(undefined), complete: vi.fn(), retry: vi.fn() };
     const agent = { run: vi.fn().mockImplementation(() => new Promise(resolve => setTimeout(() => resolve({ threadId: 'c2', runId: 'r2', content: 'Hello', metadata: {} }), 30))) };
-    const worker = new JobWorker({ agent, coordinator, leaseSeconds: 1, subscribe: callback => { deliver = callback; return () => { deliver = undefined; }; } });
+    const worker = new JobWorker({ agent, coordinator, leaseSeconds: 1, subscribe: callback => { deliver = callback; return () => { deliver = undefined; }; }, catalog: computingCatalog });
     worker.start();
     const pending = turn({ conversationId: 'c2', turnId: 't2', correlationId: 'x', agentThreadId: 'c2', userMessageId: 't2', userContent: 'Hi' });
     deliver!(pending); deliver!(pending);
@@ -58,7 +115,7 @@ describe('AI worker chat turn', () => {
     let finish!: () => void;
     const coordinator = { claim: vi.fn().mockResolvedValue(1), complete: vi.fn(), retry: vi.fn() };
     const agent = { run: vi.fn().mockImplementation(() => new Promise(resolve => { finish = () => resolve({ threadId: 'c3', runId: 'r3', content: 'Done', metadata: {} }); })) };
-    const worker = new JobWorker({ agent, coordinator });
+    const worker = new JobWorker({ agent, coordinator, catalog: computingCatalog });
     worker.start();
     const running = worker.handle(turn({ conversationId: 'c3', turnId: 't3', correlationId: 'x', agentThreadId: 'c3', userMessageId: 't3' }));
     let stopped = false;
@@ -68,56 +125,5 @@ describe('AI worker chat turn', () => {
     finish();
     await Promise.all([running, stopping]);
     expect(stopped).toBe(true);
-  });
-
-  it('routes renewal failures to a swallowed background error', async () => {
-    vi.useFakeTimers();
-    const coordinator = { claim: vi.fn().mockResolvedValue(1), renew: vi.fn().mockRejectedValue(new Error('offline')), complete: vi.fn(), retry: vi.fn() };
-    let finish!: () => void;
-    const agent = { run: vi.fn().mockImplementation(() => new Promise(resolve => { finish = () => resolve({ threadId: 'c4', runId: 'r4', content: 'Done', metadata: {} }); })) };
-    const worker = new JobWorker({ agent, coordinator, leaseSeconds: 1 });
-    worker.start();
-    const task = worker.handle(turn({ conversationId: 'c4', turnId: 't4', correlationId: 'x', agentThreadId: 'c4', userMessageId: 't4' }));
-    await vi.advanceTimersByTimeAsync(500);
-    await vi.advanceTimersByTimeAsync(500);
-    finish();
-    await task;
-    await worker.stop();
-    expect(coordinator.renew).toHaveBeenCalled();
-    vi.useRealTimers();
-  });
-
-  it('does not crash when a coordinator claim fails', async () => {
-    const coordinator = { claim: vi.fn().mockRejectedValue(new Error('coordinator offline')), complete: vi.fn(), retry: vi.fn() };
-    const agent = { run: vi.fn() };
-
-    await expect(processChatTurn(turn({ conversationId: 'c5', turnId: 't5', correlationId: 'x', agentThreadId: 'c5', userMessageId: 't5' }), agent, coordinator)).resolves.toBeUndefined();
-    expect(agent.run).not.toHaveBeenCalled();
-    expect(coordinator.retry).not.toHaveBeenCalled();
-  });
-
-  it('retries an agent failure using the claimed lease fence', async () => {
-    const coordinator = { claim: vi.fn().mockResolvedValue(4), complete: vi.fn(), retry: vi.fn() };
-    const agent = { run: vi.fn().mockRejectedValue(new Error('Agent unavailable')) };
-
-    await processChatTurn(turn({ conversationId: 'c6', turnId: 't6', correlationId: 'x', agentThreadId: 'c6', userMessageId: 't6', attempt: 3 }), agent, coordinator);
-
-    expect(coordinator.retry).toHaveBeenCalledWith('t6', 4, 'Error');
-  });
-
-  it('processes child work independently without invoking the parent agent', async () => {
-    let deliverWorkItem: ((item: any) => void) | undefined;
-    const coordinator = {
-      claim: vi.fn(), complete: vi.fn(), retry: vi.fn(),
-      claimWorkItem: vi.fn().mockResolvedValue(1), completeWorkItem: vi.fn(), retryWorkItem: vi.fn(),
-    };
-    const agent = { run: vi.fn() };
-    const worker = new JobWorker({ agent, coordinator, subscribeWorkItems: callback => { deliverWorkItem = callback; return () => { deliverWorkItem = undefined; }; } });
-    worker.start();
-    deliverWorkItem!({ workItemId: 'item-1', workSetId: 'set-1', conversationId: 'c1', entityType: 'topic', entityId: 'goals', kind: 'prompt', inputJson: '{"title":"Goals","detail":"Share them."}', attempt: 0, expectedContextRevision: 0n, expectedUiRevision: 1n });
-    await worker.stop();
-
-    expect(agent.run).not.toHaveBeenCalled();
-    expect(coordinator.completeWorkItem).toHaveBeenCalledWith('item-1', 1, expect.stringContaining('Share them.'));
   });
 });

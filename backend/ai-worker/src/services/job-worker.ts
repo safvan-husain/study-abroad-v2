@@ -1,4 +1,4 @@
-import { processChatTurn, type ChatTurn, type Coordinator } from './process-chat-turn.js';
+import { processChatTurn, type ChatTurn, type Coordinator, type CatalogStore } from './process-chat-turn.js';
 import type { AgentClient } from './agent-server-client.js';
 import { processWorkItem, type WorkItemCoordinator, type WorkspaceWorkItem } from './process-work-item.js';
 export class JobWorker {
@@ -10,12 +10,13 @@ export class JobWorker {
   private readonly inFlight = new Map<string, Promise<void>>();
   constructor(private readonly deps: {
     agent: AgentClient;
-    coordinator: Coordinator & Partial<WorkItemCoordinator>;
+    coordinator: Coordinator & Partial<WorkItemCoordinator> & Partial<CatalogStore>;
     leaseSeconds?: number;
     poll?: () => Promise<ChatTurn[]>;
     subscribe?: (callback: (turn: ChatTurn) => void) => (() => void) | void;
     pollWorkItems?: () => Promise<WorkspaceWorkItem[]>;
     subscribeWorkItems?: (callback: (item: WorkspaceWorkItem) => void) => (() => void) | void;
+    catalog?: CatalogStore;
   }) {}
   start(intervalMs = 5000) {
     if (!this.stopped) return;
@@ -41,7 +42,12 @@ export class JobWorker {
               void this.deps.coordinator.renew!(turn.turnId, attempt, this.deps.leaseSeconds ?? 60).catch(() => undefined);
             }, renewMs);
           }
-        });
+        }, this.deps.catalog ?? (() => {
+          const maybe = this.deps.coordinator as Partial<CatalogStore>;
+          return typeof maybe.listCourses === 'function' && typeof maybe.getProfile === 'function'
+            ? maybe as CatalogStore
+            : undefined;
+        })());
       } finally {
         if (renewer) clearInterval(renewer);
         this.active.delete(turn.turnId);
@@ -66,7 +72,7 @@ export class JobWorker {
               void this.deps.coordinator.renewWorkItem!(item.workItemId, attempt, this.deps.leaseSeconds ?? 60).catch(() => undefined);
             }, renewMs);
           }
-        });
+        }, this.deps.agent);
       } finally {
         if (renewer) clearInterval(renewer);
         this.active.delete(key);

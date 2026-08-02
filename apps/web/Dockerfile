@@ -12,7 +12,9 @@ COPY packages/contracts packages/contracts
 COPY packages/spacetimedb-bindings packages/spacetimedb-bindings
 RUN pnpm install --frozen-lockfile
 COPY apps/web apps/web
-RUN pnpm --filter @study-abroad/web build
+RUN pnpm --filter @study-abroad/contracts build \
+  && pnpm --filter @study-abroad/spacetimedb-bindings build \
+  && pnpm --filter @study-abroad/web build
 FROM node:22-alpine
 WORKDIR /app
 ENV NODE_ENV=production

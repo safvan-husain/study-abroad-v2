@@ -28,6 +28,7 @@
     "coordinator:test": "tsx scripts/coordinator-test.ts",
     "spacetime:generate": "pnpm --filter @study-abroad/spacetimedb-bindings generate",
     "coordinator:smoke": "pnpm --filter @study-abroad/spacetimedb-bindings build && tsx scripts/spacetime-smoke.ts",
+    "catalog:seed": "pnpm --filter @study-abroad/spacetimedb-bindings build && tsx scripts/catalog/seed.ts",
     "worker:smoke": "tsx scripts/worker-smoke.ts",
     "end-to-end:smoke": "tsx scripts/end-to-end-smoke.ts",
     "test:e2e": "playwright test test/e2e/advisor-workspace.spec.ts"

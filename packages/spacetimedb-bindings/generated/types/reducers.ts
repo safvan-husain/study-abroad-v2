@@ -14,12 +14,16 @@ import EnsureGuestJourneyReducer from "../ensure_guest_journey_reducer";
 import FailReducer from "../fail_reducer";
 import FailWorkItemReducer from "../fail_work_item_reducer";
 import LoginReducer from "../login_reducer";
+import PublishTurnUpdateReducer from "../publish_turn_update_reducer";
 import RegisterWorkerReducer from "../register_worker_reducer";
 import RenewReducer from "../renew_reducer";
 import RenewWorkItemReducer from "../renew_work_item_reducer";
+import ReplaceCatalogReducer from "../replace_catalog_reducer";
 import RetryReducer from "../retry_reducer";
 import RetryWorkItemReducer from "../retry_work_item_reducer";
 import SendMessageReducer from "../send_message_reducer";
+import UpdateDiscoveryProfileReducer from "../update_discovery_profile_reducer";
+import UpsertConversationProfileReducer from "../upsert_conversation_profile_reducer";
 
 export type ClaimParams = __Infer<typeof ClaimReducer>;
 export type ClaimWorkItemParams = __Infer<typeof ClaimWorkItemReducer>;
@@ -29,10 +33,14 @@ export type EnsureGuestJourneyParams = __Infer<typeof EnsureGuestJourneyReducer>
 export type FailParams = __Infer<typeof FailReducer>;
 export type FailWorkItemParams = __Infer<typeof FailWorkItemReducer>;
 export type LoginParams = __Infer<typeof LoginReducer>;
+export type PublishTurnUpdateParams = __Infer<typeof PublishTurnUpdateReducer>;
 export type RegisterWorkerParams = __Infer<typeof RegisterWorkerReducer>;
 export type RenewParams = __Infer<typeof RenewReducer>;
 export type RenewWorkItemParams = __Infer<typeof RenewWorkItemReducer>;
+export type ReplaceCatalogParams = __Infer<typeof ReplaceCatalogReducer>;
 export type RetryParams = __Infer<typeof RetryReducer>;
 export type RetryWorkItemParams = __Infer<typeof RetryWorkItemReducer>;
 export type SendMessageParams = __Infer<typeof SendMessageReducer>;
+export type UpdateDiscoveryProfileParams = __Infer<typeof UpdateDiscoveryProfileReducer>;
+export type UpsertConversationProfileParams = __Infer<typeof UpsertConversationProfileReducer>;
 

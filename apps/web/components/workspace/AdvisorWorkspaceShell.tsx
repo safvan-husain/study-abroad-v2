@@ -8,8 +8,24 @@ export function AdvisorWorkspaceShell() {
   const workspace = useAdvisorWorkspace();
   return (
     <div className="advisor-shell">
-      <WorkspaceView directive={workspace.directive} workSets={workspace.workSets} workItems={workspace.workItems} workResults={workspace.workResults} />
-      <AdvisorRail connectionState={workspace.connectionState} error={workspace.error} messages={workspace.messages} turns={workspace.turns} directive={workspace.directive} onSend={workspace.send} />
+      <WorkspaceView
+        directive={workspace.directive}
+        workSets={workspace.workSets}
+        workItems={workspace.workItems}
+        workResults={workspace.workResults}
+        profile={workspace.profile}
+      />
+      <AdvisorRail
+        connectionState={workspace.connectionState}
+        error={workspace.error}
+        messages={workspace.messages}
+        turns={workspace.turns}
+        turnUpdates={workspace.turnUpdates}
+        directive={workspace.directive}
+        profile={workspace.profile}
+        onSend={workspace.send}
+        onUpdateProfile={workspace.updateProfile}
+      />
     </div>
   );
 }

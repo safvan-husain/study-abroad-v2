@@ -33,6 +33,9 @@ services:
       LANGSMITH_ENDPOINT: "${LANGSMITH_ENDPOINT:-https://api.smith.langchain.com}"
       LANGSMITH_API_KEY: "${LANGSMITH_API_KEY:-}"
       LANGSMITH_PROJECT: "${LANGSMITH_PROJECT:-study-abroad-v2-agents}"
+      OLLAMA_HOST: "${OLLAMA_HOST:-}"
+      OLLAMA_API_KEY: "${OLLAMA_API_KEY:-}"
+      OLLAMA_MODEL: "${OLLAMA_MODEL:-gemma4:31b}"
     healthcheck: { test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:2024/ok')"], interval: 10s, timeout: 5s, retries: 20 }
   worker:
     build: { context: ., dockerfile: backend/ai-worker/Dockerfile }

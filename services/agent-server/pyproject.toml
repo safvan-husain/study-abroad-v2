@@ -10,6 +10,8 @@ dependencies = [
   "langgraph>=0.3.18",
   "langgraph-cli[inmem]>=0.0.32",
   "langgraph-sdk>=0.1.61",
+  "langchain-core>=0.3.0",
+  "langchain-ollama>=0.2.0",
 ]
 
 [project.optional-dependencies]

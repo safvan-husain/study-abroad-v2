@@ -2,16 +2,28 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { DbConnection } from '@study-abroad/spacetimedb-bindings';
+import type { DiscoveryProfilePatch, TurnUpdatePayload } from '@study-abroad/contracts';
+import { turnUpdatePayload } from '@study-abroad/contracts';
 import { getOrCreateGuestSessionId } from '../lib/guest-session';
 
 const TOKEN_KEY = 'study-abroad-spacetimedb-token';
 
 export type AdvisorMessage = { messageId: string; role: string; content: string; sequence: bigint };
-export type AdvisorTurn = { turnId: string; status: string; errorCode: string | null };
+export type AdvisorTurn = { turnId: string; status: string; errorCode: string | null; attempt: number };
 export type AdvisorDirective = { viewType: string; awareness: string; uiRevision: bigint; workSetId: string | null };
 export type AdvisorWorkSet = { workSetId: string; status: string };
-export type AdvisorWorkItem = { workItemId: string; workSetId: string; entityId: string; status: string; errorCode: string | null };
+export type AdvisorWorkItem = { workItemId: string; workSetId: string; entityId: string; kind: string; status: string; errorCode: string | null };
 export type AdvisorWorkResult = { workItemId: string; resultJson: string };
+export type AdvisorTurnUpdate = { updateId: bigint; turnId: string; attempt: number; sequence: number; kind: string; payload: TurnUpdatePayload };
+export type AdvisorProfile = DiscoveryProfilePatch;
+export type AdvisorCatalogCourse = {
+  courseId: string;
+  institutionName: string;
+  country: string;
+  city: string;
+  name: string;
+  area: string;
+};
 
 function spacetimeUri() {
   if (process.env.NEXT_PUBLIC_SPACETIME_URL) return process.env.NEXT_PUBLIC_SPACETIME_URL.replace(/^http/, 'ws');
@@ -21,6 +33,25 @@ function spacetimeUri() {
 
 function commandId() {
   return globalThis.crypto?.randomUUID?.() ?? `command-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+}
+
+function parseProfile(row: Record<string, unknown> | undefined): AdvisorProfile | undefined {
+  if (!row) return undefined;
+  let candidateAreas: string[] = [];
+  try {
+    candidateAreas = JSON.parse(String(row.candidateAreasJson ?? '[]')) as string[];
+  } catch {
+    candidateAreas = [];
+  }
+  return {
+    background: String(row.background ?? ''),
+    courseInterests: String(row.courseInterests ?? ''),
+    ambitions: String(row.ambitions ?? ''),
+    primaryArea: String(row.primaryArea ?? ''),
+    candidateAreas,
+    studentPhrase: String(row.studentPhrase ?? ''),
+    constraintsText: String(row.constraintsText ?? ''),
+  };
 }
 
 export function useAdvisorWorkspace() {
@@ -34,6 +65,9 @@ export function useAdvisorWorkspace() {
   const [workSets, setWorkSets] = useState<AdvisorWorkSet[]>([]);
   const [workItems, setWorkItems] = useState<AdvisorWorkItem[]>([]);
   const [workResults, setWorkResults] = useState<AdvisorWorkResult[]>([]);
+  const [turnUpdates, setTurnUpdates] = useState<AdvisorTurnUpdate[]>([]);
+  const [profile, setProfile] = useState<AdvisorProfile>();
+  const [catalogCourses, setCatalogCourses] = useState<AdvisorCatalogCourse[]>([]);
   const [conversationId, setConversationId] = useState<string>();
 
   useEffect(() => {
@@ -47,11 +81,54 @@ export function useAdvisorWorkspace() {
     const refresh = (connection: DbConnection) => {
       const db = connection.db as any;
       setMessages([...db.my_messages.iter()].sort((a, b) => Number(a.sequence - b.sequence)));
-      setTurns([...db.my_turns.iter()]);
-      setDirective([...db.my_active_directives.iter()][0]);
+      setTurns([...db.my_turns.iter()].map((turn: any) => ({
+        turnId: turn.turnId,
+        status: turn.status,
+        errorCode: turn.errorCode ?? null,
+        attempt: turn.attempt,
+      })));
+      setDirective([...db.my_active_directives.iter()].map((row: any) => ({
+        viewType: row.viewType,
+        awareness: row.awareness,
+        uiRevision: row.uiRevision,
+        workSetId: row.workSetId ?? null,
+      }))[0]);
       setWorkSets([...db.my_workspace_work_sets.iter()]);
-      setWorkItems([...db.my_workspace_work_items.iter()]);
+      setWorkItems([...db.my_workspace_work_items.iter()].map((item: any) => ({
+        workItemId: item.workItemId,
+        workSetId: item.workSetId,
+        entityId: item.entityId,
+        kind: item.kind,
+        status: item.status,
+        errorCode: item.errorCode ?? null,
+      })));
       setWorkResults([...db.my_workspace_results.iter()]);
+      setTurnUpdates([...db.my_turn_updates.iter()].map((row: any) => {
+        let payload: TurnUpdatePayload = { kind: 'turn_started' };
+        try {
+          const parsed = turnUpdatePayload.safeParse(JSON.parse(String(row.payloadJson ?? '{}')));
+          if (parsed.success) payload = parsed.data;
+        } catch {
+          // Malformed payloadJson falls back to turn_started.
+        }
+        return {
+          updateId: row.updateId,
+          turnId: row.turnId,
+          attempt: row.attempt,
+          sequence: row.sequence,
+          kind: row.kind,
+          payload,
+        };
+      }));
+      setProfile(parseProfile([...db.my_conversation_profiles.iter()][0]));
+      setCatalogCourses([...db.catalog_course.iter()].filter((row: any) => row.active !== false).map((row: any) => ({
+        courseId: row.courseId,
+        institutionName: row.institutionName,
+        country: row.country,
+        city: row.city,
+        name: row.name,
+        area: row.area,
+      })));
     };
 
     const builder = DbConnection.builder()
@@ -67,6 +144,7 @@ export function useAdvisorWorkspace() {
           const tables = [
             'my_messages', 'my_turns', 'my_active_directives', 'my_workspace_work_sets',
             'my_workspace_work_items', 'my_workspace_results', 'my_user_actions', 'my_conversations',
+            'my_turn_updates', 'my_conversation_profiles', 'catalog_course',
           ];
           const db = connection.db as any;
           for (const tableName of tables) {
@@ -119,5 +197,36 @@ export function useAdvisorWorkspace() {
     await connection.reducers.sendMessage({ conversationId, clientCommandId: commandId(), content: content.trim() });
   }, [connectionState, conversationId]);
 
-  return { connectionState, error, conversationId, messages, turns, directive, workSets, workItems, workResults, send };
+  const updateProfile = useCallback(async (next: AdvisorProfile) => {
+    const connection = connectionRef.current;
+    if (!connection || connectionState !== 'ready' || !conversationId) throw new Error('Advisor is not connected');
+    await connection.reducers.updateDiscoveryProfile({
+      conversationId,
+      clientCommandId: commandId(),
+      background: next.background,
+      courseInterests: next.courseInterests,
+      ambitions: next.ambitions,
+      primaryArea: next.primaryArea,
+      candidateAreasJson: JSON.stringify(next.candidateAreas),
+      studentPhrase: next.studentPhrase,
+      constraintsText: next.constraintsText,
+    });
+  }, [connectionState, conversationId]);
+
+  return {
+    connectionState,
+    error,
+    conversationId,
+    messages,
+    turns,
+    directive,
+    workSets,
+    workItems,
+    workResults,
+    turnUpdates,
+    profile,
+    catalogCourses,
+    send,
+    updateProfile,
+  };
 }

@@ -43,8 +43,8 @@ button:focus-visible, textarea:focus-visible, a:focus-visible { outline: 3px sol
 .journey-progress { display: grid; grid-template-columns: repeat(4, 1fr); margin-top: 48px; max-width: 690px; }
 .journey-progress div { display: grid; grid-template-columns: 25px auto 1fr; align-items: center; gap: 7px; color: #7d8b85; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
 .journey-progress span { width: 24px; height: 24px; display: grid; place-items: center; border: 1px solid #b9c6bc; border-radius: 50%; font-size: 9px; }
-.journey-progress div:first-child { color: var(--forest-800); }
-.journey-progress div:first-child span { color: white; border-color: var(--forest-800); background: var(--forest-800); }
+.journey-progress .active, .journey-progress div:first-child { color: var(--forest-800); }
+.journey-progress .active span, .journey-progress div:first-child span { color: white; border-color: var(--forest-800); background: var(--forest-800); }
 .journey-progress i { height: 1px; margin: 0 12px; background: #cbd4cc; }
 .workspace-awareness, .empty-workspace { display: flex; gap: 18px; max-width: 850px; margin: 22px 0; padding: 21px 24px; border: 1px solid #cadbcf; border-radius: 14px; background: linear-gradient(135deg, var(--sage-100), #f9fbf6); }
 .awareness-mark, .empty-workspace > span { width: 40px; height: 40px; flex: none; display: grid; place-items: center; border-radius: 50%; background: var(--forest-800); color: white; }
@@ -63,7 +63,9 @@ button:focus-visible, textarea:focus-visible, a:focus-visible { outline: 3px sol
 .work-card-failed .work-card-icon { background: var(--attention); color: #8a4237; }
 .work-card-label { color: var(--forest-650); font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .13em; }
 .work-card h4 { margin: 7px 0; color: var(--forest-950); font-family: var(--font-display); font-size: 20px; font-weight: 400; }
+.work-card-meta { margin: 0 0 8px !important; color: var(--forest-650) !important; font-size: 11px !important; font-weight: 600; }
 .work-card p { margin: 0; color: var(--navy-700); font-size: 13px; line-height: 1.55; }
+.work-card-course { border-color: #c5d8cb; background: linear-gradient(180deg, #ffffff, #f7faf7); }
 .work-card[aria-busy="true"] { background-image: linear-gradient(105deg, transparent 40%, rgba(219, 233, 223, .7) 50%, transparent 60%); background-size: 250% 100%; animation: sheen 1.8s infinite; }
 
 .advisor-rail { position: relative; display: grid; grid-template-rows: 78px minmax(0, 1fr) auto; margin: 18px 18px 18px 0; overflow: hidden; border: 1px solid #c6d3ca; border-left: 0; border-radius: 0 18px 18px 0; background: var(--white); box-shadow: var(--shadow); }
@@ -84,9 +86,13 @@ button:focus-visible, textarea:focus-visible, a:focus-visible { outline: 3px sol
 .advisor-message-user p { margin-left: 28px; background: var(--forest-800); color: white; }
 .turn-status { color: #64766e; font-size: 11px; }
 .turn-status span { width: 7px; height: 7px; display: inline-block; margin-right: 7px; border-radius: 50%; background: #5c9472; animation: pulse 1.2s infinite; }
-.suggestions { padding: 19px 0; border-top: 1px solid var(--line); }
-.suggestions button { width: 100%; display: flex; justify-content: space-between; margin-top: 8px; padding: 9px 0; border: 0; border-bottom: 1px solid #edf0ec; background: transparent; color: var(--navy-700); text-align: left; cursor: pointer; font-size: 12px; }
-.suggestions button:hover { color: var(--forest-650); }
+.turn-activity { margin: 12px 0 8px; padding: 12px 14px; border: 1px solid #d5e0d7; border-radius: 12px; background: #f7faf7; }
+.turn-activity-completed { opacity: .88; }
+.turn-activity ol { margin: 8px 0 0; padding-left: 18px; color: var(--navy-700); font-size: 12px; line-height: 1.55; }
+.interest-panel { margin: 14px 0; padding: 14px; border: 1px solid #ceddd1; border-radius: 12px; background: #fbfaf6; }
+.interest-panel p { margin: 6px 0; color: var(--navy-700); font-size: 12px; line-height: 1.45; }
+.interest-panel button, .interest-actions button { margin-top: 8px; margin-right: 8px; border: 0; background: transparent; color: var(--forest-650); cursor: pointer; font-size: 12px; font-weight: 700; }
+.interest-panel textarea { width: 100%; margin-top: 8px; padding: 8px; border: 1px solid #c5d0c7; border-radius: 8px; font: inherit; font-size: 12px; }
 .active-context { padding: 17px; border: 1px solid #ceddd1; border-radius: 13px; background: var(--sage-100); }
 .active-context div { display: flex; gap: 10px; margin-top: 10px; }
 .active-context i { color: var(--forest-650); font-style: normal; }

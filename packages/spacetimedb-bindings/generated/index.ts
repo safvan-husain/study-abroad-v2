@@ -42,25 +42,34 @@ import EnsureGuestJourneyReducer from "./ensure_guest_journey_reducer";
 import FailReducer from "./fail_reducer";
 import FailWorkItemReducer from "./fail_work_item_reducer";
 import LoginReducer from "./login_reducer";
+import PublishTurnUpdateReducer from "./publish_turn_update_reducer";
 import RegisterWorkerReducer from "./register_worker_reducer";
 import RenewReducer from "./renew_reducer";
 import RenewWorkItemReducer from "./renew_work_item_reducer";
+import ReplaceCatalogReducer from "./replace_catalog_reducer";
 import RetryReducer from "./retry_reducer";
 import RetryWorkItemReducer from "./retry_work_item_reducer";
 import SendMessageReducer from "./send_message_reducer";
+import UpdateDiscoveryProfileReducer from "./update_discovery_profile_reducer";
+import UpsertConversationProfileReducer from "./upsert_conversation_profile_reducer";
 
 // Import all procedure arg schemas
 
 // Import all table schema definitions
+import CatalogCourseRow from "./catalog_course_table";
+import CatalogInstitutionRow from "./catalog_institution_table";
 import MyActiveDirectivesRow from "./my_active_directives_table";
+import MyConversationProfilesRow from "./my_conversation_profiles_table";
 import MyConversationsRow from "./my_conversations_table";
 import MyMessagePartsRow from "./my_message_parts_table";
 import MyMessagesRow from "./my_messages_table";
+import MyTurnUpdatesRow from "./my_turn_updates_table";
 import MyTurnsRow from "./my_turns_table";
 import MyUserActionsRow from "./my_user_actions_table";
 import MyWorkspaceResultsRow from "./my_workspace_results_table";
 import MyWorkspaceWorkItemsRow from "./my_workspace_work_items_table";
 import MyWorkspaceWorkSetsRow from "./my_workspace_work_sets_table";
+import WorkerConversationProfilesRow from "./worker_conversation_profiles_table";
 import WorkerPendingTurnsRow from "./worker_pending_turns_table";
 import WorkerPendingWorkItemsRow from "./worker_pending_work_items_table";
 
@@ -68,6 +77,34 @@ import WorkerPendingWorkItemsRow from "./worker_pending_work_items_table";
 
 /** The schema information for all tables in this module. This is defined the same was as the tables would have been defined in the server. */
 const tablesSchema = __schema({
+  catalog_course: __table({
+    name: 'catalog_course',
+    indexes: [
+      { name: 'area', algorithm: 'btree', columns: [
+        'area',
+      ] },
+      { name: 'course_id', algorithm: 'btree', columns: [
+        'courseId',
+      ] },
+      { name: 'institution_id', algorithm: 'btree', columns: [
+        'institutionId',
+      ] },
+    ],
+    constraints: [
+      { name: 'catalog_course_course_id_key', constraint: 'unique', columns: ['courseId'] },
+    ],
+  }, CatalogCourseRow),
+  catalog_institution: __table({
+    name: 'catalog_institution',
+    indexes: [
+      { name: 'institution_id', algorithm: 'btree', columns: [
+        'institutionId',
+      ] },
+    ],
+    constraints: [
+      { name: 'catalog_institution_institution_id_key', constraint: 'unique', columns: ['institutionId'] },
+    ],
+  }, CatalogInstitutionRow),
   my_active_directives: __table({
     name: 'my_active_directives',
     indexes: [
@@ -75,6 +112,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, MyActiveDirectivesRow),
+  my_conversation_profiles: __table({
+    name: 'my_conversation_profiles',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyConversationProfilesRow),
   my_conversations: __table({
     name: 'my_conversations',
     indexes: [
@@ -96,6 +140,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, MyMessagesRow),
+  my_turn_updates: __table({
+    name: 'my_turn_updates',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyTurnUpdatesRow),
   my_turns: __table({
     name: 'my_turns',
     indexes: [
@@ -131,6 +182,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, MyWorkspaceWorkSetsRow),
+  worker_conversation_profiles: __table({
+    name: 'worker_conversation_profiles',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, WorkerConversationProfilesRow),
   worker_pending_turns: __table({
     name: 'worker_pending_turns',
     indexes: [
@@ -157,12 +215,16 @@ const reducersSchema = __reducers(
   __reducerSchema("fail", FailReducer),
   __reducerSchema("fail_work_item", FailWorkItemReducer),
   __reducerSchema("login", LoginReducer),
+  __reducerSchema("publish_turn_update", PublishTurnUpdateReducer),
   __reducerSchema("register_worker", RegisterWorkerReducer),
   __reducerSchema("renew", RenewReducer),
   __reducerSchema("renew_work_item", RenewWorkItemReducer),
+  __reducerSchema("replace_catalog", ReplaceCatalogReducer),
   __reducerSchema("retry", RetryReducer),
   __reducerSchema("retry_work_item", RetryWorkItemReducer),
   __reducerSchema("send_message", SendMessageReducer),
+  __reducerSchema("update_discovery_profile", UpdateDiscoveryProfileReducer),
+  __reducerSchema("upsert_conversation_profile", UpsertConversationProfileReducer),
 );
 
 /** The schema information for all procedures in this module. This is defined the same way as the procedures would have been defined in the server. */

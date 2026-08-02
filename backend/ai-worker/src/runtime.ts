@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { DbConnection } from '@study-abroad/spacetimedb-bindings';
 import type { ChatTurn } from './services/process-chat-turn.js';
 import { loadConfig } from './config.js';
@@ -5,6 +8,34 @@ import { createWorker } from './index.js';
 import { SpacetimeCoordinatorAdapter, type PendingJobSource } from './services/coordinator-adapter.js';
 import type { PendingWorkItemSource } from './services/coordinator-adapter.js';
 import type { WorkspaceWorkItem } from './services/process-work-item.js';
+
+type CatalogSeedCourse = {
+  courseId: string;
+  institutionId: string;
+  institutionName: string;
+  country: string;
+  city: string;
+  name: string;
+  area: string;
+  level: string;
+  tuitionBand: string;
+  englishBar: string;
+};
+
+function loadCatalogSeed(): CatalogSeedCourse[] {
+  const candidates = [
+    join(dirname(fileURLToPath(import.meta.url)), '../../../scripts/catalog/courses.json'),
+    join(process.cwd(), 'scripts/catalog/courses.json'),
+  ];
+  for (const path of candidates) {
+    try {
+      return JSON.parse(readFileSync(path, 'utf8')) as CatalogSeedCourse[];
+    } catch {
+      // try next path
+    }
+  }
+  return [];
+}
 
 type WorkerPendingTurnRow = {
   conversationId: string;
@@ -66,7 +97,12 @@ async function connect(config: ReturnType<typeof loadConfig>): Promise<DbConnect
                 settled = true;
                 resolve(connection);
               }
-            }).subscribe(['SELECT * FROM worker_pending_turns', 'SELECT * FROM worker_pending_work_items']);
+            }).subscribe([
+              'SELECT * FROM worker_pending_turns',
+              'SELECT * FROM worker_pending_work_items',
+              'SELECT * FROM catalog_course',
+              'SELECT * FROM worker_conversation_profiles',
+            ]);
           })
           .catch((error: unknown) => {
             if (!settled) {
@@ -161,6 +197,37 @@ const connection = await connect(config);
 const jobs = createPendingJobSource(connection);
 const workItems = createPendingWorkItemSource(connection);
 const coordinator = new SpacetimeCoordinatorAdapter(connection as any, jobs, workItems, config.WORKER_LEASE_SECONDS);
+
+if (coordinator.listCourses().length === 0) {
+  const catalogCourses = loadCatalogSeed();
+  if (catalogCourses.length === 0) {
+    console.error('Catalog seed file missing; worker refusing to start without a catalogue.');
+    connection.disconnect();
+    process.exit(1);
+  }
+  try {
+    await (connection.reducers as any).replaceCatalog({
+      courses: catalogCourses.map((course) => ({
+        courseId: course.courseId,
+        institutionId: course.institutionId,
+        institutionName: course.institutionName,
+        country: course.country,
+        city: course.city,
+        name: course.name,
+        area: course.area,
+        level: course.level,
+        tuitionBand: course.tuitionBand,
+        englishBar: course.englishBar,
+      })),
+    });
+    console.log(`Seeded ${catalogCourses.length} catalog courses from worker startup.`);
+  } catch (error) {
+    console.error('Catalog seed failed; worker refusing to start without a catalogue:', error);
+    connection.disconnect();
+    process.exit(1);
+  }
+}
+
 const worker = createWorker({ coordinator, jobs, workItems }, config);
 
 worker.start();

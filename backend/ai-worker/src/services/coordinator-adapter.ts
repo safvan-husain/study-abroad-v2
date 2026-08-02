@@ -1,5 +1,6 @@
 import type { DbConnection } from '@study-abroad/spacetimedb-bindings';
-import type { Coordinator, ChatTurn, TurnCompletion } from './process-chat-turn.js';
+import type { DiscoveryProfilePatch, TurnUpdatePayload } from '@study-abroad/contracts';
+import type { Coordinator, ChatTurn, TurnCompletion, CatalogStore } from './process-chat-turn.js';
 import type { WorkItemCoordinator, WorkspaceWorkItem } from './process-work-item.js';
 
 export interface PendingJobSource {
@@ -16,7 +17,7 @@ type ReducerArgs = Record<string, unknown>;
 type CoordinatorConnection = { reducers: Record<string, unknown>; db: unknown };
 
 /** Production boundary over generated SpacetimeDB accessors and an explicit job source. */
-export class SpacetimeCoordinatorAdapter implements Coordinator, WorkItemCoordinator {
+export class SpacetimeCoordinatorAdapter implements Coordinator, WorkItemCoordinator, CatalogStore {
   constructor(
     private readonly connection: CoordinatorConnection,
     private readonly jobs: PendingJobSource,
@@ -25,12 +26,50 @@ export class SpacetimeCoordinatorAdapter implements Coordinator, WorkItemCoordin
   ) {}
   pendingJobs() { return this.jobs; }
   pendingWorkItems() { return this.workItems; }
-  private reducer(name: 'claim' | 'renew' | 'completeTurn' | 'retry' | 'fail' | 'claimWorkItem' | 'renewWorkItem' | 'completeWorkItem' | 'retryWorkItem' | 'failWorkItem') {
+  private reducer(name: string) {
     const reducer = this.connection.reducers[name] as ((args: ReducerArgs) => Promise<unknown>) | undefined;
     if (!reducer) throw new Error(`SpacetimeDB reducer is unavailable: ${name}`);
     return reducer;
   }
-  // The reducer derives ownership from the authenticated SpacetimeDB caller.
+  listCourses() {
+    const table = (this.connection.db as { catalog_course?: { iter: () => Iterable<Record<string, unknown>> } }).catalog_course;
+    if (!table) return [];
+    return [...table.iter()]
+      .filter((row) => row.active !== false)
+      .map((row) => ({
+        courseId: String(row.courseId ?? ''),
+        institutionId: String(row.institutionId ?? ''),
+        institutionName: String(row.institutionName ?? ''),
+        country: String(row.country ?? ''),
+        city: String(row.city ?? ''),
+        name: String(row.name ?? ''),
+        area: String(row.area ?? ''),
+        level: String(row.level ?? ''),
+        tuitionBand: String(row.tuitionBand ?? ''),
+        englishBar: String(row.englishBar ?? ''),
+      }));
+  }
+  getProfile(conversationId: string): DiscoveryProfilePatch | undefined {
+    const table = (this.connection.db as { worker_conversation_profiles?: { iter: () => Iterable<Record<string, unknown>> } }).worker_conversation_profiles;
+    if (!table) return undefined;
+    const row = [...table.iter()].find((entry) => String(entry.conversationId) === conversationId);
+    if (!row) return undefined;
+    let candidateAreas: string[] = [];
+    try {
+      candidateAreas = JSON.parse(String(row.candidateAreasJson ?? '[]')) as string[];
+    } catch {
+      candidateAreas = [];
+    }
+    return {
+      background: String(row.background ?? ''),
+      courseInterests: String(row.courseInterests ?? ''),
+      ambitions: String(row.ambitions ?? ''),
+      primaryArea: String(row.primaryArea ?? ''),
+      candidateAreas,
+      studentPhrase: String(row.studentPhrase ?? ''),
+      constraintsText: String(row.constraintsText ?? ''),
+    };
+  }
   async claim(turn: ChatTurn) {
     await this.reducer('claim')({ turnId: turn.turnId, expectedAttempt: turn.attempt, leaseSeconds: BigInt(this.leaseSeconds) });
     return turn.attempt + 1;
@@ -46,6 +85,27 @@ export class SpacetimeCoordinatorAdapter implements Coordinator, WorkItemCoordin
   }
   async fail(turnId: string, attempt: number, errorCode: string) {
     await this.reducer('fail')({ turnId, attempt, errorCode });
+  }
+  async publishTurnUpdate(turnId: string, attempt: number, sequence: number, payload: TurnUpdatePayload) {
+    await this.reducer('publishTurnUpdate')({
+      turnId,
+      attempt,
+      sequence,
+      kind: payload.kind,
+      payloadJson: JSON.stringify(payload),
+    });
+  }
+  async upsertConversationProfile(conversationId: string, profile: DiscoveryProfilePatch) {
+    await this.reducer('upsertConversationProfile')({
+      conversationId,
+      background: profile.background,
+      courseInterests: profile.courseInterests,
+      ambitions: profile.ambitions,
+      primaryArea: profile.primaryArea,
+      candidateAreasJson: JSON.stringify(profile.candidateAreas),
+      studentPhrase: profile.studentPhrase,
+      constraintsText: profile.constraintsText,
+    });
   }
   async claimWorkItem(item: WorkspaceWorkItem) {
     await this.reducer('claimWorkItem')({ workItemId: item.workItemId, expectedAttempt: item.attempt, leaseSeconds: BigInt(this.leaseSeconds) });
@@ -64,3 +124,5 @@ export class SpacetimeCoordinatorAdapter implements Coordinator, WorkItemCoordin
     await this.reducer('failWorkItem')({ workItemId, attempt, errorCode });
   }
 }
+
+export type { DbConnection };
