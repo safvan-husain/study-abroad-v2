@@ -6,5 +6,8 @@ MODULE=/workspace/coordinator/spacetimedb
 NAME=study-abroad-coordinator
 CLI=/opt/spacetime/spacetimedb-cli
 
-"$CLI" delete "$NAME" --server "$SERVER" --anonymous --yes 2>/dev/null || true
-exec "$CLI" publish "$NAME" --server "$SERVER" --module-path "$MODULE" --anonymous --yes --delete-data=on-conflict
+if ! "$CLI" login show >/dev/null 2>&1; then
+  "$CLI" login --server-issued-login "$SERVER"
+fi
+
+exec "$CLI" publish "$NAME" --server "$SERVER" --module-path "$MODULE" --yes --delete-data=on-conflict

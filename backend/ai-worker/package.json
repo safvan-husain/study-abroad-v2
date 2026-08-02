@@ -18,7 +18,6 @@
     "@study-abroad/contracts": "workspace:*",
     "@study-abroad/spacetimedb-bindings": "workspace:*",
     "dotenv": "^17.4.2",
-    "mongodb": "^7.5.0",
     "zod": "^4.1.12"
   },
   "devDependencies": {

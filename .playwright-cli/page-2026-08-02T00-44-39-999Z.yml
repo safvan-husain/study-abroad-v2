@@ -1,0 +1,65 @@
+- generic [ref=e1]:
+  - generic [ref=e2]:
+    - banner [ref=e3]:
+      - link "study abroad / v2" [ref=e4] [cursor=pointer]:
+        - /url: /
+      - navigation [ref=e5]:
+        - link "Architecture" [ref=e6] [cursor=pointer]:
+          - /url: "#architecture"
+        - link "Status" [ref=e7] [cursor=pointer]:
+          - /url: "#status"
+      - link "Explore shell" [ref=e8] [cursor=pointer]:
+        - /url: "#status"
+    - main [ref=e9]:
+      - region "Chat conversation" [ref=e10]:
+        - generic [ref=e11]:
+          - text: First chatbot slice
+          - strong [ref=e12]: pending
+        - generic [ref=e13]:
+          - article [ref=e53]:
+            - text: user
+            - paragraph [ref=e54]: Playwright isolation test A - 2026-08-02T00:44Z
+          - paragraph [ref=e55]: Assistant is thinking...
+        - generic [ref=e15]:
+          - textbox "Message" [ref=e16]:
+            - /placeholder: Ask a question
+          - button "Send" [active] [ref=e17]
+      - generic [ref=e19]:
+        - generic [ref=e20]:
+          - text: APPLICATION WORKSPACE · PHASE 3
+          - heading "Build with clarity. Observe every boundary." [level=1] [ref=e21]
+          - paragraph [ref=e22]: A focused frontend shell for the Study Abroad architecture spike. The browser stays intentionally separate from coordination and graph execution.
+          - generic [ref=e23]:
+            - link "See the boundary" [ref=e24] [cursor=pointer]:
+              - /url: "#architecture"
+            - link "Check status" [ref=e25] [cursor=pointer]:
+              - /url: "#status"
+        - generic "Architecture preview" [ref=e26]:
+          - text: LIVE BOUNDARY
+          - generic [ref=e27]:
+            - generic [ref=e28]: Web shell
+            - strong [ref=e29]: Next.js
+          - generic [ref=e30]:
+            - generic [ref=e31]: Request API
+            - strong [ref=e32]: NestJS
+          - generic [ref=e33]:
+            - generic [ref=e34]: Agent execution
+            - strong [ref=e35]: HTTP-only
+      - generic [ref=e36]:
+        - text: A SMALL, VERIFIABLE START
+        - heading "Ready for the first conversation." [level=2] [ref=e37]
+        - paragraph [ref=e38]: This shell establishes feature-oriented UI, centralized visual tokens, and explicit process ownership without pulling future chat or domain work forward.
+        - generic [ref=e39]:
+          - article [ref=e40]:
+            - generic [ref=e41]: READY
+            - heading "Web" [level=3] [ref=e42]
+            - paragraph [ref=e43]: Next.js renders the browser surface and owns no agent execution.
+          - article [ref=e44]:
+            - generic [ref=e45]: READY
+            - heading "API" [level=3] [ref=e46]
+            - paragraph [ref=e47]: NestJS provides the browser-facing health and coordinator boundary.
+          - article [ref=e48]:
+            - generic [ref=e49]: PENDING
+            - heading "Agent runtime" [level=3] [ref=e50]
+            - paragraph [ref=e51]: Python Agent Server remains an independent HTTP process.
+  - alert [ref=e52]

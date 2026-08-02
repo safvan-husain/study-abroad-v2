@@ -1,31 +1,97 @@
 import type { ChatMessage } from '@study-abroad/contracts';
 import type { AgentClient } from './agent-server-client.js';
-import type { WorkerMessageStore } from './mongo-message-store.js';
 
 export interface Coordinator {
-  claim(turnId: string, workerId: string): Promise<boolean>;
-  renew?(turnId: string, workerId: string, leaseSeconds: number): Promise<boolean>;
-  complete(turnId: string, result: Record<string, string>): Promise<void>;
-  retry(turnId: string, errorCode: string): Promise<void>;
-  fail?(turnId: string, errorCode: string): Promise<void>;
+  claim(turn: ChatTurn): Promise<number | undefined>;
+  renew?(turnId: string, attempt: number, leaseSeconds: number): Promise<void>;
+  complete(turnId: string, attempt: number, completion: TurnCompletion): Promise<void>;
+  retry(turnId: string, attempt: number, errorCode: string): Promise<void>;
+  fail?(turnId: string, attempt: number, errorCode: string): Promise<void>;
 }
-export interface ChatTurn { conversationId: string; turnId: string; correlationId: string; workerId: string; }
-export async function processChatTurn(turn: ChatTurn, store: WorkerMessageStore, agent: AgentClient, coordinator: Coordinator): Promise<void> {
-  let claimed = false;
-  try { claimed = await coordinator.claim(turn.turnId, turn.workerId); } catch { return; }
-  if (!claimed) return;
+export interface ChatTurn {
+  conversationId: string;
+  turnId: string;
+  correlationId: string;
+  agentThreadId: string;
+  userMessageId: string;
+  userContent: string;
+  attempt: number;
+  baseUiRevision: bigint;
+}
+export interface TurnCompletion {
+  assistantContent: string;
+  runId: string;
+  agentThreadId: string;
+  directiveSchemaVersion: number;
+  directiveUiRevision: bigint;
+  directiveType: string;
+  directiveAwareness: string;
+  workKind: string;
+  workItems: WorkItemSpec[];
+}
+export interface WorkItemSpec {
+  entityType: string;
+  entityId: string;
+  kind: string;
+  inputJson: string;
+}
+
+export async function processChatTurn(
+  turn: ChatTurn,
+  agent: AgentClient,
+  coordinator: Coordinator,
+  onClaimed?: (attempt: number) => void,
+): Promise<void> {
+  let attempt: number | undefined;
+  try { attempt = await coordinator.claim(turn); } catch { return; }
+  if (attempt === undefined) return;
+  onClaimed?.(attempt);
   try {
-    const history = await store.list(turn.conversationId);
-    const turnUsers = history.filter(message => message.role === 'user' && message.turnId === turn.turnId);
-    if (turnUsers.length !== 1) throw new Error(turnUsers.length === 0 ? 'turn has no user message' : 'turn has multiple user messages');
-    const result = await agent.run([turnUsers[0]], turn);
-    const assistant: ChatMessage = await store.append({ messageId: `${turn.turnId}-assistant`, conversationId: turn.conversationId, turnId: turn.turnId, role: 'assistant', content: result.content, idempotencyKey: `${turn.turnId}-assistant` });
-    await coordinator.complete(turn.turnId, { status: 'completed', messageId: assistant.messageId, agentThreadId: result.threadId, runId: result.runId, correlationId: turn.correlationId });
+    const userMessage: ChatMessage = {
+      messageId: turn.userMessageId,
+      conversationId: turn.conversationId,
+      turnId: turn.turnId,
+      role: 'user',
+      content: turn.userContent,
+      createdAt: new Date().toISOString(),
+    };
+    const result = await agent.run([userMessage], turn);
+    await coordinator.complete(turn.turnId, attempt, {
+      assistantContent: 'I have opened a planning space so we can shape your study-abroad direction together.',
+      runId: result.runId,
+      agentThreadId: result.threadId,
+      directiveSchemaVersion: 1,
+      directiveUiRevision: turn.baseUiRevision + 1n,
+      directiveType: 'discovery',
+      directiveAwareness: 'I am ready to learn about your study-abroad goals.',
+      workKind: 'discovery_guidance',
+      workItems: [
+        {
+          entityType: 'discovery_topic',
+          entityId: 'academic-background',
+          kind: 'advisor_prompt',
+          inputJson: JSON.stringify({
+            title: 'Academic starting point',
+            detail: 'Share your current qualification, subject area, and recent grades.',
+          }),
+        },
+        {
+          entityType: 'discovery_topic',
+          entityId: 'study-ambition',
+          kind: 'advisor_prompt',
+          inputJson: JSON.stringify({
+            title: 'Study ambition',
+            detail: 'Tell me which subjects, careers, or destinations you are considering.',
+          }),
+        },
+      ],
+    });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'worker_error';
     const errorCode = error instanceof Error ? error.name : 'worker_error';
-    const permanent = message.includes('no user message') || message.includes('multiple user messages') || message.includes('Invalid thread ID') || message.includes('must be a UUID');
-    if (permanent && coordinator.fail) await coordinator.fail(turn.turnId, errorCode);
-    else await coordinator.retry(turn.turnId, errorCode);
+    try {
+      await coordinator.retry(turn.turnId, attempt, errorCode);
+    } catch {
+      // A newer worker may own the turn after a fenced completion is rejected.
+    }
   }
 }
