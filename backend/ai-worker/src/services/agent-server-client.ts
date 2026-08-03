@@ -50,12 +50,11 @@ export class AgentServerClient implements AgentClient {
     const assistantId = await this.assistantId();
     await this.client.threads.create({
       threadId: ids.conversationId,
-      metadata: { thread_id: ids.conversationId, conversation_id: ids.conversationId },
+      metadata: { conversation_id: ids.conversationId },
       ifExists: 'do_nothing',
     });
     let runId: string | undefined;
     const metadata = {
-      thread_id: ids.conversationId,
       conversation_id: ids.conversationId,
       turn_id: ids.turnId,
       correlation_id: ids.correlationId,
@@ -97,7 +96,7 @@ export class AgentServerClient implements AgentClient {
     const threadId = `${input.conversationId}-fit-${input.course.courseId}`;
     await this.client.threads.create({
       threadId,
-      metadata: { thread_id: threadId, conversation_id: input.conversationId },
+      metadata: { conversation_id: input.conversationId },
       ifExists: 'do_nothing',
     });
     let runId: string | undefined;
@@ -110,7 +109,6 @@ export class AgentServerClient implements AgentClient {
         course: { ...input.course, studentPhrase: input.course.studentPhrase ?? input.profile.studentPhrase },
       },
       metadata: {
-        thread_id: threadId,
         conversation_id: input.conversationId,
         correlation_id: input.correlationId,
       },

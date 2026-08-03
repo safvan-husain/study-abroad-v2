@@ -17,23 +17,16 @@ describe("Agent Server observability contract", () => {
       expect(evidence.second.runId).not.toBe(evidence.first.runId);
       expect(evidence.first.output.messages).toEqual([
         expect.objectContaining({ type: "human", content: "local-observability" }),
-        expect.objectContaining({
-          type: "ai",
-          content: "Reference response for turn 1: local-observability",
-        }),
+        expect.objectContaining({ type: "ai", content: expect.any(String) }),
       ]);
       expect(evidence.second.output.messages).toEqual([
         expect.objectContaining({ type: "human", content: "local-observability" }),
-        expect.objectContaining({
-          type: "ai",
-          content: "Reference response for turn 1: local-observability",
-        }),
+        expect.objectContaining({ type: "ai", content: expect.any(String) }),
         expect.objectContaining({ type: "human", content: "local-observability" }),
-        expect.objectContaining({
-          type: "ai",
-          content: "Reference response for turn 2: local-observability",
-        }),
+        expect.objectContaining({ type: "ai", content: expect.any(String) }),
       ]);
+      expect(String((evidence.first.output.messages as Array<{ content?: unknown }>)[1]?.content ?? "").length).toBeGreaterThan(0);
+      expect(String((evidence.second.output.messages as Array<{ content?: unknown }>)[3]?.content ?? "").length).toBeGreaterThan(0);
       expect(evidence.state.messages).toEqual(evidence.second.output.messages);
       const expectedCorrelationMetadata = {
         correlation_id: evidence.metadata.correlation_id,

@@ -1,5 +1,9 @@
 # Agent Server observability boundary
 
+For the specific reason a visible LangSmith trace can open as an empty Agent
+Studio thread, and the requirements for reconstructing it, see
+[`langsmith-trace-to-agent-studio.md`](./langsmith-trace-to-agent-studio.md).
+
 The active and only Agent Server graph runtime is Python under `services/agent-server`. The earlier TypeScript graph spike was removed after the runtime decision; future workers communicate with the Python graph only through Agent Server HTTP.
 
 Phase 1 proves the graph and Agent Server boundary before application databases or worker infrastructure are introduced. The Python graph is deterministic on purpose: each run appends a native AI message, and the second run on the same thread returns the accumulated human/AI message state.
@@ -28,6 +32,18 @@ Run the Python local development Agent Server from one terminal:
 pnpm agent:dev
 ```
 
+When Agent Studio is running in a browser that blocks `localhost`, start the
+same graph through LangGraph's supported HTTPS tunnel instead:
+
+```sh
+pnpm agent:dev:tunnel
+```
+
+Open the printed Studio URL. The first connection to a new temporary
+`trycloudflare.com` hostname requires adding that exact hostname to Studio's
+allowed-domain list. Quick-tunnel hostnames change whenever the command is
+restarted and are intended only for local development and testing.
+
 Run the observability smoke from another terminal:
 
 ```sh
@@ -48,6 +64,15 @@ Clone and verify a traced LangSmith chat thread against the local Agent Server:
 
 ```sh
 pnpm agent:clone-thread -- --thread <langsmith-thread-id>
+```
+
+To clone into a tunneled server, pass the HTTPS API URL printed by
+`agent:dev:tunnel`:
+
+```sh
+pnpm agent:clone-thread -- --thread <langsmith-thread-id> \
+  --agent-url https://<temporary-host>.trycloudflare.com \
+  --organization <langsmith-organization-id>
 ```
 
 The clone smoke builds the expected transcript and per-turn message checkpoints from the LangSmith root runs, creates the local thread, then reads `threads.get`, `threads.getState`, and `threads.getHistory`. It fails if any message, checkpoint, source turn count, or clone provenance field differs. A successful result prints verification counts and the Agent Studio URL; the URL is only a UI inspection surface after the Agent Server state check passes.

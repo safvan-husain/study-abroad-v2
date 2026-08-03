@@ -112,6 +112,8 @@ def _extract_profile(text: str, existing: dict[str, Any], intent: dict[str, Any]
 
 
 def _ollama_chat(system: str, human: str) -> str | None:
+    if os.getenv("OLLAMA_DISABLED", "").lower() in {"1", "true", "yes"}:
+        return None
     host = os.getenv("OLLAMA_HOST", "").rstrip("/")
     model = os.getenv("OLLAMA_MODEL", "gemma4:31b")
     api_key = os.getenv("OLLAMA_API_KEY", "")

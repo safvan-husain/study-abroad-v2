@@ -1,0 +1,4 @@
+{$AGENT_SERVER_HOSTNAME} {
+	encode zstd gzip
+	reverse_proxy agent-server:2024
+}

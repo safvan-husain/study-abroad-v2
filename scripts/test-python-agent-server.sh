@@ -10,7 +10,7 @@ if lsof -nP -iTCP:"${server_port}" -sTCP:LISTEN >/dev/null 2>&1; then
   exit 1
 fi
 
-uv --directory services/agent-server run langgraph dev \
+OLLAMA_DISABLED="true" LANGSMITH_TRACING="false" uv --directory services/agent-server run langgraph dev \
   --config langgraph.json \
   --host 127.0.0.1 \
   --port "${server_port}" \

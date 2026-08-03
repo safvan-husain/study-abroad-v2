@@ -14,6 +14,7 @@
     "typecheck:all": "pnpm -r typecheck",
     "test:all": "pnpm -r test",
     "agent:dev": "pnpm --filter @study-abroad/agent-server agent:dev",
+    "agent:dev:tunnel": "pnpm --filter @study-abroad/agent-server agent:dev:tunnel",
     "agent:clone-thread": "tsx scripts/clone-langsmith-thread.ts",
     "agent:smoke": "tsx scripts/agent-observability.ts",
     "agent:trace:smoke": "LANGSMITH_TRACING=true tsx scripts/agent-observability.ts",

@@ -1,6 +1,12 @@
 from langchain_core.messages import HumanMessage
 
-from agent_server.graph import _map_phrase, run_course_fit, run_discovery
+from agent_server.graph import _map_phrase, _ollama_chat, run_course_fit, run_discovery
+
+
+def test_ollama_can_be_disabled(monkeypatch):
+    monkeypatch.setenv("OLLAMA_HOST", "https://ollama.example")
+    monkeypatch.setenv("OLLAMA_DISABLED", "true")
+    assert _ollama_chat("system", "human") is None
 
 
 def test_maps_programming_to_computing():
