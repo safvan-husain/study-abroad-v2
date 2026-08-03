@@ -44,6 +44,7 @@ services:
   agent-server-proxy:
     image: caddy:2.10.2-alpine
     restart: unless-stopped
+    dns: ["1.1.1.1", "8.8.8.8"]
     environment:
       AGENT_SERVER_HOSTNAME: "${AGENT_SERVER_HOSTNAME:-agent.200-141-7-99.sslip.io}"
     depends_on:
