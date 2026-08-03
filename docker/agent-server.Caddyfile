@@ -8,13 +8,6 @@
 		reverse_proxy agent-server:2024
 	}
 
-	# Studio probes /info before it persists and applies custom connection
-	# headers. This endpoint exposes runtime metadata, not thread or run data.
-	@studio_bootstrap path /info
-	handle @studio_bootstrap {
-		reverse_proxy agent-server:2024
-	}
-
 	@authorized header X-Agent-Server-Token "{$AGENT_SERVER_ACCESS_TOKEN}"
 	handle @authorized {
 		reverse_proxy agent-server:2024

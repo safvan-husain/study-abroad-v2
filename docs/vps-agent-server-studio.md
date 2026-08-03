@@ -105,6 +105,39 @@ If Studio reports **Domain not allowed**:
 Allowed domains and custom-header values are stored locally in that browser.
 Each teammate or new browser profile must configure them once.
 
+### First connection enrollment
+
+Studio validates a new Base URL before it persists and applies newly entered
+custom headers. Consequently, the first connection from a new browser cannot
+complete while Caddy already requires that unsaved header.
+
+For first-time enrollment, the VPS administrator must briefly replace the
+Caddy site block with an unrestricted `reverse_proxy agent-server:2024`,
+restart only `agent-server-proxy`, and keep the enrollment window open only
+while the authorized user connects. In Studio, use the exact Base URL above
+without a trailing slash, add the header, and wait until Studio shows the
+thread. Immediately restore the tracked secure Caddyfile and restart
+`agent-server-proxy` again.
+
+Verify enforcement after closing the enrollment window:
+
+```sh
+# Must return 401.
+curl -sS -o /dev/null -w '%{http_code}\n' \
+  https://agent.200-141-7-99.sslip.io/ok
+
+# Must return 200 after loading AGENT_SERVER_ACCESS_TOKEN from .env.
+curl -sS -o /dev/null -w '%{http_code}\n' \
+  -H "X-Agent-Server-Token: $AGENT_SERVER_ACCESS_TOKEN" \
+  https://agent.200-141-7-99.sslip.io/ok
+```
+
+Once enrolled, Studio stores the header against that exact Base URL in the
+browser and reconnects through the locked proxy normally. Repeat enrollment
+for each new browser profile and after changing the hostname. Rotating only the
+secret does not require changing the Base URL, but every authorized browser
+must receive and save the new value before enforcement switches to it.
+
 ## Open a LangSmith trace in Studio
 
 New worker traces contain these metadata values:
@@ -154,11 +187,9 @@ authorized user's Studio connection settings. It must not be committed, placed
 in trace metadata, or added to `AGENT_SERVER_PUBLIC_URL`.
 
 Caddy allows unauthenticated `OPTIONS` requests so browser CORS preflight
-continues to work. It also allows Studio's initial `/info` bootstrap request;
-that endpoint exposes runtime metadata but no thread or run data. All other
-public API requests require the token. The internal worker keeps using
-`http://agent-server:2024`; it does not pass through the public Caddy proxy and
-does not need the token.
+continues to work. Every actual public API request requires the token. The
+internal worker keeps using `http://agent-server:2024`; it does not pass
+through the public Caddy proxy and does not need the token.
 
 Every browser that uses Studio must configure:
 
