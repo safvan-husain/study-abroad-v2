@@ -39,10 +39,10 @@ named `agent-server-state` volume. Caddy exposes the API over HTTPS at
 so no purchased domain or DNS account is required. Caddy obtains and renews the
 TLS certificate automatically.
 
-`AGENT_SERVER_PUBLIC_URL` is passed to the Agent Server as
-`LANGGRAPH_API_URL`. This makes new LangSmith traces point their original-thread
-Studio link at the public VPS server rather than Docker's private
-`http://agent-server:2024` address.
+`AGENT_SERVER_PUBLIC_URL` is passed to both the Agent Server and worker as
+`LANGGRAPH_API_URL`. The worker adds it to each run's trace metadata. This makes
+new LangSmith traces point their original-thread Studio link at the public VPS
+server rather than Docker's private `http://agent-server:2024` address.
 
 This remains a development server exposed to the public internet. It is useful
 for a low-cost Studio workflow, but it has no production authentication or

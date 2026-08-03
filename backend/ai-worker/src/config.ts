@@ -11,6 +11,7 @@ const configSchema = z.object({
   AGENT_USERNAME: z.string().min(1).default('study_abroad_agent'),
   AGENT_PASSWORD: z.string().min(1).default('study-agent-dev'),
   AGENT_SERVER_URL: z.string().url().default('http://localhost:2025'),
+  LANGGRAPH_API_URL: z.string().url().optional(),
   AGENT_GRAPH_ID: z.string().default('agent'),
   WORKER_ID: z.string().min(1).default('local-worker'),
   WORKER_LEASE_SECONDS: z.coerce.number().int().positive().default(60),

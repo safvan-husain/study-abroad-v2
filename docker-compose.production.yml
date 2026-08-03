@@ -56,7 +56,7 @@ services:
       - agent-server-caddy-config:/config
   worker:
     build: { context: ., dockerfile: backend/ai-worker/Dockerfile }
-    environment: { AGENT_SERVER_URL: http://agent-server:2024, SPACETIME_URL: http://spacetimedb:3000, SPACETIME_DATABASE: study-abroad-coordinator, AGENT_USERNAME: "${AGENT_USERNAME:-study_abroad_agent}", AGENT_PASSWORD: "${AGENT_PASSWORD:-study-agent-dev}", AGENT_GRAPH_ID: agent }
+    environment: { AGENT_SERVER_URL: http://agent-server:2024, LANGGRAPH_API_URL: "${AGENT_SERVER_PUBLIC_URL:-https://agent.200-141-7-99.sslip.io}", SPACETIME_URL: http://spacetimedb:3000, SPACETIME_DATABASE: study-abroad-coordinator, AGENT_USERNAME: "${AGENT_USERNAME:-study_abroad_agent}", AGENT_PASSWORD: "${AGENT_PASSWORD:-study-agent-dev}", AGENT_GRAPH_ID: agent }
     depends_on:
       spacetimedb: { condition: service_healthy, restart: true }
       agent-server: { condition: service_healthy }

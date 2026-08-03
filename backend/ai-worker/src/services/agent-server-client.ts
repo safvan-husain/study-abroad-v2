@@ -58,6 +58,7 @@ export class AgentServerClient implements AgentClient {
       conversation_id: ids.conversationId,
       turn_id: ids.turnId,
       correlation_id: ids.correlationId,
+      ...(this.config.LANGGRAPH_API_URL ? { LANGGRAPH_API_URL: this.config.LANGGRAPH_API_URL } : {}),
     };
     const input = {
       messages: messages.slice(-1).map(({ content }) => ({ role: 'human', content })),
@@ -111,6 +112,7 @@ export class AgentServerClient implements AgentClient {
       metadata: {
         conversation_id: input.conversationId,
         correlation_id: input.correlationId,
+        ...(this.config.LANGGRAPH_API_URL ? { LANGGRAPH_API_URL: this.config.LANGGRAPH_API_URL } : {}),
       },
       multitaskStrategy: 'reject',
       onRunCreated: (run) => {
