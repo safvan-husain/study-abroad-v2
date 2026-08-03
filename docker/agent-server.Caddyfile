@@ -1,4 +1,17 @@
 {$AGENT_SERVER_HOSTNAME} {
 	encode zstd gzip
-	reverse_proxy agent-server:2024
+
+	# Browser CORS preflight does not contain the secret header. Let the Agent
+	# Server answer it with the required Access-Control-Allow-* headers.
+	@preflight method OPTIONS
+	handle @preflight {
+		reverse_proxy agent-server:2024
+	}
+
+	@authorized header X-Agent-Server-Token "{$AGENT_SERVER_ACCESS_TOKEN}"
+	handle @authorized {
+		reverse_proxy agent-server:2024
+	}
+
+	respond "Unauthorized" 401
 }

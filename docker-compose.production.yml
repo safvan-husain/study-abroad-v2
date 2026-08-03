@@ -47,6 +47,7 @@ services:
     dns: ["1.1.1.1", "8.8.8.8"]
     environment:
       AGENT_SERVER_HOSTNAME: "${AGENT_SERVER_HOSTNAME:-agent.200-141-7-99.sslip.io}"
+      AGENT_SERVER_ACCESS_TOKEN: "${AGENT_SERVER_ACCESS_TOKEN:?Set AGENT_SERVER_ACCESS_TOKEN in .env}"
     depends_on:
       agent-server: { condition: service_healthy }
     ports: ["80:80", "443:443"]

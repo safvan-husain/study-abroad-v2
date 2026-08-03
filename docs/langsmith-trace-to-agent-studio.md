@@ -33,6 +33,10 @@ All of these must remain true:
 
 ## Persistent VPS development server without a purchased domain
 
+For the complete reproducible HTTPS setup, exact VPS environment values,
+LangSmith/Studio connection fields, and the enforced custom-header security
+design, see [VPS Agent Server HTTPS and Agent Studio connection](./vps-agent-server-studio.md).
+
 The production Compose stack keeps the development Agent Server state in the
 named `agent-server-state` volume. Caddy exposes the API over HTTPS at
 `https://agent.200-141-7-99.sslip.io`; `sslip.io` resolves the embedded VPS IP,
