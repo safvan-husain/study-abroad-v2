@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
-test('direct advisor turn publishes progressive search and independent course fits', async ({ page }) => {
-  test.setTimeout(90_000);
+test('agent navigation is safe, permanent, and preserves browser history', async ({ page }) => {
+  test.setTimeout(120_000);
   const transcriptRequests: string[] = [];
   page.on('request', (request) => {
     if (/\/conversations\/.*\/(messages|turns)/.test(request.url())) transcriptRequests.push(request.url());
@@ -9,9 +9,7 @@ test('direct advisor turn publishes progressive search and independent course fi
 
   await page.goto('/');
   await expect(page.getByRole('main', { name: 'Study planning workspace' })).toBeVisible();
-  await expect(page.getByRole('complementary', { name: 'Study advisor' })).toBeVisible();
   await expect(page.getByText('Tell me about your background and interests.')).toBeVisible();
-  await expect(page.getByText('TRY ASKING')).toHaveCount(0);
 
   const composer = page.getByLabel('Message your advisor');
   await expect(composer).toBeEnabled({ timeout: 20_000 });
@@ -19,18 +17,28 @@ test('direct advisor turn publishes progressive search and independent course fi
   await page.getByRole('button', { name: 'Send message' }).click();
 
   await expect(page.getByText('I am interested in programming and want help getting started.')).toBeVisible();
-  await expect(page.getByText('Your workspace is ready')).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Course matches for you' })).toHaveCount(0);
-  const openSummary = page.getByRole('button', { name: 'Open summary' }).first();
-  await expect(openSummary).toBeVisible({ timeout: 60_000 });
-  await openSummary.click();
-  await expect(page.getByRole('heading', { name: 'Course matches for you' })).toBeVisible({ timeout: 20_000 });
-  await expect(page.getByText(/Showing courses related to/i).first()).toBeVisible({ timeout: 60_000 });
-  await expect(page.getByText(/Computer Science|Computer Systems|indicative fit/i).first()).toBeVisible({ timeout: 60_000 });
-  await expect(page.getByRole('complementary', { name: 'Study advisor' }).getByText(/Computer Science|indicative fit/i)).toHaveCount(0);
+  // The catalogue action safely auto-applies because the originating tab is unchanged.
+  await expect(page.getByRole('heading', { name: 'Course matches for you' })).toBeVisible({ timeout: 90_000 });
+  await expect(page.getByText('5 course matches ready', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Open again' }).first()).toBeVisible();
 
+  // Independent summaries finish after the first navigation revision and therefore
+  // remain offered instead of repeatedly stealing focus.
+  const openSummary = page.getByRole('button', { name: 'Open summary' }).first();
+  await expect(openSummary).toBeVisible({ timeout: 90_000 });
+  const summaryLabel = await openSummary.locator('xpath=..').locator('strong').textContent().catch(() => null);
+  await openSummary.click();
+  await expect(page.locator('.breadcrumb')).toHaveText('YOUR JOURNEY / EXPLORE / COURSE SUMMARY');
+  await expect(page.getByRole('button', { name: 'Open again' }).first()).toBeVisible();
+  if (summaryLabel) await expect(page.getByText(summaryLabel, { exact: true }).first()).toBeVisible();
+
+  // Back returns to the catalogue, then the prior home workspace, while cards remain.
+  await page.goBack();
+  await expect(page.locator('.breadcrumb')).toHaveText('YOUR JOURNEY / EXPLORE');
+  await expect(page.getByRole('heading', { name: 'Course matches for you' })).toBeVisible();
   await page.goBack();
   await expect(page.getByText('Your workspace is ready')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Open again' }).first()).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Open summary' }).first()).toBeVisible();
   expect(transcriptRequests).toEqual([]);
 });

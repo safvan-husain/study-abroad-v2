@@ -12,6 +12,7 @@ import {
 
 export default {
   conversationId: __t.string(),
-  activityId: __t.string(),
-  state: __t.string(),
+  clientInstanceId: __t.string(),
+  targetJson: __t.string(),
+  visible: __t.bool(),
 };

@@ -2,30 +2,23 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { DbConnection } from '@study-abroad/spacetimedb-bindings';
-import type { DiscoveryProfilePatch, TurnUpdatePayload, UiActivityReceiptState, UiTargetRef } from '@study-abroad/contracts';
+import type { DiscoveryProfilePatch, TurnUpdatePayload, UiActionActivation, UiActionStatus, UiTargetRef } from '@study-abroad/contracts';
 import { turnUpdatePayload, uiTargetRef } from '@study-abroad/contracts';
 import { getOrCreateGuestSessionId } from '../lib/guest-session';
 
 const TOKEN_KEY = 'study-abroad-spacetimedb-token';
 
-export type AdvisorMessage = { messageId: string; role: string; content: string; sequence: bigint };
+export type AdvisorMessage = { messageId: string; turnId: string; role: string; content: string; sequence: bigint; createdAtMicros: bigint };
 export type AdvisorTurn = { turnId: string; status: string; errorCode: string | null; attempt: number };
 export type AdvisorDirective = { viewType: string; awareness: string; uiRevision: bigint; workSetId: string | null };
 export type AdvisorWorkSet = { workSetId: string; status: string };
 export type AdvisorWorkItem = { workItemId: string; workSetId: string; entityId: string; kind: string; displayTitle: string; orderIndex: number; target: UiTargetRef; status: string; errorCode: string | null };
 export type AdvisorWorkResult = { workItemId: string; resultJson: string; target: UiTargetRef };
-export type AdvisorUiActivity = { activityId: string; workItemId: string; kind: string; label: string; target: UiTargetRef; createdAtMicros: bigint };
-export type AdvisorUiActivityReceipt = { activityId: string; state: UiActivityReceiptState };
+export type AdvisorUiAction = { actionId: string; clientInstanceId: string; sourceKind: string; sourceId: string; kind: string; label: string; buttonLabel: string; target: UiTargetRef; baseTarget: UiTargetRef; baseNavigationRevision: bigint; activation: UiActionActivation; status: UiActionStatus; createdAtMicros: bigint; updatedAtMicros: bigint };
+export type AdvisorUserUiState = { clientInstanceId: string; target: UiTargetRef; navigationRevision: bigint; visible: boolean; lastSeenAtMicros: bigint };
 export type AdvisorTurnUpdate = { updateId: bigint; turnId: string; attempt: number; sequence: number; kind: string; payload: TurnUpdatePayload };
 export type AdvisorProfile = DiscoveryProfilePatch;
-export type AdvisorCatalogCourse = {
-  courseId: string;
-  institutionName: string;
-  country: string;
-  city: string;
-  name: string;
-  area: string;
-};
+export type AdvisorCatalogCourse = { courseId: string; institutionName: string; country: string; city: string; name: string; area: string };
 
 function spacetimeUri() {
   if (process.env.NEXT_PUBLIC_SPACETIME_URL) return process.env.NEXT_PUBLIC_SPACETIME_URL.replace(/^http/, 'ws');
@@ -40,19 +33,11 @@ function commandId() {
 function parseProfile(row: Record<string, unknown> | undefined): AdvisorProfile | undefined {
   if (!row) return undefined;
   let candidateAreas: string[] = [];
-  try {
-    candidateAreas = JSON.parse(String(row.candidateAreasJson ?? '[]')) as string[];
-  } catch {
-    candidateAreas = [];
-  }
+  try { candidateAreas = JSON.parse(String(row.candidateAreasJson ?? '[]')) as string[]; } catch { candidateAreas = []; }
   return {
-    background: String(row.background ?? ''),
-    courseInterests: String(row.courseInterests ?? ''),
-    ambitions: String(row.ambitions ?? ''),
-    primaryArea: String(row.primaryArea ?? ''),
-    candidateAreas,
-    studentPhrase: String(row.studentPhrase ?? ''),
-    constraintsText: String(row.constraintsText ?? ''),
+    background: String(row.background ?? ''), courseInterests: String(row.courseInterests ?? ''),
+    ambitions: String(row.ambitions ?? ''), primaryArea: String(row.primaryArea ?? ''), candidateAreas,
+    studentPhrase: String(row.studentPhrase ?? ''), constraintsText: String(row.constraintsText ?? ''),
   };
 }
 
@@ -60,9 +45,7 @@ function parseTarget(value: unknown): UiTargetRef | undefined {
   try {
     const parsed = uiTargetRef.safeParse(JSON.parse(String(value ?? '{}')));
     return parsed.success ? parsed.data : undefined;
-  } catch {
-    return undefined;
-  }
+  } catch { return undefined; }
 }
 
 export function useAdvisorWorkspace() {
@@ -76,8 +59,8 @@ export function useAdvisorWorkspace() {
   const [workSets, setWorkSets] = useState<AdvisorWorkSet[]>([]);
   const [workItems, setWorkItems] = useState<AdvisorWorkItem[]>([]);
   const [workResults, setWorkResults] = useState<AdvisorWorkResult[]>([]);
-  const [uiActivities, setUiActivities] = useState<AdvisorUiActivity[]>([]);
-  const [uiActivityReceipts, setUiActivityReceipts] = useState<AdvisorUiActivityReceipt[]>([]);
+  const [uiActions, setUiActions] = useState<AdvisorUiAction[]>([]);
+  const [userUiStates, setUserUiStates] = useState<AdvisorUserUiState[]>([]);
   const [turnUpdates, setTurnUpdates] = useState<AdvisorTurnUpdate[]>([]);
   const [profile, setProfile] = useState<AdvisorProfile>();
   const [catalogCourses, setCatalogCourses] = useState<AdvisorCatalogCourse[]>([]);
@@ -86,6 +69,7 @@ export function useAdvisorWorkspace() {
   useEffect(() => {
     let disposed = false;
     let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+    let cacheRefreshTimer: ReturnType<typeof setInterval> | undefined;
     const id = getOrCreateGuestSessionId(window.localStorage);
     setConversationId(id);
     setConnectionState('connecting');
@@ -93,83 +77,42 @@ export function useAdvisorWorkspace() {
 
     const refresh = (connection: DbConnection) => {
       const db = connection.db as any;
-      setMessages([...db.my_messages.iter()].sort((a, b) => Number(a.sequence - b.sequence)));
-      setTurns([...db.my_turns.iter()].map((turn: any) => ({
-        turnId: turn.turnId,
-        status: turn.status,
-        errorCode: turn.errorCode ?? null,
-        attempt: turn.attempt,
-      })));
-      setDirective([...db.my_active_directives.iter()].map((row: any) => ({
-        viewType: row.viewType,
-        awareness: row.awareness,
-        uiRevision: row.uiRevision,
-        workSetId: row.workSetId ?? null,
-      }))[0]);
+      setMessages([...db.my_messages.iter()].sort((a: any, b: any) => Number(a.sequence - b.sequence)));
+      setTurns([...db.my_turns.iter()].map((turn: any) => ({ turnId: turn.turnId, status: turn.status, errorCode: turn.errorCode ?? null, attempt: turn.attempt })));
+      setDirective([...db.my_active_directives.iter()].map((row: any) => ({ viewType: row.viewType, awareness: row.awareness, uiRevision: row.uiRevision, workSetId: row.workSetId ?? null }))[0]);
       setWorkSets([...db.my_workspace_work_sets.iter()]);
       const workControls = [...db.my_workspace_work_controls.iter()];
       const controlByItem = new Map(workControls.map((control: any) => [control.workItemId, control]));
       setWorkItems([...db.my_workspace_work_items.iter()].flatMap((item: any): AdvisorWorkItem[] => {
         const control = controlByItem.get(item.workItemId) as any;
         const target = parseTarget(control?.targetJson);
-        return target ? [{
-          workItemId: item.workItemId,
-          workSetId: item.workSetId,
-          entityId: item.entityId,
-          kind: item.kind,
-          displayTitle: control.displayTitle,
-          orderIndex: control.orderIndex,
-          target,
-          status: item.status,
-          errorCode: item.errorCode ?? null,
-        }] : [];
+        return target ? [{ workItemId: item.workItemId, workSetId: item.workSetId, entityId: item.entityId, kind: item.kind, displayTitle: control.displayTitle, orderIndex: control.orderIndex, target, status: item.status, errorCode: item.errorCode ?? null }] : [];
       }).sort((a: AdvisorWorkItem, b: AdvisorWorkItem) => a.orderIndex - b.orderIndex));
       setWorkResults([...db.my_workspace_results.iter()].flatMap((result: any): AdvisorWorkResult[] => {
-        const control = controlByItem.get(result.workItemId) as any;
-        const target = parseTarget(control?.targetJson);
+        const target = parseTarget((controlByItem.get(result.workItemId) as any)?.targetJson);
         return target ? [{ workItemId: result.workItemId, resultJson: result.resultJson, target }] : [];
       }));
-      setUiActivities([...db.my_ui_activities.iter()].flatMap((activity: any): AdvisorUiActivity[] => {
-        const target = parseTarget(activity.targetJson);
-        return target ? [{
-          activityId: activity.activityId,
-          workItemId: activity.workItemId,
-          kind: activity.kind,
-          label: activity.label,
-          target,
-          createdAtMicros: activity.createdAtMicros,
+      setUiActions([...db.my_ui_actions.iter()].flatMap((row: any): AdvisorUiAction[] => {
+        const target = parseTarget(row.targetJson);
+        const baseTarget = parseTarget(row.baseTargetJson);
+        return target && baseTarget ? [{
+          actionId: row.actionId, clientInstanceId: row.clientInstanceId, sourceKind: row.sourceKind, sourceId: row.sourceId,
+          kind: row.kind, label: row.label, buttonLabel: row.buttonLabel, target, baseTarget,
+          baseNavigationRevision: row.baseNavigationRevision, activation: row.activation, status: row.status,
+          createdAtMicros: row.createdAtMicros, updatedAtMicros: row.updatedAtMicros,
         }] : [];
-      }).sort((a: AdvisorUiActivity, b: AdvisorUiActivity) => Number(a.createdAtMicros - b.createdAtMicros)));
-      setUiActivityReceipts([...db.my_ui_activity_receipts.iter()].map((receipt: any) => ({
-        activityId: receipt.activityId,
-        state: receipt.state,
-      })));
+      }).sort((a: AdvisorUiAction, b: AdvisorUiAction) => Number(a.createdAtMicros - b.createdAtMicros)));
+      setUserUiStates([...db.my_user_ui_states.iter()].flatMap((row: any): AdvisorUserUiState[] => {
+        const target = parseTarget(row.targetJson);
+        return target ? [{ clientInstanceId: row.clientInstanceId, target, navigationRevision: row.navigationRevision, visible: row.visible, lastSeenAtMicros: row.lastSeenAtMicros }] : [];
+      }));
       setTurnUpdates([...db.my_turn_updates.iter()].map((row: any) => {
         let payload: TurnUpdatePayload = { kind: 'turn_started' };
-        try {
-          const parsed = turnUpdatePayload.safeParse(JSON.parse(String(row.payloadJson ?? '{}')));
-          if (parsed.success) payload = parsed.data;
-        } catch {
-          // Malformed payloadJson falls back to turn_started.
-        }
-        return {
-          updateId: row.updateId,
-          turnId: row.turnId,
-          attempt: row.attempt,
-          sequence: row.sequence,
-          kind: row.kind,
-          payload,
-        };
+        try { const parsed = turnUpdatePayload.safeParse(JSON.parse(String(row.payloadJson ?? '{}'))); if (parsed.success) payload = parsed.data; } catch { /* diagnostic row is retained but hidden */ }
+        return { updateId: row.updateId, turnId: row.turnId, attempt: row.attempt, sequence: row.sequence, kind: row.kind, payload };
       }));
       setProfile(parseProfile([...db.my_conversation_profiles.iter()][0]));
-      setCatalogCourses([...db.catalog_course.iter()].filter((row: any) => row.active !== false).map((row: any) => ({
-        courseId: row.courseId,
-        institutionName: row.institutionName,
-        country: row.country,
-        city: row.city,
-        name: row.name,
-        area: row.area,
-      })));
+      setCatalogCourses([...db.catalog_course.iter()].filter((row: any) => row.active !== false).map((row: any) => ({ courseId: row.courseId, institutionName: row.institutionName, country: row.country, city: row.city, name: row.name, area: row.area })));
     };
 
     const builder = DbConnection.builder()
@@ -183,114 +126,92 @@ export function useAdvisorWorkspace() {
         setConnectionState('hydrating');
         void connection.reducers.ensureGuestJourney({ conversationId: id }).then(() => {
           const tables = [
-            'my_messages', 'my_turns', 'my_active_directives', 'my_workspace_work_sets',
-            'my_workspace_work_items', 'my_workspace_work_controls', 'my_workspace_results', 'my_user_actions', 'my_conversations',
-            'my_turn_updates', 'my_conversation_profiles', 'my_ui_activities',
-            'my_ui_activity_receipts', 'my_ui_client_contexts', 'catalog_course',
+            'my_messages', 'my_turns', 'my_active_directives', 'my_workspace_work_sets', 'my_workspace_work_items',
+            'my_workspace_work_controls', 'my_workspace_results', 'my_user_actions', 'my_conversations', 'my_turn_updates',
+            'my_conversation_profiles', 'my_ui_actions', 'my_user_ui_states', 'catalog_course',
           ];
           const db = connection.db as any;
           for (const tableName of tables) {
             const table = db[tableName];
             const onChange = () => refresh(connection);
-            table.onInsert(onChange);
-            table.onUpdate?.(onChange);
-            table.onDelete(onChange);
+            table.onInsert(onChange); table.onUpdate?.(onChange); table.onDelete(onChange);
           }
           connection.subscriptionBuilder()
             .onApplied(() => {
               refresh(connection);
+              // SpacetimeDB 2.0.3 can apply remote view rows to its cache without
+              // consistently firing the generated table callback. Reconcile the
+              // already-local cache as a fallback; no HTTP polling is involved.
+              cacheRefreshTimer ??= setInterval(() => refresh(connection), 500);
               setConnectionState('ready');
             })
-            .onError((context) => {
-              setError(`Subscription failed: ${String(context.event)}`);
-              setConnectionState('error');
-            })
+            .onError((context) => { setError(`Subscription failed: ${String(context.event)}`); setConnectionState('error'); })
             .subscribe(tables.map((table) => `SELECT * FROM ${table}`));
-        }).catch((journeyError: unknown) => {
-          setError(journeyError instanceof Error ? journeyError.message : String(journeyError));
-          setConnectionState('error');
-        });
+        }).catch((journeyError: unknown) => { setError(journeyError instanceof Error ? journeyError.message : String(journeyError)); setConnectionState('error'); });
       })
       .onConnectError((_context, connectError) => {
         if (disposed) return;
-        setError(String(connectError));
-        setConnectionState('error');
+        setError(String(connectError)); setConnectionState('error');
         reconnectTimer = setTimeout(() => setReconnect((value) => value + 1), 1500);
       })
       .onDisconnect(() => {
         if (disposed) return;
-        connectionRef.current = null;
-        setConnectionState('disconnected');
+        connectionRef.current = null; setConnectionState('disconnected');
         reconnectTimer = setTimeout(() => setReconnect((value) => value + 1), 1500);
       });
     builder.build();
-
     return () => {
       disposed = true;
       if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (cacheRefreshTimer) clearInterval(cacheRefreshTimer);
       connectionRef.current?.disconnect();
       connectionRef.current = null;
     };
   }, [reconnect]);
 
-  const send = useCallback(async (content: string) => {
+  const send = useCallback(async (content: string, clientInstanceId: string) => {
     const connection = connectionRef.current;
     if (!connection || connectionState !== 'ready' || !conversationId) throw new Error('Advisor is not connected');
-    await connection.reducers.sendMessage({ conversationId, clientCommandId: commandId(), content: content.trim() });
+    await connection.reducers.sendMessage({ conversationId, clientCommandId: commandId(), clientInstanceId, content: content.trim() });
   }, [connectionState, conversationId]);
 
   const updateProfile = useCallback(async (next: AdvisorProfile) => {
     const connection = connectionRef.current;
     if (!connection || connectionState !== 'ready' || !conversationId) throw new Error('Advisor is not connected');
     await connection.reducers.updateDiscoveryProfile({
-      conversationId,
-      clientCommandId: commandId(),
-      background: next.background,
-      courseInterests: next.courseInterests,
-      ambitions: next.ambitions,
-      primaryArea: next.primaryArea,
-      candidateAreasJson: JSON.stringify(next.candidateAreas),
-      studentPhrase: next.studentPhrase,
-      constraintsText: next.constraintsText,
+      conversationId, clientCommandId: commandId(), background: next.background, courseInterests: next.courseInterests,
+      ambitions: next.ambitions, primaryArea: next.primaryArea, candidateAreasJson: JSON.stringify(next.candidateAreas),
+      studentPhrase: next.studentPhrase, constraintsText: next.constraintsText,
     });
   }, [connectionState, conversationId]);
 
-  const publishUiContext = useCallback(async (clientInstanceId: string, target: UiTargetRef, navigationRevision: number, visible: boolean) => {
+  const publishUiState = useCallback(async (clientInstanceId: string, target: UiTargetRef, visible: boolean) => {
     const connection = connectionRef.current;
     if (!connection || connectionState !== 'ready' || !conversationId) return;
-    await connection.reducers.publishUiContext({
-      conversationId,
-      clientInstanceId,
-      targetJson: JSON.stringify(target),
-      navigationRevision: BigInt(navigationRevision),
-      visible,
-    });
+    await connection.reducers.publishUiState({ conversationId, clientInstanceId, targetJson: JSON.stringify(target), visible });
   }, [connectionState, conversationId]);
 
-  const acknowledgeUiActivity = useCallback(async (activityId: string, state: UiActivityReceiptState) => {
+  const publishUiPresence = useCallback(async (clientInstanceId: string, visible: boolean) => {
     const connection = connectionRef.current;
     if (!connection || connectionState !== 'ready' || !conversationId) return;
-    await connection.reducers.acknowledgeUiActivity({ conversationId, activityId, state });
+    await connection.reducers.publishUiPresence({ conversationId, clientInstanceId, visible });
+  }, [connectionState, conversationId]);
+
+  const resolveAutoUiAction = useCallback(async (actionId: string) => {
+    const connection = connectionRef.current;
+    if (!connection || connectionState !== 'ready' || !conversationId) return;
+    await connection.reducers.resolveAutoUiAction({ conversationId, actionId });
+  }, [connectionState, conversationId]);
+
+  const openUiAction = useCallback(async (actionId: string, clientInstanceId: string) => {
+    const connection = connectionRef.current;
+    if (!connection || connectionState !== 'ready' || !conversationId) return;
+    await connection.reducers.openUiAction({ conversationId, actionId, clientInstanceId });
   }, [connectionState, conversationId]);
 
   return {
-    connectionState,
-    error,
-    conversationId,
-    messages,
-    turns,
-    directive,
-    workSets,
-    workItems,
-    workResults,
-    uiActivities,
-    uiActivityReceipts,
-    turnUpdates,
-    profile,
-    catalogCourses,
-    send,
-    updateProfile,
-    publishUiContext,
-    acknowledgeUiActivity,
+    connectionState, error, conversationId, messages, turns, directive, workSets, workItems, workResults,
+    uiActions, userUiStates, turnUpdates, profile, catalogCourses, send, updateProfile, publishUiState,
+    publishUiPresence, resolveAutoUiAction, openUiAction,
   };
 }

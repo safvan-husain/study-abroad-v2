@@ -12,8 +12,6 @@ import {
 
 export default {
   conversationId: __t.string(),
+  actionId: __t.string(),
   clientInstanceId: __t.string(),
-  targetJson: __t.string(),
-  navigationRevision: __t.u64(),
-  visible: __t.bool(),
 };

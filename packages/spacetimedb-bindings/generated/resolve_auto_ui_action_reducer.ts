@@ -10,12 +10,7 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
-export default __t.row({
-  activityId: __t.string().name("activity_id"),
-  conversationId: __t.string().name("conversation_id"),
-  workItemId: __t.string().name("work_item_id"),
-  kind: __t.string(),
-  label: __t.string(),
-  targetJson: __t.string().name("target_json"),
-  createdAtMicros: __t.i64().name("created_at_micros"),
-});
+export default {
+  conversationId: __t.string(),
+  actionId: __t.string(),
+};

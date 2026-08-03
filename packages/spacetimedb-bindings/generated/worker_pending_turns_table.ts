@@ -21,4 +21,7 @@ export default __t.row({
   leaseUntilMicros: __t.option(__t.i64()).name("lease_until_micros"),
   attempt: __t.u32(),
   baseUiRevision: __t.u64().name("base_ui_revision"),
+  uiClientInstanceId: __t.string().name("ui_client_instance_id"),
+  uiTargetJson: __t.string().name("ui_target_json"),
+  uiNavigationRevision: __t.u64().name("ui_navigation_revision"),
 });

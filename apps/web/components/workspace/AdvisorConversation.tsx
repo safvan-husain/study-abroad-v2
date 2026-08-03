@@ -1,58 +1,52 @@
 import { turnUpdateLabel, type TurnUpdatePayload } from '@study-abroad/contracts';
-import type { AdvisorMessage, AdvisorTurn, AdvisorTurnUpdate } from '../../hooks/useAdvisorWorkspace';
+import type { AdvisorMessage, AdvisorTurn, AdvisorTurnUpdate, AdvisorUiAction } from '../../hooks/useAdvisorWorkspace';
+import { AdvisorActionCard } from './AdvisorActivities';
 
 function activeUpdates(turns: AdvisorTurn[], updates: AdvisorTurnUpdate[]) {
   const latest = [...turns].at(-1);
   if (!latest) return [];
-  return updates
-    .filter((update) => update.turnId === latest.turnId && update.attempt === latest.attempt)
+  return updates.filter((update) => update.turnId === latest.turnId && update.attempt === latest.attempt)
     .sort((a, b) => a.sequence - b.sequence || Number(a.updateId - b.updateId));
 }
 
-export function AdvisorConversation({
-  messages,
-  turns,
-  turnUpdates = [],
-}: {
+export function AdvisorConversation({ messages, turns, turnUpdates = [], uiActions = [], onOpenAction = () => undefined }: {
   messages: AdvisorMessage[];
   turns: AdvisorTurn[];
   turnUpdates?: AdvisorTurnUpdate[];
+  uiActions?: AdvisorUiAction[];
+  onOpenAction?: (action: AdvisorUiAction) => void;
 }) {
   const latestTurn = [...turns].at(-1);
   const inFlight = latestTurn && ['pending', 'claimed', 'retrying'].includes(latestTurn.status);
   const milestones = activeUpdates(turns, turnUpdates);
-  const completed = latestTurn?.status === 'completed' && milestones.length > 0;
+  const events = [
+    ...messages.map((message) => ({ kind: 'message' as const, at: message.createdAtMicros, id: message.messageId, message })),
+    ...uiActions.map((action) => ({ kind: 'action' as const, at: action.createdAtMicros, id: action.actionId, action })),
+  ].sort((a, b) => Number(a.at - b.at) || (a.kind === b.kind ? a.id.localeCompare(b.id) : a.kind === 'message' ? -1 : 1));
 
   return (
     <section className="advisor-conversation" aria-label="Advisor conversation" aria-live="polite">
-      {messages.length === 0 ? (
+      {events.length === 0 ? (
         <div className="advisor-welcome">
           <span className="eyebrow">YOUR STUDY ADVISOR</span>
           <h2>Tell me about your background and interests.</h2>
-          <p>
-            Share what you have studied so far, and the subjects or careers you want to explore.
-            I will use that to search our partner catalogue and organize useful course matches in your workspace.
-          </p>
+          <p>Share what you have studied and the subjects or careers you want to explore. I will organize useful course matches in your workspace.</p>
         </div>
-      ) : messages.map((message) => (
-        <article className={`advisor-message advisor-message-${message.role}`} key={message.messageId}>
-          <span>{message.role === 'assistant' ? 'Advisor' : 'You'}</span>
-          <p>{message.content}</p>
+      ) : events.map((event) => event.kind === 'message' ? (
+        <article className={`advisor-message advisor-message-${event.message.role}`} key={event.id}>
+          <span>{event.message.role === 'assistant' ? 'Advisor' : 'You'}</span>
+          <p>{event.message.content}</p>
         </article>
-      ))}
-      {inFlight || completed ? (
-        <section className={`turn-activity${completed ? ' turn-activity-completed' : ''}`} aria-label="Advisor activity">
-          <span className="eyebrow">{completed ? 'COMPLETED ACTIVITY' : 'IN PROGRESS'}</span>
-          {milestones.length === 0 ? (
-            <p className="turn-status"><span aria-hidden="true" /> Advisor is preparing your workspace...</p>
-          ) : (
-            <ol>
-              {milestones.map((update) => (
-                <li key={String(update.updateId)}>{turnUpdateLabel(update.payload as TurnUpdatePayload)}</li>
-              ))}
-            </ol>
+      ) : <AdvisorActionCard key={event.id} action={event.action} onOpen={onOpenAction} />)}
+      {inFlight ? (
+        <section className="turn-activity" aria-label="Advisor activity">
+          <span className="eyebrow">IN PROGRESS</span>
+          {milestones.length === 0 ? <p className="turn-status"><span aria-hidden="true" /> Advisor is preparing your workspace...</p> : (
+            <ol>{milestones.map((update) => <li key={String(update.updateId)}>{turnUpdateLabel(update.payload as TurnUpdatePayload)}</li>)}</ol>
           )}
         </section>
+      ) : latestTurn?.status === 'completed' ? (
+        <section className="turn-activity turn-activity-completed" aria-label="Advisor activity complete"><p className="turn-status">✓ Done</p></section>
       ) : null}
       {latestTurn?.status === 'failed' ? <p className="inline-error">The advisor could not finish that turn. Your message is still saved.</p> : null}
     </section>

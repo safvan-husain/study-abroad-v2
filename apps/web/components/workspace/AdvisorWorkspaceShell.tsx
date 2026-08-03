@@ -1,93 +1,94 @@
 'use client';
 
-import { useCallback, useEffect, useRef } from 'react';
-import { HOME_UI_TARGET } from '@study-abroad/contracts';
-import { useAdvisorWorkspace } from '../../hooks/useAdvisorWorkspace';
-import type { AdvisorUiActivity } from '../../hooks/useAdvisorWorkspace';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { HOME_UI_TARGET, uiTargetsMatch } from '@study-abroad/contracts';
+import { useAdvisorWorkspace, type AdvisorUiAction } from '../../hooks/useAdvisorWorkspace';
 import { useWorkspaceNavigation } from '../../hooks/useWorkspaceNavigation';
 import { createGuestSessionId } from '../../lib/guest-session';
-import { workspaceContainsTarget } from '../../lib/ui-targets';
 import { AdvisorRail } from './AdvisorRail';
 import { WorkspaceView } from './WorkspaceView';
 
 const UI_CLIENT_KEY = 'study-abroad-ui-client-id';
+const PRESENCE_INTERVAL_MS = 10_000;
 
 export function AdvisorWorkspaceShell() {
   const workspace = useAdvisorWorkspace();
   const navigation = useWorkspaceNavigation();
-  const pendingAcknowledgements = useRef(new Set<string>());
-  const clientInstanceId = useRef<string | undefined>(undefined);
+  const [clientInstanceId, setClientInstanceId] = useState<string>();
+  const [resolvingActionId, setResolvingActionId] = useState<string>();
+  const appliedActions = useRef(new Set<string>());
 
   useEffect(() => {
     const stored = window.sessionStorage.getItem(UI_CLIENT_KEY);
-    clientInstanceId.current = stored || createGuestSessionId();
-    if (!stored) window.sessionStorage.setItem(UI_CLIENT_KEY, clientInstanceId.current);
+    const id = stored || createGuestSessionId();
+    if (!stored) window.sessionStorage.setItem(UI_CLIENT_KEY, id);
+    setClientInstanceId(id);
   }, []);
 
   useEffect(() => {
-    const publish = () => {
-      if (!clientInstanceId.current) return;
-      void workspace.publishUiContext(
-        clientInstanceId.current,
-        navigation.target,
-        navigation.navigationRevision,
-        document.visibilityState === 'visible',
-      );
-    };
-    publish();
-    document.addEventListener('visibilitychange', publish);
-    return () => document.removeEventListener('visibilitychange', publish);
-  }, [navigation.navigationRevision, navigation.target, workspace.publishUiContext]);
+    if (!clientInstanceId) return;
+    void workspace.publishUiState(clientInstanceId, navigation.target, document.visibilityState === 'visible');
+  }, [clientInstanceId, navigation.navigationRevision, navigation.target, workspace.publishUiState]);
 
   useEffect(() => {
-    const receiptIds = new Set(workspace.uiActivityReceipts.map((receipt) => receipt.activityId));
-    for (const activityId of receiptIds) pendingAcknowledgements.current.delete(activityId);
-    for (const activity of workspace.uiActivities) {
-      if (receiptIds.has(activity.activityId)
-        || pendingAcknowledgements.current.has(activity.activityId)
-        || !workspaceContainsTarget(navigation.target, activity.target)) continue;
-      pendingAcknowledgements.current.add(activity.activityId);
-      void workspace.acknowledgeUiActivity(activity.activityId, 'observed_in_place')
-        .finally(() => pendingAcknowledgements.current.delete(activity.activityId));
-    }
-  }, [navigation.target, workspace.acknowledgeUiActivity, workspace.uiActivities, workspace.uiActivityReceipts]);
+    if (!clientInstanceId) return;
+    const publish = () => void workspace.publishUiPresence(clientInstanceId, document.visibilityState === 'visible');
+    const timer = window.setInterval(publish, PRESENCE_INTERVAL_MS);
+    document.addEventListener('visibilitychange', publish);
+    return () => { window.clearInterval(timer); document.removeEventListener('visibilitychange', publish); };
+  }, [clientInstanceId, workspace.publishUiPresence]);
 
-  const openActivity = useCallback((activity: AdvisorUiActivity) => {
-    pendingAcknowledgements.current.add(activity.activityId);
-    void workspace.acknowledgeUiActivity(activity.activityId, 'opened');
-    navigation.openTarget(activity.target);
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      document.getElementById(`workspace-item-${activity.workItemId}`)?.scrollIntoView({ block: 'center' });
+  useEffect(() => {
+    if (!clientInstanceId || resolvingActionId) return;
+    const action = workspace.uiActions.find((candidate) =>
+      candidate.clientInstanceId === clientInstanceId && candidate.status === 'auto_pending');
+    if (!action) return;
+    setResolvingActionId(action.actionId);
+    void (async () => {
+      // Flush the latest local target first; this makes Back and rapid navigation
+      // visible before SpacetimeDB performs the authoritative revision check.
+      await workspace.publishUiState(clientInstanceId, navigation.target, document.visibilityState === 'visible');
+      await workspace.resolveAutoUiAction(action.actionId);
+    })().finally(() => setResolvingActionId(undefined));
+  }, [clientInstanceId, navigation.target, resolvingActionId, workspace.publishUiState, workspace.resolveAutoUiAction, workspace.uiActions]);
+
+  useEffect(() => {
+    if (!clientInstanceId) return;
+    for (const action of workspace.uiActions) {
+      if (action.clientInstanceId !== clientInstanceId || action.status !== 'applied' || appliedActions.current.has(action.actionId)) continue;
+      appliedActions.current.add(action.actionId);
+      if (!uiTargetsMatch(navigation.target, action.target)) navigation.openTarget(action.target);
+    }
+  }, [clientInstanceId, navigation, workspace.uiActions]);
+
+  const openAction = useCallback(async (action: AdvisorUiAction) => {
+    if (!clientInstanceId) return;
+    await workspace.openUiAction(action.actionId, clientInstanceId);
+    navigation.openTarget(action.target);
+    if (action.sourceKind === 'work_item') requestAnimationFrame(() => requestAnimationFrame(() => {
+      document.getElementById(`workspace-item-${action.sourceId}`)?.scrollIntoView({ block: 'center' });
     }));
-  }, [navigation, workspace]);
+  }, [clientInstanceId, navigation, workspace]);
+
+  const send = useCallback(async (content: string) => {
+    if (!clientInstanceId) throw new Error('Browser tab is not ready');
+    await workspace.publishUiState(clientInstanceId, navigation.target, document.visibilityState === 'visible');
+    await workspace.send(content, clientInstanceId);
+  }, [clientInstanceId, navigation.target, workspace]);
 
   return (
     <div className="advisor-shell">
       <WorkspaceView
-        directive={workspace.directive}
-        workSets={workspace.workSets}
-        workItems={workspace.workItems}
-        workResults={workspace.workResults}
-        profile={workspace.profile}
-        target={navigation.target}
-        setScrollElement={navigation.setScrollElement}
-        onScroll={navigation.rememberScroll}
+        directive={workspace.directive} workSets={workspace.workSets} workItems={workspace.workItems}
+        workResults={workspace.workResults} profile={workspace.profile} target={navigation.target}
+        setScrollElement={navigation.setScrollElement} onScroll={navigation.rememberScroll}
         onHome={() => navigation.openTarget(HOME_UI_TARGET)}
       />
       <AdvisorRail
-        connectionState={workspace.connectionState}
-        error={workspace.error}
-        messages={workspace.messages}
-        turns={workspace.turns}
-        turnUpdates={workspace.turnUpdates}
-        uiActivities={workspace.uiActivities}
-        uiActivityReceipts={workspace.uiActivityReceipts}
-        currentTarget={navigation.target}
-        directive={workspace.directive}
-        profile={workspace.profile}
-        onSend={workspace.send}
-        onUpdateProfile={workspace.updateProfile}
-        onOpenActivity={openActivity}
+        connectionState={workspace.connectionState} error={workspace.error} messages={workspace.messages}
+        turns={workspace.turns} turnUpdates={workspace.turnUpdates} uiActions={workspace.uiActions}
+        directive={workspace.directive} profile={workspace.profile} onSend={send}
+        onUpdateProfile={workspace.updateProfile} onOpenAction={openAction}
       />
     </div>
   );

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { AgentServerClient } from '../src/services/agent-server-client.js';
+import { AgentServerClient, courseFitThreadId } from '../src/services/agent-server-client.js';
 
 describe('AgentServerClient', () => {
   it('reuses the graph assistant and sends only the new native human message', async () => {
@@ -26,5 +26,28 @@ describe('AgentServerClient', () => {
       LANGGRAPH_API_URL: 'https://agent.example.test',
     });
     expect(wait.mock.calls[0][2].metadata).not.toHaveProperty('thread_id');
+  });
+
+  it('uses a stable UUID thread for each course fit', async () => {
+    const wait = vi.fn().mockImplementation(async (_thread: string, _assistant: string, options: any) => {
+      options.onRunCreated({ run_id: 'run-fit' });
+      return { course_fit_result: {
+        entityType: 'course', entityId: 'course-1', title: 'Computer Science', detail: 'A fit.',
+        institutionName: 'University', area: 'computing', country: 'Latvia', studentPhrase: 'programming',
+      } };
+    });
+    const client: any = { assistants: { create: vi.fn().mockResolvedValue({ assistant_id: 'assistant-1' }) }, threads: { create: vi.fn().mockResolvedValue({}) }, runs: { wait } };
+    const subject = new AgentServerClient({ AGENT_SERVER_URL: 'http://agent', AGENT_GRAPH_ID: 'chat' } as any, client);
+    const input: any = {
+      conversationId: 'conversation-1', correlationId: 'work-1',
+      course: { courseId: 'course-1', name: 'Computer Science', institutionName: 'University', area: 'computing', country: 'Latvia' },
+      profile: { studentPhrase: 'programming' },
+      uiContext: { clientInstanceId: 'tab-1', target: { schemaVersion: 1, viewType: 'home' }, navigationRevision: 0n, visible: true, lastSeenAtMicros: 1n },
+    };
+    await subject.runCourseFit(input);
+    const expected = courseFitThreadId('conversation-1', 'course-1');
+    expect(expected).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-8[0-9a-f]{3}-[0-9a-f]{12}$/);
+    expect(client.threads.create).toHaveBeenCalledWith(expect.objectContaining({ threadId: expected }));
+    expect(wait).toHaveBeenCalledWith(expected, 'assistant-1', expect.any(Object));
   });
 });

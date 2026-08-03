@@ -34,7 +34,6 @@ import {
 } from "spacetimedb";
 
 // Import all reducer arg schemas
-import AcknowledgeUiActivityReducer from "./acknowledge_ui_activity_reducer";
 import ClaimReducer from "./claim_reducer";
 import ClaimWorkItemReducer from "./claim_work_item_reducer";
 import CompleteTurnReducer from "./complete_turn_reducer";
@@ -43,12 +42,15 @@ import EnsureGuestJourneyReducer from "./ensure_guest_journey_reducer";
 import FailReducer from "./fail_reducer";
 import FailWorkItemReducer from "./fail_work_item_reducer";
 import LoginReducer from "./login_reducer";
+import OpenUiActionReducer from "./open_ui_action_reducer";
 import PublishTurnUpdateReducer from "./publish_turn_update_reducer";
-import PublishUiContextReducer from "./publish_ui_context_reducer";
+import PublishUiPresenceReducer from "./publish_ui_presence_reducer";
+import PublishUiStateReducer from "./publish_ui_state_reducer";
 import RegisterWorkerReducer from "./register_worker_reducer";
 import RenewReducer from "./renew_reducer";
 import RenewWorkItemReducer from "./renew_work_item_reducer";
 import ReplaceCatalogReducer from "./replace_catalog_reducer";
+import ResolveAutoUiActionReducer from "./resolve_auto_ui_action_reducer";
 import RetryReducer from "./retry_reducer";
 import RetryWorkItemReducer from "./retry_work_item_reducer";
 import SendMessageReducer from "./send_message_reducer";
@@ -67,10 +69,9 @@ import MyMessagePartsRow from "./my_message_parts_table";
 import MyMessagesRow from "./my_messages_table";
 import MyTurnUpdatesRow from "./my_turn_updates_table";
 import MyTurnsRow from "./my_turns_table";
-import MyUiActivitiesRow from "./my_ui_activities_table";
-import MyUiActivityReceiptsRow from "./my_ui_activity_receipts_table";
-import MyUiClientContextsRow from "./my_ui_client_contexts_table";
+import MyUiActionsRow from "./my_ui_actions_table";
 import MyUserActionsRow from "./my_user_actions_table";
+import MyUserUiStatesRow from "./my_user_ui_states_table";
 import MyWorkspaceResultsRow from "./my_workspace_results_table";
 import MyWorkspaceWorkControlsRow from "./my_workspace_work_controls_table";
 import MyWorkspaceWorkItemsRow from "./my_workspace_work_items_table";
@@ -78,6 +79,7 @@ import MyWorkspaceWorkSetsRow from "./my_workspace_work_sets_table";
 import WorkerConversationProfilesRow from "./worker_conversation_profiles_table";
 import WorkerPendingTurnsRow from "./worker_pending_turns_table";
 import WorkerPendingWorkItemsRow from "./worker_pending_work_items_table";
+import WorkerUserUiStatesRow from "./worker_user_ui_states_table";
 
 /** Type-only namespace exports for generated type groups. */
 
@@ -160,27 +162,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, MyTurnsRow),
-  my_ui_activities: __table({
-    name: 'my_ui_activities',
+  my_ui_actions: __table({
+    name: 'my_ui_actions',
     indexes: [
     ],
     constraints: [
     ],
-  }, MyUiActivitiesRow),
-  my_ui_activity_receipts: __table({
-    name: 'my_ui_activity_receipts',
-    indexes: [
-    ],
-    constraints: [
-    ],
-  }, MyUiActivityReceiptsRow),
-  my_ui_client_contexts: __table({
-    name: 'my_ui_client_contexts',
-    indexes: [
-    ],
-    constraints: [
-    ],
-  }, MyUiClientContextsRow),
+  }, MyUiActionsRow),
   my_user_actions: __table({
     name: 'my_user_actions',
     indexes: [
@@ -188,6 +176,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, MyUserActionsRow),
+  my_user_ui_states: __table({
+    name: 'my_user_ui_states',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyUserUiStatesRow),
   my_workspace_results: __table({
     name: 'my_workspace_results',
     indexes: [
@@ -237,11 +232,17 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, WorkerPendingWorkItemsRow),
+  worker_user_ui_states: __table({
+    name: 'worker_user_ui_states',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, WorkerUserUiStatesRow),
 });
 
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
 const reducersSchema = __reducers(
-  __reducerSchema("acknowledge_ui_activity", AcknowledgeUiActivityReducer),
   __reducerSchema("claim", ClaimReducer),
   __reducerSchema("claim_work_item", ClaimWorkItemReducer),
   __reducerSchema("complete_turn", CompleteTurnReducer),
@@ -250,12 +251,15 @@ const reducersSchema = __reducers(
   __reducerSchema("fail", FailReducer),
   __reducerSchema("fail_work_item", FailWorkItemReducer),
   __reducerSchema("login", LoginReducer),
+  __reducerSchema("open_ui_action", OpenUiActionReducer),
   __reducerSchema("publish_turn_update", PublishTurnUpdateReducer),
-  __reducerSchema("publish_ui_context", PublishUiContextReducer),
+  __reducerSchema("publish_ui_presence", PublishUiPresenceReducer),
+  __reducerSchema("publish_ui_state", PublishUiStateReducer),
   __reducerSchema("register_worker", RegisterWorkerReducer),
   __reducerSchema("renew", RenewReducer),
   __reducerSchema("renew_work_item", RenewWorkItemReducer),
   __reducerSchema("replace_catalog", ReplaceCatalogReducer),
+  __reducerSchema("resolve_auto_ui_action", ResolveAutoUiActionReducer),
   __reducerSchema("retry", RetryReducer),
   __reducerSchema("retry_work_item", RetryWorkItemReducer),
   __reducerSchema("send_message", SendMessageReducer),

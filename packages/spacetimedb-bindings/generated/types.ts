@@ -163,6 +163,17 @@ export const TurnJob = __t.object("TurnJob", {
 });
 export type TurnJob = __Infer<typeof TurnJob>;
 
+export const TurnUiOrigin = __t.object("TurnUiOrigin", {
+  turnId: __t.string(),
+  conversationId: __t.string(),
+  principalId: __t.string(),
+  clientInstanceId: __t.string(),
+  targetJson: __t.string(),
+  navigationRevision: __t.u64(),
+  createdAtMicros: __t.i64(),
+});
+export type TurnUiOrigin = __Infer<typeof TurnUiOrigin>;
+
 export const TurnUpdate = __t.object("TurnUpdate", {
   updateId: __t.u64(),
   turnId: __t.string(),
@@ -175,37 +186,25 @@ export const TurnUpdate = __t.object("TurnUpdate", {
 });
 export type TurnUpdate = __Infer<typeof TurnUpdate>;
 
-export const UiActivity = __t.object("UiActivity", {
-  activityId: __t.string(),
-  conversationId: __t.string(),
-  workItemId: __t.string(),
-  kind: __t.string(),
-  label: __t.string(),
-  targetJson: __t.string(),
-  createdAtMicros: __t.i64(),
-});
-export type UiActivity = __Infer<typeof UiActivity>;
-
-export const UiActivityReceipt = __t.object("UiActivityReceipt", {
-  receiptId: __t.string(),
-  activityId: __t.string(),
-  principalId: __t.string(),
-  state: __t.string(),
-  updatedAtMicros: __t.i64(),
-});
-export type UiActivityReceipt = __Infer<typeof UiActivityReceipt>;
-
-export const UiClientContext = __t.object("UiClientContext", {
-  contextId: __t.string(),
+export const UiAction = __t.object("UiAction", {
+  actionId: __t.string(),
   conversationId: __t.string(),
   principalId: __t.string(),
   clientInstanceId: __t.string(),
+  sourceKind: __t.string(),
+  sourceId: __t.string(),
+  kind: __t.string(),
+  label: __t.string(),
+  buttonLabel: __t.string(),
   targetJson: __t.string(),
-  navigationRevision: __t.u64(),
-  visible: __t.bool(),
+  baseTargetJson: __t.string(),
+  baseNavigationRevision: __t.u64(),
+  activation: __t.string(),
+  status: __t.string(),
+  createdAtMicros: __t.i64(),
   updatedAtMicros: __t.i64(),
 });
-export type UiClientContext = __Infer<typeof UiClientContext>;
+export type UiAction = __Infer<typeof UiAction>;
 
 export const UserAction = __t.object("UserAction", {
   actionId: __t.string(),
@@ -217,6 +216,18 @@ export const UserAction = __t.object("UserAction", {
   createdAtMicros: __t.i64(),
 });
 export type UserAction = __Infer<typeof UserAction>;
+
+export const UserUiState = __t.object("UserUiState", {
+  stateId: __t.string(),
+  conversationId: __t.string(),
+  principalId: __t.string(),
+  clientInstanceId: __t.string(),
+  targetJson: __t.string(),
+  navigationRevision: __t.u64(),
+  visible: __t.bool(),
+  lastSeenAtMicros: __t.i64(),
+});
+export type UserUiState = __Infer<typeof UserUiState>;
 
 export const WorkItemSpec = __t.object("WorkItemSpec", {
   entityType: __t.string(),
@@ -241,6 +252,9 @@ export const WorkerPendingTurn = __t.object("WorkerPendingTurn", {
   leaseUntilMicros: __t.option(__t.i64()),
   attempt: __t.u32(),
   baseUiRevision: __t.u64(),
+  uiClientInstanceId: __t.string(),
+  uiTargetJson: __t.string(),
+  uiNavigationRevision: __t.u64(),
 });
 export type WorkerPendingTurn = __Infer<typeof WorkerPendingTurn>;
 
@@ -261,6 +275,9 @@ export const WorkerPendingWorkItem = __t.object("WorkerPendingWorkItem", {
   attempt: __t.u32(),
   expectedContextRevision: __t.u64(),
   expectedUiRevision: __t.u64(),
+  uiClientInstanceId: __t.string(),
+  uiTargetJson: __t.string(),
+  uiNavigationRevision: __t.u64(),
 });
 export type WorkerPendingWorkItem = __Infer<typeof WorkerPendingWorkItem>;
 

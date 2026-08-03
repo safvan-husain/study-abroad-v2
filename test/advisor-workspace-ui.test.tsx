@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { AdvisorConversation } from '../apps/web/components/workspace/AdvisorConversation';
 import { AdvisorRail } from '../apps/web/components/workspace/AdvisorRail';
-import { AdvisorActivities } from '../apps/web/components/workspace/AdvisorActivities';
+import { AdvisorActionCard } from '../apps/web/components/workspace/AdvisorActivities';
 import { WorkspaceView } from '../apps/web/components/workspace/WorkspaceView';
 
 const summaryTarget = (entityId: string) => ({ schemaVersion: 1 as const, viewType: 'course_summary' as const, workSetId: 'set-1', entityType: 'course', entityId, slot: 'summary' });
@@ -25,7 +25,7 @@ describe('advisor workspace UI', () => {
 
   it('renders progressive activity labels from typed turn updates', () => {
     const transcript = renderToStaticMarkup(<AdvisorConversation
-      messages={[{ messageId: 'u1', role: 'user', content: 'I like programming', sequence: 1n }]}
+      messages={[{ messageId: 'u1', turnId: 't1', role: 'user', content: 'I like programming', sequence: 1n, createdAtMicros: 1n }]}
       turns={[{ turnId: 't1', status: 'claimed', errorCode: null, attempt: 1 }]}
       turnUpdates={[{
         updateId: 1n,
@@ -41,7 +41,7 @@ describe('advisor workspace UI', () => {
   });
 
   it('keeps acknowledgement transcript content separate from child course results', () => {
-    const transcript = renderToStaticMarkup(<AdvisorConversation messages={[{ messageId: 'a1', role: 'assistant', content: 'I am opening your planning space.', sequence: 2n }]} turns={[{ turnId: 't1', status: 'completed', errorCode: null, attempt: 1 }]} />);
+    const transcript = renderToStaticMarkup(<AdvisorConversation messages={[{ messageId: 'a1', turnId: 't1', role: 'assistant', content: 'I am opening your planning space.', sequence: 2n, createdAtMicros: 2n }]} turns={[{ turnId: 't1', status: 'completed', errorCode: null, attempt: 1 }]} />);
     const workspace = renderToStaticMarkup(<WorkspaceView
       directive={{ viewType: 'catalog', awareness: 'Showing courses related to programming.', uiRevision: 1n, workSetId: 'set-1' }}
       workSets={[{ workSetId: 'set-1', status: 'partial' }]}
@@ -78,14 +78,17 @@ describe('advisor workspace UI', () => {
     expect(markup).toContain('no longer matches');
   });
 
-  it('offers a course action off-target and suppresses it in the mounted workspace', () => {
-    const activity = { activityId: 'a1', workItemId: 'i1', kind: 'content_updated', label: 'Computer Science summary added', target: summaryTarget('lu-computer-science-bsc'), createdAtMicros: 1n };
-    const home = renderToStaticMarkup(<AdvisorActivities activities={[activity]} receipts={[]} currentTarget={{ schemaVersion: 1, viewType: 'home' }} onOpen={() => undefined} />);
-    const genericCatalog = renderToStaticMarkup(<AdvisorActivities activities={[activity]} receipts={[]} currentTarget={{ schemaVersion: 1, viewType: 'catalog' }} onOpen={() => undefined} />);
-    const catalog = renderToStaticMarkup(<AdvisorActivities activities={[activity]} receipts={[]} currentTarget={{ schemaVersion: 1, viewType: 'catalog', workSetId: 'set-1' }} onOpen={() => undefined} />);
-    expect(home).toContain('Computer Science summary added');
-    expect(home).toContain('Open summary');
-    expect(genericCatalog).toContain('Computer Science summary added');
-    expect(catalog).not.toContain('Computer Science summary added');
+  it('keeps a completed action card available regardless of the current workspace', () => {
+    const action = {
+      actionId: 'a1', clientInstanceId: 'tab-1', sourceKind: 'work_item', sourceId: 'i1', kind: 'open_course_summary',
+      label: 'Computer Science summary added', buttonLabel: 'Open summary', target: summaryTarget('lu-computer-science-bsc'),
+      baseTarget: { schemaVersion: 1 as const, viewType: 'home' as const }, baseNavigationRevision: 0n,
+      activation: 'auto_if_origin_unchanged' as const, status: 'opened' as const, createdAtMicros: 1n, updatedAtMicros: 2n,
+    };
+    const card = renderToStaticMarkup(<AdvisorActionCard action={action} onOpen={() => undefined} />);
+    const transcript = renderToStaticMarkup(<AdvisorConversation messages={[]} turns={[]} uiActions={[action]} />);
+    expect(card).toContain('Computer Science summary added');
+    expect(card).toContain('Open again');
+    expect(transcript).toContain('Computer Science summary added');
   });
 });

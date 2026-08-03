@@ -8,6 +8,7 @@ import { createWorker } from './index.js';
 import { SpacetimeCoordinatorAdapter, type PendingJobSource } from './services/coordinator-adapter.js';
 import type { PendingWorkItemSource } from './services/coordinator-adapter.js';
 import type { WorkspaceWorkItem } from './services/process-work-item.js';
+import { uiTargetRef, type UserUiState } from '@study-abroad/contracts';
 
 type CatalogSeedCourse = {
   courseId: string;
@@ -48,6 +49,9 @@ type WorkerPendingTurnRow = {
   leaseUntilMicros: bigint | null;
   attempt: number;
   baseUiRevision: bigint;
+  uiClientInstanceId: string;
+  uiTargetJson: string;
+  uiNavigationRevision: bigint;
 };
 
 type WorkerPendingWorkItemRow = {
@@ -67,13 +71,32 @@ type WorkerPendingWorkItemRow = {
   attempt: number;
   expectedContextRevision: bigint;
   expectedUiRevision: bigint;
+  uiClientInstanceId: string;
+  uiTargetJson: string;
+  uiNavigationRevision: bigint;
 };
+
+function originUiState(row: { uiClientInstanceId: string; uiTargetJson: string; uiNavigationRevision: bigint }): UserUiState | undefined {
+  try {
+    return {
+      clientInstanceId: row.uiClientInstanceId,
+      target: uiTargetRef.parse(JSON.parse(row.uiTargetJson)),
+      navigationRevision: row.uiNavigationRevision,
+      visible: true,
+      lastSeenAtMicros: 0n,
+    };
+  } catch {
+    return undefined;
+  }
+}
 
 function rowToTurn(row: WorkerPendingTurnRow): ChatTurn | undefined {
   const claimedLeaseExpired = row.status === 'claimed'
     && row.leaseUntilMicros !== null
     && row.leaseUntilMicros <= BigInt(Date.now()) * 1_000n;
   if (row.status !== 'pending' && row.status !== 'retrying' && !claimedLeaseExpired) return undefined;
+  const uiContext = originUiState(row);
+  if (!uiContext) return undefined;
   return {
     conversationId: row.conversationId,
     turnId: row.turnId,
@@ -83,6 +106,7 @@ function rowToTurn(row: WorkerPendingTurnRow): ChatTurn | undefined {
     userContent: row.userContent,
     attempt: row.attempt,
     baseUiRevision: row.baseUiRevision,
+    uiContext,
   };
 }
 
@@ -106,6 +130,7 @@ async function connect(config: ReturnType<typeof loadConfig>): Promise<DbConnect
               'SELECT * FROM worker_pending_work_items',
               'SELECT * FROM catalog_course',
               'SELECT * FROM worker_conversation_profiles',
+              'SELECT * FROM worker_user_ui_states',
             ]);
           })
           .catch((error: unknown) => {
@@ -130,6 +155,8 @@ function rowToWorkItem(row: WorkerPendingWorkItemRow): WorkspaceWorkItem | undef
     && row.leaseUntilMicros !== null
     && row.leaseUntilMicros <= BigInt(Date.now()) * 1_000n;
   if (row.status !== 'pending' && row.status !== 'retrying' && !claimedLeaseExpired) return undefined;
+  const uiContext = originUiState(row);
+  if (!uiContext) return undefined;
   return {
     workItemId: row.workItemId,
     workSetId: row.workSetId,
@@ -145,6 +172,7 @@ function rowToWorkItem(row: WorkerPendingWorkItemRow): WorkspaceWorkItem | undef
     attempt: row.attempt,
     expectedContextRevision: row.expectedContextRevision,
     expectedUiRevision: row.expectedUiRevision,
+    uiContext,
   };
 }
 

@@ -33,6 +33,7 @@ class DiscoveryState(TypedDict):
     profile: dict[str, Any]
     task: str
     course: dict[str, Any]
+    ui_context: dict[str, Any]
     discovery_result: dict[str, Any]
     course_fit_result: dict[str, Any]
 

@@ -16,6 +16,7 @@ const item = {
   attempt: 0,
   expectedContextRevision: 0n,
   expectedUiRevision: 1n,
+  uiContext: { clientInstanceId: 'tab-1', target: { schemaVersion: 1 as const, viewType: 'home' as const }, navigationRevision: 0n, visible: true, lastSeenAtMicros: 1n },
 };
 
 describe('processWorkItem', () => {

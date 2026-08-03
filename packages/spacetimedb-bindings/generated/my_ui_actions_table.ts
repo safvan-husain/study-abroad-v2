@@ -11,12 +11,20 @@ import {
 } from "spacetimedb";
 
 export default __t.row({
-  contextId: __t.string().name("context_id"),
+  actionId: __t.string().name("action_id"),
   conversationId: __t.string().name("conversation_id"),
   principalId: __t.string().name("principal_id"),
   clientInstanceId: __t.string().name("client_instance_id"),
+  sourceKind: __t.string().name("source_kind"),
+  sourceId: __t.string().name("source_id"),
+  kind: __t.string(),
+  label: __t.string(),
+  buttonLabel: __t.string().name("button_label"),
   targetJson: __t.string().name("target_json"),
-  navigationRevision: __t.u64().name("navigation_revision"),
-  visible: __t.bool(),
+  baseTargetJson: __t.string().name("base_target_json"),
+  baseNavigationRevision: __t.u64().name("base_navigation_revision"),
+  activation: __t.string(),
+  status: __t.string(),
+  createdAtMicros: __t.i64().name("created_at_micros"),
   updatedAtMicros: __t.i64().name("updated_at_micros"),
 });

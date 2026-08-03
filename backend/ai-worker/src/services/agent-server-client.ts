@@ -1,5 +1,6 @@
+import { createHash } from 'node:crypto';
 import { Client } from '@langchain/langgraph-sdk';
-import type { ChatMessage, DiscoveryTurnResult, CourseFitResult, CatalogCourseView, DiscoveryProfilePatch } from '@study-abroad/contracts';
+import type { ChatMessage, DiscoveryTurnResult, CourseFitResult, CatalogCourseView, DiscoveryProfilePatch, UserUiState } from '@study-abroad/contracts';
 import { discoveryTurnResult, courseFitResult } from '@study-abroad/contracts';
 import type { WorkerConfig } from '../config.js';
 
@@ -16,15 +17,36 @@ export interface AgentCourseFitInput {
   profile: DiscoveryProfilePatch;
   conversationId: string;
   correlationId: string;
+  uiContext: UserUiState;
 }
 
 export interface AgentClient {
   run(
     input: ChatMessage[],
     ids: { conversationId: string; turnId: string; correlationId: string },
-    context?: { catalogAreas: string[]; profile: DiscoveryProfilePatch },
+    context?: { catalogAreas: string[]; profile: DiscoveryProfilePatch; uiContext: UserUiState },
   ): Promise<AgentTurnResult>;
   runCourseFit?(input: AgentCourseFitInput): Promise<{ runId: string; result: CourseFitResult }>;
+}
+
+export function uiContextForGraph(context: UserUiState) {
+  return {
+    clientInstanceId: context.clientInstanceId,
+    target: context.target,
+    navigationRevision: context.navigationRevision.toString(),
+    visible: context.visible,
+    lastSeenAtMicros: context.lastSeenAtMicros.toString(),
+  };
+}
+
+export function courseFitThreadId(conversationId: string, courseId: string) {
+  const characters = createHash('sha256').update(`course-fit\u001f${conversationId}\u001f${courseId}`).digest('hex').slice(0, 32).split('');
+  // Agent Server currently validates caller-supplied thread IDs as UUIDv4.
+  // The remaining bits stay deterministic so retries address the same thread.
+  characters[12] = '4';
+  characters[16] = '8';
+  const hex = characters.join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
 export class AgentServerClient implements AgentClient {
@@ -45,7 +67,7 @@ export class AgentServerClient implements AgentClient {
   async run(
     messages: ChatMessage[],
     ids: { conversationId: string; turnId: string; correlationId: string },
-    context?: { catalogAreas: string[]; profile: DiscoveryProfilePatch },
+    context?: { catalogAreas: string[]; profile: DiscoveryProfilePatch; uiContext: UserUiState },
   ): Promise<AgentTurnResult> {
     const assistantId = await this.assistantId();
     await this.client.threads.create({
@@ -64,6 +86,7 @@ export class AgentServerClient implements AgentClient {
       messages: messages.slice(-1).map(({ content }) => ({ role: 'human', content })),
       catalog_areas: context?.catalogAreas ?? [],
       profile: context?.profile ?? {},
+      ui_context: context?.uiContext ? uiContextForGraph(context.uiContext) : {},
       task: 'discover',
       course: {},
     };
@@ -94,7 +117,7 @@ export class AgentServerClient implements AgentClient {
 
   async runCourseFit(input: AgentCourseFitInput): Promise<{ runId: string; result: CourseFitResult }> {
     const assistantId = await this.assistantId();
-    const threadId = `${input.conversationId}-fit-${input.course.courseId}`;
+    const threadId = courseFitThreadId(input.conversationId, input.course.courseId);
     await this.client.threads.create({
       threadId,
       metadata: { conversation_id: input.conversationId },
@@ -106,6 +129,7 @@ export class AgentServerClient implements AgentClient {
         messages: [],
         catalog_areas: [],
         profile: input.profile,
+        ui_context: uiContextForGraph(input.uiContext),
         task: 'course_fit',
         course: { ...input.course, studentPhrase: input.course.studentPhrase ?? input.profile.studentPhrase },
       },

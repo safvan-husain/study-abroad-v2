@@ -13,5 +13,6 @@ import {
 export default {
   conversationId: __t.string(),
   clientCommandId: __t.string(),
+  clientInstanceId: __t.string(),
   content: __t.string(),
 };

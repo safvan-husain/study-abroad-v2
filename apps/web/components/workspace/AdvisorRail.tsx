@@ -1,10 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { HOME_UI_TARGET, type UiTargetRef } from '@study-abroad/contracts';
-import type { AdvisorDirective, AdvisorMessage, AdvisorProfile, AdvisorTurn, AdvisorTurnUpdate, AdvisorUiActivity, AdvisorUiActivityReceipt } from '../../hooks/useAdvisorWorkspace';
+import type { AdvisorDirective, AdvisorMessage, AdvisorProfile, AdvisorTurn, AdvisorTurnUpdate, AdvisorUiAction } from '../../hooks/useAdvisorWorkspace';
 import { AdvisorConversation } from './AdvisorConversation';
-import { AdvisorActivities } from './AdvisorActivities';
 
 export function AdvisorRail({
   connectionState,
@@ -12,28 +10,24 @@ export function AdvisorRail({
   messages,
   turns,
   turnUpdates,
-  uiActivities = [],
-  uiActivityReceipts = [],
-  currentTarget = HOME_UI_TARGET,
+  uiActions = [],
   directive,
   profile,
   onSend,
   onUpdateProfile,
-  onOpenActivity = () => undefined,
+  onOpenAction = () => undefined,
 }: {
   connectionState: string;
   error?: string;
   messages: AdvisorMessage[];
   turns: AdvisorTurn[];
   turnUpdates: AdvisorTurnUpdate[];
-  uiActivities: AdvisorUiActivity[];
-  uiActivityReceipts: AdvisorUiActivityReceipt[];
-  currentTarget: UiTargetRef;
+  uiActions: AdvisorUiAction[];
   directive?: AdvisorDirective;
   profile?: AdvisorProfile;
   onSend: (content: string) => Promise<void>;
   onUpdateProfile: (profile: AdvisorProfile) => Promise<void>;
-  onOpenActivity: (activity: AdvisorUiActivity) => void;
+  onOpenAction: (action: AdvisorUiAction) => void;
 }) {
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
@@ -57,8 +51,7 @@ export function AdvisorRail({
         <div><strong>Amelia</strong><span><i className={connectionState === 'ready' ? 'online' : ''} /> {connectionState === 'ready' ? 'Advisor online' : connectionState}</span></div>
       </header>
       <div className="advisor-scroll">
-        <AdvisorConversation messages={messages} turns={turns} turnUpdates={turnUpdates} />
-        <AdvisorActivities activities={uiActivities} receipts={uiActivityReceipts} currentTarget={currentTarget} onOpen={onOpenActivity} />
+        <AdvisorConversation messages={messages} turns={turns} turnUpdates={turnUpdates} uiActions={uiActions} onOpenAction={onOpenAction} />
         {profile && (profile.studentPhrase || profile.primaryArea || profile.background) ? (
           <section className="interest-panel" aria-label="What we understand about you">
             <span className="eyebrow">WHAT WE UNDERSTAND</span>

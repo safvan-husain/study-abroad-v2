@@ -1,4 +1,4 @@
-import { courseFitResult, type CourseFitResult, type DiscoveryProfilePatch } from '@study-abroad/contracts';
+import { courseFitResult, type CourseFitResult, type DiscoveryProfilePatch, type UserUiState } from '@study-abroad/contracts';
 import type { AgentClient } from './agent-server-client.js';
 
 export interface WorkspaceWorkItem {
@@ -16,6 +16,7 @@ export interface WorkspaceWorkItem {
   attempt: number;
   expectedContextRevision: bigint;
   expectedUiRevision: bigint;
+  uiContext: UserUiState;
 }
 
 export interface WorkItemCoordinator {
@@ -72,6 +73,7 @@ export async function processWorkItem(
           const remote = await agent.runCourseFit({
             conversationId: item.conversationId,
             correlationId: item.workItemId,
+            uiContext: item.uiContext,
             profile: {
               background: profile.background ?? '',
               courseInterests: profile.courseInterests ?? '',

@@ -1,7 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 import { SpacetimeCoordinatorAdapter } from '../src/services/coordinator-adapter.js';
+import { uiContextForGraph } from '../src/services/agent-server-client.js';
 
 describe('SpacetimeCoordinatorAdapter', () => {
+  it('serializes bigint UI revisions at the Agent Server boundary', () => {
+    const wire = uiContextForGraph({ clientInstanceId: 'tab-1', target: { schemaVersion: 1, viewType: 'home' }, navigationRevision: 7n, visible: true, lastSeenAtMicros: 99n });
+    expect(JSON.stringify(wire)).toContain('"navigationRevision":"7"');
+    expect(JSON.stringify(wire)).toContain('"lastSeenAtMicros":"99"');
+  });
   it('serializes lease fences and u64 durations for generated reducers', async () => {
     const claim = vi.fn().mockResolvedValue(undefined);
     const jobs = { subscribe: () => () => undefined, poll: async () => [] };
@@ -16,6 +22,7 @@ describe('SpacetimeCoordinatorAdapter', () => {
       userContent: 'Hello',
       attempt: 2,
       baseUiRevision: 4n,
+      uiContext: { clientInstanceId: 'tab-1', target: { schemaVersion: 1, viewType: 'home' }, navigationRevision: 0n, visible: true, lastSeenAtMicros: 1n },
     });
 
     expect(attempt).toBe(3);
@@ -59,7 +66,7 @@ describe('SpacetimeCoordinatorAdapter', () => {
     const completeWorkItem = vi.fn().mockResolvedValue(undefined);
     const jobs = { subscribe: () => () => undefined, poll: async () => [] };
     const adapter = new SpacetimeCoordinatorAdapter({ reducers: { claimWorkItem, completeWorkItem }, db: {} }, jobs);
-    const item = { workItemId: 'work-1', workSetId: 'set-1', conversationId: 'c1', entityType: 'topic', entityId: 'goals', kind: 'prompt', displayTitle: 'Preparing goals', orderIndex: 0, targetJson: '{"schemaVersion":1,"viewType":"catalog"}', dependencyJson: '{}', inputJson: '{}', attempt: 2, expectedContextRevision: 0n, expectedUiRevision: 1n };
+    const item = { workItemId: 'work-1', workSetId: 'set-1', conversationId: 'c1', entityType: 'topic', entityId: 'goals', kind: 'prompt', displayTitle: 'Preparing goals', orderIndex: 0, targetJson: '{"schemaVersion":1,"viewType":"catalog"}', dependencyJson: '{}', inputJson: '{}', attempt: 2, expectedContextRevision: 0n, expectedUiRevision: 1n, uiContext: { clientInstanceId: 'tab-1', target: { schemaVersion: 1 as const, viewType: 'home' as const }, navigationRevision: 0n, visible: true, lastSeenAtMicros: 1n } };
 
     expect(await adapter.claimWorkItem(item)).toBe(3);
     await adapter.completeWorkItem('work-1', 3, '{"ready":true}');

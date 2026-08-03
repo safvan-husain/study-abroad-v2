@@ -11,6 +11,7 @@ const turn = (overrides: Partial<{
   userContent: string;
   attempt: number;
   baseUiRevision: bigint;
+  uiContext: { clientInstanceId: string; target: { schemaVersion: 1; viewType: 'home' }; navigationRevision: bigint; visible: boolean; lastSeenAtMicros: bigint };
 }> = {}) => ({
   conversationId: 'c1',
   turnId: 't1',
@@ -20,6 +21,7 @@ const turn = (overrides: Partial<{
   userContent: 'Hello',
   attempt: 0,
   baseUiRevision: 0n,
+  uiContext: { clientInstanceId: 'tab-1', target: { schemaVersion: 1, viewType: 'home' }, navigationRevision: 0n, visible: true, lastSeenAtMicros: 1n },
   ...overrides,
 });
 

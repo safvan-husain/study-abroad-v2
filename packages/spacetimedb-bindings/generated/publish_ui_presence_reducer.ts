@@ -10,10 +10,8 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
-export default __t.row({
-  receiptId: __t.string().name("receipt_id"),
-  activityId: __t.string().name("activity_id"),
-  principalId: __t.string().name("principal_id"),
-  state: __t.string(),
-  updatedAtMicros: __t.i64().name("updated_at_micros"),
-});
+export default {
+  conversationId: __t.string(),
+  clientInstanceId: __t.string(),
+  visible: __t.bool(),
+};

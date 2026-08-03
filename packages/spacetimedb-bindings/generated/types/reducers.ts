@@ -6,7 +6,6 @@
 import { type Infer as __Infer } from "spacetimedb";
 
 // Import all reducer arg schemas
-import AcknowledgeUiActivityReducer from "../acknowledge_ui_activity_reducer";
 import ClaimReducer from "../claim_reducer";
 import ClaimWorkItemReducer from "../claim_work_item_reducer";
 import CompleteTurnReducer from "../complete_turn_reducer";
@@ -15,19 +14,21 @@ import EnsureGuestJourneyReducer from "../ensure_guest_journey_reducer";
 import FailReducer from "../fail_reducer";
 import FailWorkItemReducer from "../fail_work_item_reducer";
 import LoginReducer from "../login_reducer";
+import OpenUiActionReducer from "../open_ui_action_reducer";
 import PublishTurnUpdateReducer from "../publish_turn_update_reducer";
-import PublishUiContextReducer from "../publish_ui_context_reducer";
+import PublishUiPresenceReducer from "../publish_ui_presence_reducer";
+import PublishUiStateReducer from "../publish_ui_state_reducer";
 import RegisterWorkerReducer from "../register_worker_reducer";
 import RenewReducer from "../renew_reducer";
 import RenewWorkItemReducer from "../renew_work_item_reducer";
 import ReplaceCatalogReducer from "../replace_catalog_reducer";
+import ResolveAutoUiActionReducer from "../resolve_auto_ui_action_reducer";
 import RetryReducer from "../retry_reducer";
 import RetryWorkItemReducer from "../retry_work_item_reducer";
 import SendMessageReducer from "../send_message_reducer";
 import UpdateDiscoveryProfileReducer from "../update_discovery_profile_reducer";
 import UpsertConversationProfileReducer from "../upsert_conversation_profile_reducer";
 
-export type AcknowledgeUiActivityParams = __Infer<typeof AcknowledgeUiActivityReducer>;
 export type ClaimParams = __Infer<typeof ClaimReducer>;
 export type ClaimWorkItemParams = __Infer<typeof ClaimWorkItemReducer>;
 export type CompleteTurnParams = __Infer<typeof CompleteTurnReducer>;
@@ -36,12 +37,15 @@ export type EnsureGuestJourneyParams = __Infer<typeof EnsureGuestJourneyReducer>
 export type FailParams = __Infer<typeof FailReducer>;
 export type FailWorkItemParams = __Infer<typeof FailWorkItemReducer>;
 export type LoginParams = __Infer<typeof LoginReducer>;
+export type OpenUiActionParams = __Infer<typeof OpenUiActionReducer>;
 export type PublishTurnUpdateParams = __Infer<typeof PublishTurnUpdateReducer>;
-export type PublishUiContextParams = __Infer<typeof PublishUiContextReducer>;
+export type PublishUiPresenceParams = __Infer<typeof PublishUiPresenceReducer>;
+export type PublishUiStateParams = __Infer<typeof PublishUiStateReducer>;
 export type RegisterWorkerParams = __Infer<typeof RegisterWorkerReducer>;
 export type RenewParams = __Infer<typeof RenewReducer>;
 export type RenewWorkItemParams = __Infer<typeof RenewWorkItemReducer>;
 export type ReplaceCatalogParams = __Infer<typeof ReplaceCatalogReducer>;
+export type ResolveAutoUiActionParams = __Infer<typeof ResolveAutoUiActionReducer>;
 export type RetryParams = __Infer<typeof RetryReducer>;
 export type RetryWorkItemParams = __Infer<typeof RetryWorkItemReducer>;
 export type SendMessageParams = __Infer<typeof SendMessageReducer>;

@@ -30,7 +30,33 @@ export const uiIntent = z.discriminatedUnion('kind', [
   }),
 ]);
 
-export const uiActivityReceiptState = z.enum(['observed_in_place', 'opened', 'dismissed']);
+export const uiActionActivation = z.enum(['auto_if_origin_unchanged', 'offer']);
+export const uiActionStatus = z.enum(['auto_pending', 'offered', 'applied', 'opened', 'dismissed']);
+
+export const userUiState = z.object({
+  clientInstanceId: z.string().min(1).max(128),
+  target: uiTargetRef,
+  navigationRevision: z.bigint().min(0n),
+  visible: z.boolean(),
+  lastSeenAtMicros: z.bigint(),
+}).strict();
+
+export const uiAction = z.object({
+  actionId: z.string().min(1).max(128),
+  sourceKind: z.enum(['turn', 'work_item']),
+  sourceId: z.string().min(1).max(128),
+  kind: z.enum(['open_catalog', 'open_course_summary']),
+  label: z.string().min(1).max(256),
+  buttonLabel: z.string().min(1).max(64),
+  target: uiTargetRef,
+  clientInstanceId: z.string().min(1).max(128),
+  baseTarget: uiTargetRef,
+  baseNavigationRevision: z.bigint().min(0n),
+  activation: uiActionActivation,
+  status: uiActionStatus,
+  createdAtMicros: z.bigint(),
+  updatedAtMicros: z.bigint(),
+}).strict();
 
 export const courseSummaryDependencies = z.object({
   profile: z.object({
@@ -58,7 +84,10 @@ export const courseSummaryDependencies = z.object({
 
 export type UiTargetRef = z.infer<typeof uiTargetRef>;
 export type UiIntent = z.infer<typeof uiIntent>;
-export type UiActivityReceiptState = z.infer<typeof uiActivityReceiptState>;
+export type UiActionActivation = z.infer<typeof uiActionActivation>;
+export type UiActionStatus = z.infer<typeof uiActionStatus>;
+export type UserUiState = z.infer<typeof userUiState>;
+export type UiAction = z.infer<typeof uiAction>;
 export type CourseSummaryDependencies = z.infer<typeof courseSummaryDependencies>;
 
 export const HOME_UI_TARGET: UiTargetRef = { schemaVersion: 1, viewType: 'home' };

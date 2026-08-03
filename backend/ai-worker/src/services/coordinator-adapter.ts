@@ -1,5 +1,5 @@
 import type { DbConnection } from '@study-abroad/spacetimedb-bindings';
-import type { DiscoveryProfilePatch, TurnUpdatePayload } from '@study-abroad/contracts';
+import { uiTargetRef, type DiscoveryProfilePatch, type TurnUpdatePayload, type UserUiState } from '@study-abroad/contracts';
 import type { Coordinator, ChatTurn, TurnCompletion, CatalogStore } from './process-chat-turn.js';
 import type { WorkItemCoordinator, WorkspaceWorkItem } from './process-work-item.js';
 
@@ -69,6 +69,24 @@ export class SpacetimeCoordinatorAdapter implements Coordinator, WorkItemCoordin
       studentPhrase: String(row.studentPhrase ?? ''),
       constraintsText: String(row.constraintsText ?? ''),
     };
+  }
+  getUiState(conversationId: string, clientInstanceId: string): UserUiState | undefined {
+    const table = (this.connection.db as { worker_user_ui_states?: { iter: () => Iterable<Record<string, unknown>> } }).worker_user_ui_states;
+    const row = table ? [...table.iter()].find((entry) =>
+      String(entry.conversationId) === conversationId && String(entry.clientInstanceId) === clientInstanceId) : undefined;
+    if (!row) return undefined;
+    try {
+      const target = uiTargetRef.parse(JSON.parse(String(row.targetJson ?? '{}')));
+      return {
+        clientInstanceId,
+        target,
+        navigationRevision: BigInt(row.navigationRevision as bigint),
+        visible: Boolean(row.visible),
+        lastSeenAtMicros: BigInt(row.lastSeenAtMicros as bigint),
+      };
+    } catch {
+      return undefined;
+    }
   }
   async claim(turn: ChatTurn) {
     await this.reducer('claim')({ turnId: turn.turnId, expectedAttempt: turn.attempt, leaseSeconds: BigInt(this.leaseSeconds) });

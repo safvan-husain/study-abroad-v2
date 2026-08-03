@@ -24,6 +24,7 @@ pub const MAX_CATALOG_NAME_LENGTH: usize = 256;
 pub const UI_TARGET_SCHEMA_VERSION: u32 = 1;
 pub const MAX_UI_TARGET_LENGTH: usize = 1_024;
 pub const MAX_UI_LABEL_LENGTH: usize = 256;
+pub const UI_STATE_FRESH_MICROS: i64 = 30_000_000;
 const ROLE_AI_AGENT: u8 = 2;
 const AGENT_USERNAME: &str = "study_abroad_agent";
 const AGENT_PASSWORD: &str = "study-agent-dev";
@@ -213,36 +214,10 @@ pub struct WorkspaceWorkControl {
     pub dependency_json: String,
 }
 
-#[spacetimedb::table(accessor = ui_activity)]
-pub struct UiActivity {
+#[spacetimedb::table(accessor = user_ui_state)]
+pub struct UserUiState {
     #[primary_key]
-    pub activity_id: String,
-    #[index(btree)]
-    pub conversation_id: String,
-    #[unique]
-    pub work_item_id: String,
-    pub kind: String,
-    pub label: String,
-    pub target_json: String,
-    pub created_at_micros: i64,
-}
-
-#[spacetimedb::table(accessor = ui_activity_receipt)]
-pub struct UiActivityReceipt {
-    #[primary_key]
-    pub receipt_id: String,
-    #[index(btree)]
-    pub activity_id: String,
-    #[index(btree)]
-    pub principal_id: String,
-    pub state: String,
-    pub updated_at_micros: i64,
-}
-
-#[spacetimedb::table(accessor = ui_client_context)]
-pub struct UiClientContext {
-    #[primary_key]
-    pub context_id: String,
+    pub state_id: String,
     #[index(btree)]
     pub conversation_id: String,
     #[index(btree)]
@@ -251,6 +226,44 @@ pub struct UiClientContext {
     pub target_json: String,
     pub navigation_revision: u64,
     pub visible: bool,
+    pub last_seen_at_micros: i64,
+}
+
+#[spacetimedb::table(accessor = turn_ui_origin)]
+pub struct TurnUiOrigin {
+    #[primary_key]
+    pub turn_id: String,
+    #[index(btree)]
+    pub conversation_id: String,
+    #[index(btree)]
+    pub principal_id: String,
+    pub client_instance_id: String,
+    pub target_json: String,
+    pub navigation_revision: u64,
+    pub created_at_micros: i64,
+}
+
+#[spacetimedb::table(accessor = ui_action)]
+pub struct UiAction {
+    #[primary_key]
+    pub action_id: String,
+    #[index(btree)]
+    pub conversation_id: String,
+    #[index(btree)]
+    pub principal_id: String,
+    pub client_instance_id: String,
+    pub source_kind: String,
+    pub source_id: String,
+    pub kind: String,
+    pub label: String,
+    pub button_label: String,
+    pub target_json: String,
+    pub base_target_json: String,
+    pub base_navigation_revision: u64,
+    pub activation: String,
+    #[index(btree)]
+    pub status: String,
+    pub created_at_micros: i64,
     pub updated_at_micros: i64,
 }
 
@@ -362,6 +375,9 @@ pub struct WorkerPendingTurn {
     pub lease_until_micros: Option<i64>,
     pub attempt: u32,
     pub base_ui_revision: u64,
+    pub ui_client_instance_id: String,
+    pub ui_target_json: String,
+    pub ui_navigation_revision: u64,
 }
 
 #[derive(SpacetimeType)]
@@ -394,6 +410,9 @@ pub struct WorkerPendingWorkItem {
     pub attempt: u32,
     pub expected_context_revision: u64,
     pub expected_ui_revision: u64,
+    pub ui_client_instance_id: String,
+    pub ui_target_json: String,
+    pub ui_navigation_revision: u64,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -401,9 +420,13 @@ pub struct WorkerPendingWorkItem {
 pub struct UiTargetRef {
     pub schema_version: u32,
     pub view_type: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub work_set_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub entity_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub entity_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub slot: Option<String>,
 }
 
@@ -628,11 +651,45 @@ pub fn validate_ui_target_json(target_json: &str) -> Result<UiTargetRef, &'stati
     }
 }
 
-fn validate_activity_receipt_state(state: &str) -> Result<(), &'static str> {
-    match state {
-        "observed_in_place" | "opened" | "dismissed" => Ok(()),
-        _ => Err("unsupported UI activity receipt state"),
+fn validate_resolvable_ui_target(
+    ctx: &ReducerContext,
+    conversation_id: &str,
+    target_json: &str,
+) -> Result<UiTargetRef, &'static str> {
+    let target = validate_ui_target_json(target_json)?;
+    if target.view_type == "home" || (target.view_type == "catalog" && target.work_set_id.is_none())
+    {
+        return Ok(target);
     }
+    let work_set_id = target
+        .work_set_id
+        .clone()
+        .ok_or("UI target work set is required")?;
+    let work_set = ctx
+        .db
+        .workspace_work_set()
+        .work_set_id()
+        .find(&work_set_id)
+        .ok_or("UI target work set not found")?;
+    if work_set.conversation_id != conversation_id {
+        return Err("UI target work set belongs to another conversation");
+    }
+    if target.view_type == "course_summary" {
+        let entity_id = target
+            .entity_id
+            .as_deref()
+            .ok_or("UI target entity is required")?;
+        let found = ctx
+            .db
+            .workspace_work_item()
+            .work_set_id()
+            .filter(&work_set_id)
+            .any(|item| item.entity_type == "course" && item.entity_id == entity_id);
+        if !found {
+            return Err("UI target course is not in the work set");
+        }
+    }
+    Ok(target)
 }
 
 pub fn validate_directive(
@@ -772,13 +829,108 @@ fn work_item_id(work_set_id: &str, index: usize) -> String {
     format!("{work_set_id}-{index}")
 }
 
-fn ui_activity_id(work_item_id: &str) -> String {
-    format!("{work_item_id}-activity")
-}
-
 fn stable_internal_id(parts: &[&str]) -> String {
     let source = parts.join("\u{1f}");
     blake3::hash(source.as_bytes()).to_hex().to_string()
+}
+
+fn ui_state_id(principal_id: &str, conversation_id: &str, client_instance_id: &str) -> String {
+    stable_internal_id(&[principal_id, conversation_id, client_instance_id])
+}
+
+fn ui_action_id(source_kind: &str, source_id: &str) -> String {
+    stable_internal_id(&["ui_action", source_kind, source_id])
+}
+
+fn ui_state_matches_origin(state: &UserUiState, origin: &TurnUiOrigin, now: i64) -> bool {
+    state.principal_id == origin.principal_id
+        && state.conversation_id == origin.conversation_id
+        && state.client_instance_id == origin.client_instance_id
+        && state.navigation_revision == origin.navigation_revision
+        && state.target_json == origin.target_json
+        && state.visible
+        && now.saturating_sub(state.last_seen_at_micros) <= UI_STATE_FRESH_MICROS
+}
+
+fn work_item_has_turn_navigation_action(ctx: &ReducerContext, work_item_id: &str) -> bool {
+    let Some(item) = ctx
+        .db
+        .workspace_work_item()
+        .work_item_id()
+        .find(work_item_id.to_owned())
+    else {
+        return false;
+    };
+    let Some(work_set) = ctx
+        .db
+        .workspace_work_set()
+        .work_set_id()
+        .find(&item.work_set_id)
+    else {
+        return false;
+    };
+    ctx.db
+        .ui_action()
+        .action_id()
+        .find(&ui_action_id("turn", &work_set.source_turn_id))
+        .is_some()
+}
+
+fn create_ui_action(
+    ctx: &ReducerContext,
+    origin: &TurnUiOrigin,
+    source_kind: &str,
+    source_id: &str,
+    kind: &str,
+    label: String,
+    button_label: &str,
+    target_json: String,
+) {
+    validate_resolvable_ui_target(ctx, &origin.conversation_id, &target_json)
+        .unwrap_or_else(|error| panic!("{error}"));
+    if label.is_empty() || label.len() > MAX_UI_LABEL_LENGTH {
+        panic!("invalid UI action label");
+    }
+    let now = now_micros(ctx);
+    let state_id = ui_state_id(
+        &origin.principal_id,
+        &origin.conversation_id,
+        &origin.client_instance_id,
+    );
+    // A turn-level catalogue action is the single automatic navigation candidate
+    // for that turn. Its child summaries remain user-controlled even if they
+    // finish before the browser resolves the catalogue action.
+    let turn_navigation_exists =
+        source_kind == "work_item" && work_item_has_turn_navigation_action(ctx, source_id);
+    let status = if turn_navigation_exists {
+        "offered"
+    } else {
+        ctx.db
+            .user_ui_state()
+            .state_id()
+            .find(&state_id)
+            .filter(|state| ui_state_matches_origin(state, origin, now))
+            .map(|_| "auto_pending")
+            .unwrap_or("offered")
+    };
+    ctx.db.ui_action().insert(UiAction {
+        action_id: ui_action_id(source_kind, source_id),
+        conversation_id: origin.conversation_id.clone(),
+        principal_id: origin.principal_id.clone(),
+        client_instance_id: origin.client_instance_id.clone(),
+        source_kind: source_kind.into(),
+        source_id: source_id.into(),
+        kind: kind.into(),
+        label,
+        button_label: button_label.into(),
+        target_json,
+        base_target_json: origin.target_json.clone(),
+        base_navigation_revision: origin.navigation_revision,
+        activation: "auto_if_origin_unchanged".into(),
+        status: status.into(),
+        created_at_micros: now,
+        updated_at_micros: now,
+    });
 }
 
 fn current_course_summary_dependencies(
@@ -844,7 +996,7 @@ fn refresh_course_summary_input(
     Ok(())
 }
 
-fn activity_label(control: &WorkspaceWorkControl, result_json: &str) -> String {
+fn summary_action_label(control: &WorkspaceWorkControl, result_json: &str) -> String {
     let title = serde_json::from_str::<serde_json::Value>(result_json)
         .ok()
         .and_then(|value| {
@@ -1075,10 +1227,13 @@ pub fn send_message(
     ctx: &ReducerContext,
     conversation_id: String,
     client_command_id: String,
+    client_instance_id: String,
     content: String,
 ) {
     validate_conversation_id(&conversation_id).unwrap_or_else(|error| panic!("{error}"));
     validate_command_id(&client_command_id).unwrap_or_else(|error| panic!("{error}"));
+    validate_identifier(&client_instance_id, "invalid UI client identifier")
+        .unwrap_or_else(|error| panic!("{error}"));
     let content = content.trim().to_owned();
     validate_message_content(&content).unwrap_or_else(|error| panic!("{error}"));
     ensure_member(ctx, &conversation_id);
@@ -1097,6 +1252,14 @@ pub fn send_message(
     }
 
     let now = now_micros(ctx);
+    let principal_id = caller(ctx);
+    let state_id = ui_state_id(&principal_id, &conversation_id, &client_instance_id);
+    let ui_state = ctx
+        .db
+        .user_ui_state()
+        .state_id()
+        .find(&state_id)
+        .expect("originating UI state not found");
     let mut conversation = ctx
         .db
         .conversation()
@@ -1119,7 +1282,7 @@ pub fn send_message(
     });
     ctx.db.command().insert(Command {
         command_id: client_command_id.clone(),
-        principal_id: caller(ctx),
+        principal_id: principal_id.clone(),
         conversation_id: conversation_id.clone(),
         turn_id: client_command_id.clone(),
         kind: "send_message".into(),
@@ -1130,7 +1293,7 @@ pub fn send_message(
         conversation_id,
         user_message_id: client_command_id.clone(),
         agent_thread_id: conversation.agent_thread_id.clone(),
-        correlation_id: client_command_id,
+        correlation_id: client_command_id.clone(),
         status: "pending".into(),
         worker_id: None,
         lease_until_micros: None,
@@ -1138,6 +1301,15 @@ pub fn send_message(
         base_ui_revision: conversation.ui_revision,
         run_id: None,
         error_code: None,
+    });
+    ctx.db.turn_ui_origin().insert(TurnUiOrigin {
+        turn_id: client_command_id,
+        conversation_id: conversation.conversation_id.clone(),
+        principal_id,
+        client_instance_id,
+        target_json: ui_state.target_json,
+        navigation_revision: ui_state.navigation_revision,
+        created_at_micros: now,
     });
     ctx.db.conversation().conversation_id().update(conversation);
 }
@@ -1249,6 +1421,7 @@ pub fn complete_turn(
     for spec in &work_items {
         validate_work_item_spec(spec).unwrap_or_else(|error| panic!("{error}"));
     }
+    let work_item_count = work_items.len();
 
     let now = now_micros(ctx);
     let mut job = ctx
@@ -1366,6 +1539,35 @@ pub fn complete_turn(
                     target_json: spec.target_json,
                     dependency_json: spec.dependency_json,
                 });
+        }
+    }
+    if directive_type == CATALOG_VIEW {
+        if let Some(ref set_id) = created_work_set_id {
+            let origin = ctx
+                .db
+                .turn_ui_origin()
+                .turn_id()
+                .find(&turn_id)
+                .expect("turn UI origin not found");
+            let target_json = serde_json::to_string(&UiTargetRef {
+                schema_version: UI_TARGET_SCHEMA_VERSION,
+                view_type: "catalog".into(),
+                work_set_id: Some(set_id.clone()),
+                entity_type: None,
+                entity_id: None,
+                slot: None,
+            })
+            .expect("catalog UI target must serialize");
+            create_ui_action(
+                ctx,
+                &origin,
+                "turn",
+                &turn_id,
+                "open_catalog",
+                format!("{work_item_count} course matches ready"),
+                "Open courses",
+                target_json,
+            );
         }
     }
     let directive = ActiveDirective {
@@ -1884,7 +2086,7 @@ pub fn complete_work_item(
         }
     }
 
-    let label = activity_label(&control, &result_json);
+    let label = summary_action_label(&control, &result_json);
     ctx.db.workspace_result().insert(WorkspaceResult {
         work_item_id: item.work_item_id.clone(),
         work_set_id: set_id.clone(),
@@ -1894,15 +2096,28 @@ pub fn complete_work_item(
         run_id,
         completed_at_micros: now,
     });
-    ctx.db.ui_activity().insert(UiActivity {
-        activity_id: ui_activity_id(&item.work_item_id),
-        conversation_id: item.conversation_id.clone(),
-        work_item_id: item.work_item_id.clone(),
-        kind: "content_updated".into(),
+    let work_set = ctx
+        .db
+        .workspace_work_set()
+        .work_set_id()
+        .find(&set_id)
+        .expect("work set not found");
+    let origin = ctx
+        .db
+        .turn_ui_origin()
+        .turn_id()
+        .find(&work_set.source_turn_id)
+        .expect("turn UI origin not found");
+    create_ui_action(
+        ctx,
+        &origin,
+        "work_item",
+        &item.work_item_id,
+        "open_course_summary",
         label,
-        target_json: control.target_json,
-        created_at_micros: now,
-    });
+        "Open summary",
+        control.target_json,
+    );
     item.status = "completed".into();
     item.lease_until_micros = None;
     ctx.db.workspace_work_item().work_item_id().update(item);
@@ -1910,82 +2125,160 @@ pub fn complete_work_item(
 }
 
 #[spacetimedb::reducer]
-pub fn publish_ui_context(
+pub fn publish_ui_state(
     ctx: &ReducerContext,
     conversation_id: String,
     client_instance_id: String,
     target_json: String,
-    navigation_revision: u64,
     visible: bool,
 ) {
     validate_conversation_id(&conversation_id).unwrap_or_else(|error| panic!("{error}"));
     validate_identifier(&client_instance_id, "invalid UI client identifier")
         .unwrap_or_else(|error| panic!("{error}"));
-    validate_ui_target_json(&target_json).unwrap_or_else(|error| panic!("{error}"));
     ensure_member(ctx, &conversation_id);
+    validate_resolvable_ui_target(ctx, &conversation_id, &target_json)
+        .unwrap_or_else(|error| panic!("{error}"));
     let principal_id = caller(ctx);
-    let context_id = stable_internal_id(&[&principal_id, &conversation_id, &client_instance_id]);
-    let next = UiClientContext {
-        context_id: context_id.clone(),
-        conversation_id,
-        principal_id,
-        client_instance_id,
-        target_json,
-        navigation_revision,
-        visible,
-        updated_at_micros: now_micros(ctx),
-    };
-    if let Some(existing) = ctx.db.ui_client_context().context_id().find(&context_id) {
-        if navigation_revision < existing.navigation_revision {
-            panic!("stale UI navigation revision");
+    let state_id = ui_state_id(&principal_id, &conversation_id, &client_instance_id);
+    let now = now_micros(ctx);
+    if let Some(mut state) = ctx.db.user_ui_state().state_id().find(&state_id) {
+        if state.target_json != target_json {
+            state.navigation_revision = state
+                .navigation_revision
+                .checked_add(1)
+                .expect("UI navigation revision exhausted");
+            state.target_json = target_json;
         }
-        ctx.db.ui_client_context().context_id().update(next);
+        state.visible = visible;
+        state.last_seen_at_micros = now;
+        ctx.db.user_ui_state().state_id().update(state);
     } else {
-        ctx.db.ui_client_context().insert(next);
+        ctx.db.user_ui_state().insert(UserUiState {
+            state_id,
+            conversation_id,
+            principal_id,
+            client_instance_id,
+            target_json,
+            navigation_revision: 0,
+            visible,
+            last_seen_at_micros: now,
+        });
     }
 }
 
 #[spacetimedb::reducer]
-pub fn acknowledge_ui_activity(
+pub fn publish_ui_presence(
     ctx: &ReducerContext,
     conversation_id: String,
-    activity_id: String,
-    state: String,
+    client_instance_id: String,
+    visible: bool,
 ) {
     validate_conversation_id(&conversation_id).unwrap_or_else(|error| panic!("{error}"));
-    validate_identifier(&activity_id, "invalid UI activity identifier")
+    validate_identifier(&client_instance_id, "invalid UI client identifier")
         .unwrap_or_else(|error| panic!("{error}"));
-    validate_activity_receipt_state(&state).unwrap_or_else(|error| panic!("{error}"));
     ensure_member(ctx, &conversation_id);
-    let activity = ctx
-        .db
-        .ui_activity()
-        .activity_id()
-        .find(&activity_id)
-        .expect("UI activity not found");
-    if activity.conversation_id != conversation_id {
-        panic!("UI activity does not belong to the conversation");
-    }
     let principal_id = caller(ctx);
-    let receipt_id = stable_internal_id(&[&activity_id, &principal_id]);
-    let receipt = UiActivityReceipt {
-        receipt_id: receipt_id.clone(),
-        activity_id,
-        principal_id,
-        state,
-        updated_at_micros: now_micros(ctx),
-    };
-    if ctx
+    let state_id = ui_state_id(&principal_id, &conversation_id, &client_instance_id);
+    let mut state = ctx
         .db
-        .ui_activity_receipt()
-        .receipt_id()
-        .find(&receipt_id)
-        .is_some()
-    {
-        ctx.db.ui_activity_receipt().receipt_id().update(receipt);
-    } else {
-        ctx.db.ui_activity_receipt().insert(receipt);
+        .user_ui_state()
+        .state_id()
+        .find(&state_id)
+        .expect("UI state not found");
+    state.visible = visible;
+    state.last_seen_at_micros = now_micros(ctx);
+    ctx.db.user_ui_state().state_id().update(state);
+}
+
+#[spacetimedb::reducer]
+pub fn resolve_auto_ui_action(ctx: &ReducerContext, conversation_id: String, action_id: String) {
+    validate_conversation_id(&conversation_id).unwrap_or_else(|error| panic!("{error}"));
+    validate_identifier(&action_id, "invalid UI action identifier")
+        .unwrap_or_else(|error| panic!("{error}"));
+    ensure_member(ctx, &conversation_id);
+    let principal_id = caller(ctx);
+    let mut action = ctx
+        .db
+        .ui_action()
+        .action_id()
+        .find(&action_id)
+        .expect("UI action not found");
+    if action.conversation_id != conversation_id || action.principal_id != principal_id {
+        panic!("UI action does not belong to the caller");
     }
+    if action.status != "auto_pending" {
+        return;
+    }
+    let state_id = ui_state_id(&principal_id, &conversation_id, &action.client_instance_id);
+    let mut state = ctx
+        .db
+        .user_ui_state()
+        .state_id()
+        .find(&state_id)
+        .expect("originating UI state not found");
+    let now = now_micros(ctx);
+    let unchanged = state.navigation_revision == action.base_navigation_revision
+        && state.target_json == action.base_target_json
+        && state.visible
+        && now.saturating_sub(state.last_seen_at_micros) <= UI_STATE_FRESH_MICROS;
+    if unchanged {
+        state.navigation_revision = state
+            .navigation_revision
+            .checked_add(1)
+            .expect("UI navigation revision exhausted");
+        state.target_json = action.target_json.clone();
+        state.last_seen_at_micros = now;
+        ctx.db.user_ui_state().state_id().update(state);
+        action.status = "applied".into();
+    } else {
+        action.status = "offered".into();
+    }
+    action.updated_at_micros = now;
+    ctx.db.ui_action().action_id().update(action);
+}
+
+#[spacetimedb::reducer]
+pub fn open_ui_action(
+    ctx: &ReducerContext,
+    conversation_id: String,
+    action_id: String,
+    client_instance_id: String,
+) {
+    validate_conversation_id(&conversation_id).unwrap_or_else(|error| panic!("{error}"));
+    validate_identifier(&action_id, "invalid UI action identifier")
+        .unwrap_or_else(|error| panic!("{error}"));
+    validate_identifier(&client_instance_id, "invalid UI client identifier")
+        .unwrap_or_else(|error| panic!("{error}"));
+    ensure_member(ctx, &conversation_id);
+    let principal_id = caller(ctx);
+    let mut action = ctx
+        .db
+        .ui_action()
+        .action_id()
+        .find(&action_id)
+        .expect("UI action not found");
+    if action.conversation_id != conversation_id || action.principal_id != principal_id {
+        panic!("UI action does not belong to the caller");
+    }
+    let state_id = ui_state_id(&principal_id, &conversation_id, &client_instance_id);
+    let mut state = ctx
+        .db
+        .user_ui_state()
+        .state_id()
+        .find(&state_id)
+        .expect("UI state not found");
+    let now = now_micros(ctx);
+    state.navigation_revision = state
+        .navigation_revision
+        .checked_add(1)
+        .expect("UI navigation revision exhausted");
+    state.target_json = action.target_json.clone();
+    state.visible = true;
+    state.last_seen_at_micros = now;
+    ctx.db.user_ui_state().state_id().update(state);
+    action.status = "opened".into();
+    action.updated_at_micros = now;
+    ctx.db.ui_action().action_id().update(action);
 }
 
 fn caller_conversation_ids(ctx: &ViewContext) -> Vec<String> {
@@ -2122,35 +2415,21 @@ fn my_workspace_results(ctx: &ViewContext) -> Vec<WorkspaceResult> {
         .collect()
 }
 
-#[spacetimedb::view(accessor = my_ui_activities, public)]
-fn my_ui_activities(ctx: &ViewContext) -> Vec<UiActivity> {
-    caller_conversation_ids(ctx)
-        .into_iter()
-        .flat_map(|conversation_id| {
-            ctx.db
-                .ui_activity()
-                .conversation_id()
-                .filter(&conversation_id)
-                .collect::<Vec<_>>()
-        })
-        .collect()
-}
-
-#[spacetimedb::view(accessor = my_ui_activity_receipts, public)]
-fn my_ui_activity_receipts(ctx: &ViewContext) -> Vec<UiActivityReceipt> {
+#[spacetimedb::view(accessor = my_user_ui_states, public)]
+fn my_user_ui_states(ctx: &ViewContext) -> Vec<UserUiState> {
     let principal_id = ctx.sender().to_string();
     ctx.db
-        .ui_activity_receipt()
+        .user_ui_state()
         .principal_id()
         .filter(&principal_id)
         .collect()
 }
 
-#[spacetimedb::view(accessor = my_ui_client_contexts, public)]
-fn my_ui_client_contexts(ctx: &ViewContext) -> Vec<UiClientContext> {
+#[spacetimedb::view(accessor = my_ui_actions, public)]
+fn my_ui_actions(ctx: &ViewContext) -> Vec<UiAction> {
     let principal_id = ctx.sender().to_string();
     ctx.db
-        .ui_client_context()
+        .ui_action()
         .principal_id()
         .filter(&principal_id)
         .collect()
@@ -2227,22 +2506,23 @@ fn worker_pending_turns(ctx: &ViewContext) -> Vec<WorkerPendingTurn> {
         .into_iter()
         .flat_map(|status| ctx.db.turn_job().status().filter(status))
         .filter_map(|job| {
-            ctx.db
-                .message()
-                .message_id()
-                .find(&job.user_message_id)
-                .map(|message| WorkerPendingTurn {
-                    turn_id: job.turn_id,
-                    conversation_id: job.conversation_id,
-                    agent_thread_id: job.agent_thread_id,
-                    correlation_id: job.correlation_id,
-                    user_message_id: message.message_id,
-                    user_content: message.content,
-                    status: job.status,
-                    lease_until_micros: job.lease_until_micros,
-                    attempt: job.attempt,
-                    base_ui_revision: job.base_ui_revision,
-                })
+            let message = ctx.db.message().message_id().find(&job.user_message_id)?;
+            let origin = ctx.db.turn_ui_origin().turn_id().find(&job.turn_id)?;
+            Some(WorkerPendingTurn {
+                turn_id: job.turn_id,
+                conversation_id: job.conversation_id,
+                agent_thread_id: job.agent_thread_id,
+                correlation_id: job.correlation_id,
+                user_message_id: message.message_id,
+                user_content: message.content,
+                status: job.status,
+                lease_until_micros: job.lease_until_micros,
+                attempt: job.attempt,
+                base_ui_revision: job.base_ui_revision,
+                ui_client_instance_id: origin.client_instance_id,
+                ui_target_json: origin.target_json,
+                ui_navigation_revision: origin.navigation_revision,
+            })
         })
         .collect()
 }
@@ -2261,6 +2541,16 @@ fn worker_pending_work_items(ctx: &ViewContext) -> Vec<WorkerPendingWorkItem> {
                 .workspace_work_control()
                 .work_item_id()
                 .find(&item.work_item_id)?;
+            let work_set = ctx
+                .db
+                .workspace_work_set()
+                .work_set_id()
+                .find(&item.work_set_id)?;
+            let origin = ctx
+                .db
+                .turn_ui_origin()
+                .turn_id()
+                .find(&work_set.source_turn_id)?;
             Some(WorkerPendingWorkItem {
                 work_item_id: item.work_item_id,
                 work_set_id: item.work_set_id,
@@ -2278,7 +2568,36 @@ fn worker_pending_work_items(ctx: &ViewContext) -> Vec<WorkerPendingWorkItem> {
                 attempt: item.attempt,
                 expected_context_revision: item.expected_context_revision,
                 expected_ui_revision: item.expected_ui_revision,
+                ui_client_instance_id: origin.client_instance_id,
+                ui_target_json: origin.target_json,
+                ui_navigation_revision: origin.navigation_revision,
             })
+        })
+        .collect()
+}
+
+#[spacetimedb::view(accessor = worker_user_ui_states, public)]
+fn worker_user_ui_states(ctx: &ViewContext) -> Vec<UserUiState> {
+    if !is_registered_worker_view(ctx) {
+        return vec![];
+    }
+    let mut conversation_ids = std::collections::HashSet::new();
+    for status in ["pending", "retrying", "claimed"] {
+        for job in ctx.db.turn_job().status().filter(status) {
+            conversation_ids.insert(job.conversation_id);
+        }
+        for item in ctx.db.workspace_work_item().status().filter(status) {
+            conversation_ids.insert(item.conversation_id);
+        }
+    }
+    conversation_ids
+        .into_iter()
+        .flat_map(|conversation_id| {
+            ctx.db
+                .user_ui_state()
+                .conversation_id()
+                .filter(&conversation_id)
+                .collect::<Vec<_>>()
         })
         .collect()
 }
@@ -2311,12 +2630,12 @@ fn worker_conversation_profiles(ctx: &ViewContext) -> Vec<ConversationProfile> {
 #[cfg(test)]
 mod tests {
     use super::{
-        CATALOG_VIEW, DISCOVERY_VIEW, TurnJob, WorkItemSpec, WorkspaceWorkItem, lease_is_expired,
-        lease_owner_matches, turn_is_claimable, validate_command_id, validate_conversation_id,
-        validate_directive, validate_directive_revision, validate_error_code,
-        validate_message_content, validate_turn_update, validate_ui_target_json,
-        validate_work_item_spec, validate_work_item_target, work_item_is_claimable,
-        work_item_lease_owner_matches,
+        CATALOG_VIEW, DISCOVERY_VIEW, TurnJob, UiTargetRef, WorkItemSpec, WorkspaceWorkItem,
+        lease_is_expired, lease_owner_matches, turn_is_claimable, validate_command_id,
+        validate_conversation_id, validate_directive, validate_directive_revision,
+        validate_error_code, validate_message_content, validate_turn_update,
+        validate_ui_target_json, validate_work_item_spec, validate_work_item_target,
+        work_item_is_claimable, work_item_lease_owner_matches,
     };
 
     fn turn(
@@ -2429,6 +2748,22 @@ mod tests {
             .is_ok()
         );
         assert!(validate_turn_update("unknown", "{}").is_err());
+    }
+
+    #[test]
+    fn omits_empty_optional_fields_from_ui_targets() {
+        let target = UiTargetRef {
+            schema_version: 1,
+            view_type: "catalog".into(),
+            work_set_id: Some("turn-1-work".into()),
+            entity_type: None,
+            entity_id: None,
+            slot: None,
+        };
+        assert_eq!(
+            serde_json::to_string(&target).expect("target must serialize"),
+            r#"{"schemaVersion":1,"viewType":"catalog","workSetId":"turn-1-work"}"#
+        );
     }
 
     #[test]

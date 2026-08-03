@@ -4,6 +4,7 @@ import {
   type DiscoveryProfilePatch,
   type DiscoveryTurnResult,
   type TurnUpdatePayload,
+  type UserUiState,
   mapPhraseToCatalogAreas,
   rankCoursesForAreas,
   discoveryTurnResult,
@@ -23,6 +24,7 @@ export interface Coordinator {
 export interface CatalogStore {
   listCourses(): CatalogCourseView[];
   getProfile(conversationId: string): DiscoveryProfilePatch | undefined;
+  getUiState?(conversationId: string, clientInstanceId: string): UserUiState | undefined;
 }
 
 export interface ChatTurn {
@@ -34,6 +36,7 @@ export interface ChatTurn {
   userContent: string;
   attempt: number;
   baseUiRevision: bigint;
+  uiContext: UserUiState;
 }
 
 export interface TurnCompletion {
@@ -136,7 +139,10 @@ export async function processChatTurn(
       content: turn.userContent,
       createdAt: new Date().toISOString(),
     };
-    const result = await agent.run([userMessage], turn, { catalogAreas, profile });
+    const result = await agent.run([userMessage], turn, { catalogAreas, profile, uiContext: turn.uiContext });
+    // The graph receives the origin snapshot, while this reread exposes the live tab
+    // state to deterministic orchestration. SpacetimeDB still authoritatively fences navigation.
+    catalog?.getUiState?.(turn.conversationId, turn.uiContext.clientInstanceId);
     const discovery = result.discovery
       ?? discoveryTurnResult.parse(buildFallbackDiscovery(turn.userContent, catalogAreas, profile));
 
