@@ -36,7 +36,7 @@ describe('SpacetimeCoordinatorAdapter', () => {
       directiveType: 'discovery',
       directiveAwareness: 'I am ready to learn about your goals.',
       workKind: 'discovery_guidance',
-      workItems: [{ entityType: 'discovery_topic', entityId: 'goals', kind: 'advisor_prompt', inputJson: '{}' }],
+      workItems: [{ entityType: 'discovery_topic', entityId: 'goals', kind: 'advisor_prompt', displayTitle: 'Preparing goals', orderIndex: 0, targetJson: '{"schemaVersion":1,"viewType":"catalog"}', dependencyJson: '{}', inputJson: '{}' }],
     });
 
     expect(completeTurn).toHaveBeenCalledWith({
@@ -50,7 +50,7 @@ describe('SpacetimeCoordinatorAdapter', () => {
       directiveType: 'discovery',
       directiveAwareness: 'I am ready to learn about your goals.',
       workKind: 'discovery_guidance',
-      workItems: [{ entityType: 'discovery_topic', entityId: 'goals', kind: 'advisor_prompt', inputJson: '{}' }],
+      workItems: [{ entityType: 'discovery_topic', entityId: 'goals', kind: 'advisor_prompt', displayTitle: 'Preparing goals', orderIndex: 0, targetJson: '{"schemaVersion":1,"viewType":"catalog"}', dependencyJson: '{}', inputJson: '{}' }],
     });
   });
 
@@ -59,7 +59,7 @@ describe('SpacetimeCoordinatorAdapter', () => {
     const completeWorkItem = vi.fn().mockResolvedValue(undefined);
     const jobs = { subscribe: () => () => undefined, poll: async () => [] };
     const adapter = new SpacetimeCoordinatorAdapter({ reducers: { claimWorkItem, completeWorkItem }, db: {} }, jobs);
-    const item = { workItemId: 'work-1', workSetId: 'set-1', conversationId: 'c1', entityType: 'topic', entityId: 'goals', kind: 'prompt', inputJson: '{}', attempt: 2, expectedContextRevision: 0n, expectedUiRevision: 1n };
+    const item = { workItemId: 'work-1', workSetId: 'set-1', conversationId: 'c1', entityType: 'topic', entityId: 'goals', kind: 'prompt', displayTitle: 'Preparing goals', orderIndex: 0, targetJson: '{"schemaVersion":1,"viewType":"catalog"}', dependencyJson: '{}', inputJson: '{}', attempt: 2, expectedContextRevision: 0n, expectedUiRevision: 1n };
 
     expect(await adapter.claimWorkItem(item)).toBe(3);
     await adapter.completeWorkItem('work-1', 3, '{"ready":true}');

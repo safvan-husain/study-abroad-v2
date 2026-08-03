@@ -52,6 +52,10 @@ export interface WorkItemSpec {
   entityType: string;
   entityId: string;
   kind: string;
+  displayTitle: string;
+  orderIndex: number;
+  targetJson: string;
+  dependencyJson: string;
   inputJson: string;
 }
 
@@ -149,10 +153,25 @@ export async function processChatTurn(
       });
     }
 
-    const workItems: WorkItemSpec[] = ranked.map((course) => ({
+    const workSetId = `${turn.turnId}-work`;
+    const workItems: WorkItemSpec[] = ranked.map((course, orderIndex) => ({
       entityType: 'course',
       entityId: course.courseId,
       kind: 'course_fit_summary',
+      displayTitle: `Comparing ${course.name}`,
+      orderIndex,
+      targetJson: JSON.stringify({
+        schemaVersion: 1,
+        viewType: 'course_summary',
+        workSetId,
+        entityType: 'course',
+        entityId: course.courseId,
+        slot: 'summary',
+      }),
+      dependencyJson: JSON.stringify({
+        profile: discovery.profilePatch,
+        course,
+      }),
       inputJson: JSON.stringify({
         courseId: course.courseId,
         institutionId: course.institutionId,

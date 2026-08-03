@@ -34,6 +34,7 @@ import {
 } from "spacetimedb";
 
 // Import all reducer arg schemas
+import AcknowledgeUiActivityReducer from "./acknowledge_ui_activity_reducer";
 import ClaimReducer from "./claim_reducer";
 import ClaimWorkItemReducer from "./claim_work_item_reducer";
 import CompleteTurnReducer from "./complete_turn_reducer";
@@ -43,6 +44,7 @@ import FailReducer from "./fail_reducer";
 import FailWorkItemReducer from "./fail_work_item_reducer";
 import LoginReducer from "./login_reducer";
 import PublishTurnUpdateReducer from "./publish_turn_update_reducer";
+import PublishUiContextReducer from "./publish_ui_context_reducer";
 import RegisterWorkerReducer from "./register_worker_reducer";
 import RenewReducer from "./renew_reducer";
 import RenewWorkItemReducer from "./renew_work_item_reducer";
@@ -65,8 +67,12 @@ import MyMessagePartsRow from "./my_message_parts_table";
 import MyMessagesRow from "./my_messages_table";
 import MyTurnUpdatesRow from "./my_turn_updates_table";
 import MyTurnsRow from "./my_turns_table";
+import MyUiActivitiesRow from "./my_ui_activities_table";
+import MyUiActivityReceiptsRow from "./my_ui_activity_receipts_table";
+import MyUiClientContextsRow from "./my_ui_client_contexts_table";
 import MyUserActionsRow from "./my_user_actions_table";
 import MyWorkspaceResultsRow from "./my_workspace_results_table";
+import MyWorkspaceWorkControlsRow from "./my_workspace_work_controls_table";
 import MyWorkspaceWorkItemsRow from "./my_workspace_work_items_table";
 import MyWorkspaceWorkSetsRow from "./my_workspace_work_sets_table";
 import WorkerConversationProfilesRow from "./worker_conversation_profiles_table";
@@ -154,6 +160,27 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, MyTurnsRow),
+  my_ui_activities: __table({
+    name: 'my_ui_activities',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyUiActivitiesRow),
+  my_ui_activity_receipts: __table({
+    name: 'my_ui_activity_receipts',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyUiActivityReceiptsRow),
+  my_ui_client_contexts: __table({
+    name: 'my_ui_client_contexts',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyUiClientContextsRow),
   my_user_actions: __table({
     name: 'my_user_actions',
     indexes: [
@@ -168,6 +195,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, MyWorkspaceResultsRow),
+  my_workspace_work_controls: __table({
+    name: 'my_workspace_work_controls',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyWorkspaceWorkControlsRow),
   my_workspace_work_items: __table({
     name: 'my_workspace_work_items',
     indexes: [
@@ -207,6 +241,7 @@ const tablesSchema = __schema({
 
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
 const reducersSchema = __reducers(
+  __reducerSchema("acknowledge_ui_activity", AcknowledgeUiActivityReducer),
   __reducerSchema("claim", ClaimReducer),
   __reducerSchema("claim_work_item", ClaimWorkItemReducer),
   __reducerSchema("complete_turn", CompleteTurnReducer),
@@ -216,6 +251,7 @@ const reducersSchema = __reducers(
   __reducerSchema("fail_work_item", FailWorkItemReducer),
   __reducerSchema("login", LoginReducer),
   __reducerSchema("publish_turn_update", PublishTurnUpdateReducer),
+  __reducerSchema("publish_ui_context", PublishUiContextReducer),
   __reducerSchema("register_worker", RegisterWorkerReducer),
   __reducerSchema("renew", RenewReducer),
   __reducerSchema("renew_work_item", RenewWorkItemReducer),

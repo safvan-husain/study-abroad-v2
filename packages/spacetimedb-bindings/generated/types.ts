@@ -175,6 +175,38 @@ export const TurnUpdate = __t.object("TurnUpdate", {
 });
 export type TurnUpdate = __Infer<typeof TurnUpdate>;
 
+export const UiActivity = __t.object("UiActivity", {
+  activityId: __t.string(),
+  conversationId: __t.string(),
+  workItemId: __t.string(),
+  kind: __t.string(),
+  label: __t.string(),
+  targetJson: __t.string(),
+  createdAtMicros: __t.i64(),
+});
+export type UiActivity = __Infer<typeof UiActivity>;
+
+export const UiActivityReceipt = __t.object("UiActivityReceipt", {
+  receiptId: __t.string(),
+  activityId: __t.string(),
+  principalId: __t.string(),
+  state: __t.string(),
+  updatedAtMicros: __t.i64(),
+});
+export type UiActivityReceipt = __Infer<typeof UiActivityReceipt>;
+
+export const UiClientContext = __t.object("UiClientContext", {
+  contextId: __t.string(),
+  conversationId: __t.string(),
+  principalId: __t.string(),
+  clientInstanceId: __t.string(),
+  targetJson: __t.string(),
+  navigationRevision: __t.u64(),
+  visible: __t.bool(),
+  updatedAtMicros: __t.i64(),
+});
+export type UiClientContext = __Infer<typeof UiClientContext>;
+
 export const UserAction = __t.object("UserAction", {
   actionId: __t.string(),
   principalId: __t.string(),
@@ -190,6 +222,10 @@ export const WorkItemSpec = __t.object("WorkItemSpec", {
   entityType: __t.string(),
   entityId: __t.string(),
   kind: __t.string(),
+  displayTitle: __t.string(),
+  orderIndex: __t.u32(),
+  targetJson: __t.string(),
+  dependencyJson: __t.string(),
   inputJson: __t.string(),
 });
 export type WorkItemSpec = __Infer<typeof WorkItemSpec>;
@@ -215,6 +251,10 @@ export const WorkerPendingWorkItem = __t.object("WorkerPendingWorkItem", {
   entityType: __t.string(),
   entityId: __t.string(),
   kind: __t.string(),
+  displayTitle: __t.string(),
+  orderIndex: __t.u32(),
+  targetJson: __t.string(),
+  dependencyJson: __t.string(),
   inputJson: __t.string(),
   status: __t.string(),
   leaseUntilMicros: __t.option(__t.i64()),
@@ -241,6 +281,16 @@ export const WorkspaceResult = __t.object("WorkspaceResult", {
   completedAtMicros: __t.i64(),
 });
 export type WorkspaceResult = __Infer<typeof WorkspaceResult>;
+
+export const WorkspaceWorkControl = __t.object("WorkspaceWorkControl", {
+  workItemId: __t.string(),
+  conversationId: __t.string(),
+  displayTitle: __t.string(),
+  orderIndex: __t.u32(),
+  targetJson: __t.string(),
+  dependencyJson: __t.string(),
+});
+export type WorkspaceWorkControl = __Infer<typeof WorkspaceWorkControl>;
 
 export const WorkspaceWorkItem = __t.object("WorkspaceWorkItem", {
   workItemId: __t.string(),

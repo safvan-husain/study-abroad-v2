@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { DbConnection } from '@study-abroad/spacetimedb-bindings';
-import type { DiscoveryProfilePatch, TurnUpdatePayload } from '@study-abroad/contracts';
-import { turnUpdatePayload } from '@study-abroad/contracts';
+import type { DiscoveryProfilePatch, TurnUpdatePayload, UiActivityReceiptState, UiTargetRef } from '@study-abroad/contracts';
+import { turnUpdatePayload, uiTargetRef } from '@study-abroad/contracts';
 import { getOrCreateGuestSessionId } from '../lib/guest-session';
 
 const TOKEN_KEY = 'study-abroad-spacetimedb-token';
@@ -12,8 +12,10 @@ export type AdvisorMessage = { messageId: string; role: string; content: string;
 export type AdvisorTurn = { turnId: string; status: string; errorCode: string | null; attempt: number };
 export type AdvisorDirective = { viewType: string; awareness: string; uiRevision: bigint; workSetId: string | null };
 export type AdvisorWorkSet = { workSetId: string; status: string };
-export type AdvisorWorkItem = { workItemId: string; workSetId: string; entityId: string; kind: string; status: string; errorCode: string | null };
-export type AdvisorWorkResult = { workItemId: string; resultJson: string };
+export type AdvisorWorkItem = { workItemId: string; workSetId: string; entityId: string; kind: string; displayTitle: string; orderIndex: number; target: UiTargetRef; status: string; errorCode: string | null };
+export type AdvisorWorkResult = { workItemId: string; resultJson: string; target: UiTargetRef };
+export type AdvisorUiActivity = { activityId: string; workItemId: string; kind: string; label: string; target: UiTargetRef; createdAtMicros: bigint };
+export type AdvisorUiActivityReceipt = { activityId: string; state: UiActivityReceiptState };
 export type AdvisorTurnUpdate = { updateId: bigint; turnId: string; attempt: number; sequence: number; kind: string; payload: TurnUpdatePayload };
 export type AdvisorProfile = DiscoveryProfilePatch;
 export type AdvisorCatalogCourse = {
@@ -54,6 +56,15 @@ function parseProfile(row: Record<string, unknown> | undefined): AdvisorProfile 
   };
 }
 
+function parseTarget(value: unknown): UiTargetRef | undefined {
+  try {
+    const parsed = uiTargetRef.safeParse(JSON.parse(String(value ?? '{}')));
+    return parsed.success ? parsed.data : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function useAdvisorWorkspace() {
   const connectionRef = useRef<DbConnection | null>(null);
   const [reconnect, setReconnect] = useState(0);
@@ -65,6 +76,8 @@ export function useAdvisorWorkspace() {
   const [workSets, setWorkSets] = useState<AdvisorWorkSet[]>([]);
   const [workItems, setWorkItems] = useState<AdvisorWorkItem[]>([]);
   const [workResults, setWorkResults] = useState<AdvisorWorkResult[]>([]);
+  const [uiActivities, setUiActivities] = useState<AdvisorUiActivity[]>([]);
+  const [uiActivityReceipts, setUiActivityReceipts] = useState<AdvisorUiActivityReceipt[]>([]);
   const [turnUpdates, setTurnUpdates] = useState<AdvisorTurnUpdate[]>([]);
   const [profile, setProfile] = useState<AdvisorProfile>();
   const [catalogCourses, setCatalogCourses] = useState<AdvisorCatalogCourse[]>([]);
@@ -94,15 +107,43 @@ export function useAdvisorWorkspace() {
         workSetId: row.workSetId ?? null,
       }))[0]);
       setWorkSets([...db.my_workspace_work_sets.iter()]);
-      setWorkItems([...db.my_workspace_work_items.iter()].map((item: any) => ({
-        workItemId: item.workItemId,
-        workSetId: item.workSetId,
-        entityId: item.entityId,
-        kind: item.kind,
-        status: item.status,
-        errorCode: item.errorCode ?? null,
+      const workControls = [...db.my_workspace_work_controls.iter()];
+      const controlByItem = new Map(workControls.map((control: any) => [control.workItemId, control]));
+      setWorkItems([...db.my_workspace_work_items.iter()].flatMap((item: any): AdvisorWorkItem[] => {
+        const control = controlByItem.get(item.workItemId) as any;
+        const target = parseTarget(control?.targetJson);
+        return target ? [{
+          workItemId: item.workItemId,
+          workSetId: item.workSetId,
+          entityId: item.entityId,
+          kind: item.kind,
+          displayTitle: control.displayTitle,
+          orderIndex: control.orderIndex,
+          target,
+          status: item.status,
+          errorCode: item.errorCode ?? null,
+        }] : [];
+      }).sort((a: AdvisorWorkItem, b: AdvisorWorkItem) => a.orderIndex - b.orderIndex));
+      setWorkResults([...db.my_workspace_results.iter()].flatMap((result: any): AdvisorWorkResult[] => {
+        const control = controlByItem.get(result.workItemId) as any;
+        const target = parseTarget(control?.targetJson);
+        return target ? [{ workItemId: result.workItemId, resultJson: result.resultJson, target }] : [];
+      }));
+      setUiActivities([...db.my_ui_activities.iter()].flatMap((activity: any): AdvisorUiActivity[] => {
+        const target = parseTarget(activity.targetJson);
+        return target ? [{
+          activityId: activity.activityId,
+          workItemId: activity.workItemId,
+          kind: activity.kind,
+          label: activity.label,
+          target,
+          createdAtMicros: activity.createdAtMicros,
+        }] : [];
+      }).sort((a: AdvisorUiActivity, b: AdvisorUiActivity) => Number(a.createdAtMicros - b.createdAtMicros)));
+      setUiActivityReceipts([...db.my_ui_activity_receipts.iter()].map((receipt: any) => ({
+        activityId: receipt.activityId,
+        state: receipt.state,
       })));
-      setWorkResults([...db.my_workspace_results.iter()]);
       setTurnUpdates([...db.my_turn_updates.iter()].map((row: any) => {
         let payload: TurnUpdatePayload = { kind: 'turn_started' };
         try {
@@ -143,8 +184,9 @@ export function useAdvisorWorkspace() {
         void connection.reducers.ensureGuestJourney({ conversationId: id }).then(() => {
           const tables = [
             'my_messages', 'my_turns', 'my_active_directives', 'my_workspace_work_sets',
-            'my_workspace_work_items', 'my_workspace_results', 'my_user_actions', 'my_conversations',
-            'my_turn_updates', 'my_conversation_profiles', 'catalog_course',
+            'my_workspace_work_items', 'my_workspace_work_controls', 'my_workspace_results', 'my_user_actions', 'my_conversations',
+            'my_turn_updates', 'my_conversation_profiles', 'my_ui_activities',
+            'my_ui_activity_receipts', 'my_ui_client_contexts', 'catalog_course',
           ];
           const db = connection.db as any;
           for (const tableName of tables) {
@@ -213,6 +255,24 @@ export function useAdvisorWorkspace() {
     });
   }, [connectionState, conversationId]);
 
+  const publishUiContext = useCallback(async (clientInstanceId: string, target: UiTargetRef, navigationRevision: number, visible: boolean) => {
+    const connection = connectionRef.current;
+    if (!connection || connectionState !== 'ready' || !conversationId) return;
+    await connection.reducers.publishUiContext({
+      conversationId,
+      clientInstanceId,
+      targetJson: JSON.stringify(target),
+      navigationRevision: BigInt(navigationRevision),
+      visible,
+    });
+  }, [connectionState, conversationId]);
+
+  const acknowledgeUiActivity = useCallback(async (activityId: string, state: UiActivityReceiptState) => {
+    const connection = connectionRef.current;
+    if (!connection || connectionState !== 'ready' || !conversationId) return;
+    await connection.reducers.acknowledgeUiActivity({ conversationId, activityId, state });
+  }, [connectionState, conversationId]);
+
   return {
     connectionState,
     error,
@@ -223,10 +283,14 @@ export function useAdvisorWorkspace() {
     workSets,
     workItems,
     workResults,
+    uiActivities,
+    uiActivityReceipts,
     turnUpdates,
     profile,
     catalogCourses,
     send,
     updateProfile,
+    publishUiContext,
+    acknowledgeUiActivity,
   };
 }

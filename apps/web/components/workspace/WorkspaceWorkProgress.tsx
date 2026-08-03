@@ -15,8 +15,8 @@ function resultText(result: AdvisorWorkResult | undefined) {
   }
 }
 
-export function WorkspaceWorkProgress({ workSets, items, results }: { workSets: AdvisorWorkSet[]; items: AdvisorWorkItem[]; results: AdvisorWorkResult[] }) {
-  const activeSet = workSets.at(-1);
+export function WorkspaceWorkProgress({ workSets, items, results, workSetId, selectedEntityId }: { workSets: AdvisorWorkSet[]; items: AdvisorWorkItem[]; results: AdvisorWorkResult[]; workSetId?: string; selectedEntityId?: string }) {
+  const activeSet = workSets.find((workSet) => workSet.workSetId === workSetId);
   const activeItems = activeSet ? items.filter((item) => item.workSetId === activeSet.workSetId) : [];
   if (!activeSet) return null;
   const courseItems = activeItems.filter((item) => item.kind === 'course_fit_summary');
@@ -28,15 +28,15 @@ export function WorkspaceWorkProgress({ workSets, items, results }: { workSets: 
         <span className={`work-set-status status-${activeSet.status}`}>{activeSet.status.replaceAll('_', ' ')}</span>
       </div>
       <div className="work-grid">
-        {activeItems.map((item) => {
+        {[...activeItems].sort((left, right) => left.orderIndex - right.orderIndex).map((item) => {
           const result = resultText(results.find((entry) => entry.workItemId === item.workItemId));
           const isCourse = item.kind === 'course_fit_summary';
           return (
-            <article className={`work-card work-card-${item.status}${isCourse ? ' work-card-course' : ''}`} key={item.workItemId} aria-busy={['pending', 'claimed', 'retrying'].includes(item.status)}>
+            <article id={`workspace-item-${item.workItemId}`} className={`work-card work-card-${item.status}${isCourse ? ' work-card-course' : ''}${selectedEntityId === item.entityId ? ' work-card-selected' : ''}`} key={item.workItemId} aria-busy={['pending', 'claimed', 'retrying'].includes(item.status)}>
               <div className="work-card-icon" aria-hidden="true">{item.status === 'completed' ? '✓' : '→'}</div>
               <div>
                 <span className="work-card-label">{isCourse ? (result?.area ?? item.entityId.replaceAll('-', ' ')) : item.entityId.replaceAll('-', ' ')}</span>
-                <h4>{result?.title ?? (item.status === 'failed' ? 'Needs another try' : isCourse ? 'Finding why this fits' : 'Preparing this step')}</h4>
+                <h4>{result?.title ?? (item.status === 'failed' ? 'Needs another try' : item.displayTitle)}</h4>
                 {result?.institutionName ? <p className="work-card-meta">{result.institutionName}{result.country ? ` · ${result.country}` : ''}</p> : null}
                 <p>{result?.detail ?? (item.status === 'obsolete' ? 'This result no longer matches your current workspace.' : item.status === 'failed' ? 'This item failed without affecting the other completed steps.' : isCourse ? 'A personalized fit note will appear here independently.' : 'This result will appear here independently as soon as it is ready.')}</p>
               </div>

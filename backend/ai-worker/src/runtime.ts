@@ -57,6 +57,10 @@ type WorkerPendingWorkItemRow = {
   entityType: string;
   entityId: string;
   kind: string;
+  displayTitle: string;
+  orderIndex: number;
+  targetJson: string;
+  dependencyJson: string;
   inputJson: string;
   status: string;
   leaseUntilMicros: bigint | null;
@@ -133,6 +137,10 @@ function rowToWorkItem(row: WorkerPendingWorkItemRow): WorkspaceWorkItem | undef
     entityType: row.entityType,
     entityId: row.entityId,
     kind: row.kind,
+    displayTitle: row.displayTitle,
+    orderIndex: row.orderIndex,
+    targetJson: row.targetJson,
+    dependencyJson: row.dependencyJson,
     inputJson: row.inputJson,
     attempt: row.attempt,
     expectedContextRevision: row.expectedContextRevision,

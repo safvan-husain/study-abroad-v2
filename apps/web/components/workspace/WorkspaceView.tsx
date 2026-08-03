@@ -1,4 +1,6 @@
+import { HOME_UI_TARGET, type UiTargetRef } from '@study-abroad/contracts';
 import type { AdvisorDirective, AdvisorProfile, AdvisorWorkItem, AdvisorWorkResult, AdvisorWorkSet } from '../../hooks/useAdvisorWorkspace';
+import { targetBreadcrumb } from '../../lib/ui-targets';
 import { WorkspaceWorkProgress } from './WorkspaceWorkProgress';
 
 export function WorkspaceView({
@@ -7,22 +9,30 @@ export function WorkspaceView({
   workItems,
   workResults,
   profile,
+  target = HOME_UI_TARGET,
+  setScrollElement = () => undefined,
+  onScroll = () => undefined,
+  onHome = () => undefined,
 }: {
   directive?: AdvisorDirective;
   workSets: AdvisorWorkSet[];
   workItems: AdvisorWorkItem[];
   workResults: AdvisorWorkResult[];
   profile?: AdvisorProfile;
+  target: UiTargetRef;
+  setScrollElement: (element: HTMLDivElement | null) => void;
+  onScroll: () => void;
+  onHome: () => void;
 }) {
-  const exploring = directive?.viewType === 'catalog' || workItems.some((item) => item.kind === 'course_fit_summary');
+  const exploring = target.viewType !== 'home';
   return (
     <main className="task-pane" aria-label="Study planning workspace">
       <header className="workspace-header">
-        <a className="brand" href="/" aria-label="Study Abroad advisor home"><span>SA</span> Study Abroad</a>
+        <button className="brand brand-button" type="button" onClick={onHome} aria-label="Study Abroad advisor home"><span>SA</span> Study Abroad</button>
         <div className="journey-state"><span /> Guest journey saved</div>
       </header>
-      <div className="workspace-scroll">
-        <div className="breadcrumb">YOUR JOURNEY <b>/</b> {exploring ? 'EXPLORE' : 'DISCOVERY'}</div>
+      <div className="workspace-scroll" ref={setScrollElement} onScroll={onScroll}>
+        <div className="breadcrumb">YOUR JOURNEY <b>/</b> {targetBreadcrumb(target)}</div>
         <section className="discovery-hero">
           <span className="eyebrow">A CLEARER WAY FORWARD</span>
           <h1>Shape the study plan<br />that fits your story.</h1>
@@ -38,18 +48,18 @@ export function WorkspaceView({
             <div><span>04</span><b>Documents</b></div>
           </div>
         </section>
-        {directive ? (
+        {exploring && directive ? (
           <section className="workspace-awareness">
             <span className="awareness-mark" aria-hidden="true">✦</span>
             <div><span className="eyebrow">CURRENT FOCUS</span><p>{directive.awareness}</p></div>
           </section>
-        ) : (
+        ) : !exploring ? (
           <section className="empty-workspace">
             <span aria-hidden="true">↗</span>
             <div><h3>Your workspace is ready</h3><p>Start by telling the advisor about your background and interests. Course matches will collect here independently.</p></div>
           </section>
-        )}
-        <WorkspaceWorkProgress workSets={workSets} items={workItems} results={workResults} />
+        ) : null}
+        {exploring ? <WorkspaceWorkProgress workSets={workSets} items={workItems} results={workResults} workSetId={target.workSetId} selectedEntityId={target.entityId} /> : null}
       </div>
     </main>
   );

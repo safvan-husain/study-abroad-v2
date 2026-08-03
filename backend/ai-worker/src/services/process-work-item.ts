@@ -8,6 +8,10 @@ export interface WorkspaceWorkItem {
   entityType: string;
   entityId: string;
   kind: string;
+  displayTitle: string;
+  orderIndex: number;
+  targetJson: string;
+  dependencyJson: string;
   inputJson: string;
   attempt: number;
   expectedContextRevision: bigint;

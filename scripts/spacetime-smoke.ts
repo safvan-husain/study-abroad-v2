@@ -127,7 +127,11 @@ const studentQueries = [
   "SELECT * FROM my_active_directives",
   "SELECT * FROM my_workspace_work_sets",
   "SELECT * FROM my_workspace_work_items",
+  "SELECT * FROM my_workspace_work_controls",
   "SELECT * FROM my_workspace_results",
+  "SELECT * FROM my_ui_activities",
+  "SELECT * FROM my_ui_activity_receipts",
+  "SELECT * FROM my_ui_client_contexts",
   "SELECT * FROM my_user_actions",
 ];
 const studentOne = await connect(studentQueries);
@@ -218,8 +222,8 @@ try {
     directiveAwareness: "I am ready to learn about your study-abroad goals.",
     workKind: "discovery_guidance",
     workItems: [
-      { entityType: "discovery_topic", entityId: "background", kind: "advisor_prompt", inputJson: '{"title":"Background"}' },
-      { entityType: "discovery_topic", entityId: "ambition", kind: "advisor_prompt", inputJson: '{"title":"Ambition"}' },
+      { entityType: "discovery_topic", entityId: "background", kind: "advisor_prompt", displayTitle: "Preparing background", orderIndex: 0, targetJson: '{"schemaVersion":1,"viewType":"catalog"}', dependencyJson: '{}', inputJson: '{"title":"Background"}' },
+      { entityType: "discovery_topic", entityId: "ambition", kind: "advisor_prompt", displayTitle: "Preparing ambition", orderIndex: 1, targetJson: '{"schemaVersion":1,"viewType":"catalog"}', dependencyJson: '{}', inputJson: '{"title":"Ambition"}' },
     ],
   });
   const completedTurn = await waitFor(
@@ -245,11 +249,61 @@ try {
     "two worker-visible child items",
   );
   const [firstItem, secondItem] = workerItems;
+
+  const navigationTurnId = `navigation-${randomUUID()}`;
+  await studentOne.reducers.sendMessage({
+    conversationId,
+    clientCommandId: navigationTurnId,
+    content: "Return my workspace focus to discovery while the background work continues.",
+  });
+  await waitFor(
+    () => [...workerTables.worker_pending_turns.iter()].find((row: any) => row.turnId === navigationTurnId),
+    "the navigation turn",
+  );
+  await worker.reducers.claim({ turnId: navigationTurnId, expectedAttempt: 0, leaseSeconds: 30n });
+  await worker.reducers.completeTurn({
+    turnId: navigationTurnId,
+    attempt: 1,
+    assistantContent: "Your discovery workspace is ready.",
+    runId: `run-${navigationTurnId}`,
+    agentThreadId: conversationId,
+    directiveSchemaVersion: 1,
+    directiveUiRevision: 2n,
+    directiveType: "discovery",
+    directiveAwareness: "Discovery is your current workspace focus.",
+    workKind: "",
+    workItems: [],
+  });
+
   await worker.reducers.claimWorkItem({ workItemId: secondItem.workItemId, expectedAttempt: 0, leaseSeconds: 30n });
   await worker.reducers.completeWorkItem({ workItemId: secondItem.workItemId, attempt: 1, resultJson: '{"title":"Ambition","detail":"Completed second."}', runId: undefined });
   await waitFor(
     () => [...studentOneTables.my_workspace_results.iter()].find((row: any) => row.workItemId === secondItem.workItemId),
     "the independently completed second child",
+  );
+  const secondActivity = await waitFor(
+    () => [...studentOneTables.my_ui_activities.iter()].find((row: any) => row.workItemId === secondItem.workItemId),
+    "the atomic UI activity for the completed child",
+  );
+  const secondControl = [...studentOneTables.my_workspace_work_controls.iter()]
+    .find((row: any) => row.workItemId === secondItem.workItemId);
+  if (secondControl?.targetJson !== secondItem.targetJson || secondActivity.targetJson !== secondItem.targetJson) {
+    throw new Error("Completed child did not retain its semantic UI target");
+  }
+  if ([...studentOneTables.my_workspace_work_items.iter()].find((row: any) => row.workItemId === secondItem.workItemId)?.status !== "completed") {
+    throw new Error("A valid background child was invalidated by an unrelated UI directive change");
+  }
+  await studentOne.reducers.publishUiContext({
+    conversationId,
+    clientInstanceId: "spacetime-smoke-client",
+    targetJson: '{"schemaVersion":1,"viewType":"home"}',
+    navigationRevision: 1n,
+    visible: true,
+  });
+  await studentOne.reducers.acknowledgeUiActivity({ conversationId, activityId: secondActivity.activityId, state: "opened" });
+  await waitFor(
+    () => [...studentOneTables.my_ui_activity_receipts.iter()].find((row: any) => row.activityId === secondActivity.activityId && row.state === "opened"),
+    "the UI activity receipt",
   );
   if ([...studentOneTables.my_workspace_results.iter()].some((row: any) => row.workItemId === firstItem.workItemId)) {
     throw new Error("First child appeared before its independent completion");
@@ -273,6 +327,9 @@ try {
   );
   if ([...studentTwoTables.my_workspace_results.iter()].some((row: any) => row.workSetId === workSet.workSetId)) {
     throw new Error("Second student observed the first student's child results");
+  }
+  if ([...studentTwoTables.my_ui_activities.iter()].some((row: any) => row.conversationId === conversationId)) {
+    throw new Error("Second student observed the first student's UI activities");
   }
 
   studentOneTables.my_turns.removeOnInsert(onTurnInsert);

@@ -12,19 +12,9 @@ import {
 
 export default __t.row({
   workItemId: __t.string().name("work_item_id"),
-  workSetId: __t.string().name("work_set_id"),
   conversationId: __t.string().name("conversation_id"),
-  entityType: __t.string().name("entity_type"),
-  entityId: __t.string().name("entity_id"),
-  kind: __t.string(),
   displayTitle: __t.string().name("display_title"),
   orderIndex: __t.u32().name("order_index"),
   targetJson: __t.string().name("target_json"),
   dependencyJson: __t.string().name("dependency_json"),
-  inputJson: __t.string().name("input_json"),
-  status: __t.string(),
-  leaseUntilMicros: __t.option(__t.i64()).name("lease_until_micros"),
-  attempt: __t.u32(),
-  expectedContextRevision: __t.u64().name("expected_context_revision"),
-  expectedUiRevision: __t.u64().name("expected_ui_revision"),
 });

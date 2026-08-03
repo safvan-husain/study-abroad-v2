@@ -1,3 +1,4 @@
+use serde::{Deserialize, Serialize};
 use spacetimedb::{Identity, ReducerContext, SpacetimeType, Table, ViewContext};
 
 pub const MAX_IDENTIFIER_LENGTH: usize = 128;
@@ -20,6 +21,9 @@ pub const MAX_TURN_UPDATE_PAYLOAD_LENGTH: usize = 4_096;
 pub const MAX_TURN_UPDATES_PER_CONVERSATION: usize = 32;
 pub const MAX_CATALOG_AREA_LENGTH: usize = 64;
 pub const MAX_CATALOG_NAME_LENGTH: usize = 256;
+pub const UI_TARGET_SCHEMA_VERSION: u32 = 1;
+pub const MAX_UI_TARGET_LENGTH: usize = 1_024;
+pub const MAX_UI_LABEL_LENGTH: usize = 256;
 const ROLE_AI_AGENT: u8 = 2;
 const AGENT_USERNAME: &str = "study_abroad_agent";
 const AGENT_PASSWORD: &str = "study-agent-dev";
@@ -197,6 +201,59 @@ pub struct WorkspaceResult {
     pub completed_at_micros: i64,
 }
 
+#[spacetimedb::table(accessor = workspace_work_control)]
+pub struct WorkspaceWorkControl {
+    #[primary_key]
+    pub work_item_id: String,
+    #[index(btree)]
+    pub conversation_id: String,
+    pub display_title: String,
+    pub order_index: u32,
+    pub target_json: String,
+    pub dependency_json: String,
+}
+
+#[spacetimedb::table(accessor = ui_activity)]
+pub struct UiActivity {
+    #[primary_key]
+    pub activity_id: String,
+    #[index(btree)]
+    pub conversation_id: String,
+    #[unique]
+    pub work_item_id: String,
+    pub kind: String,
+    pub label: String,
+    pub target_json: String,
+    pub created_at_micros: i64,
+}
+
+#[spacetimedb::table(accessor = ui_activity_receipt)]
+pub struct UiActivityReceipt {
+    #[primary_key]
+    pub receipt_id: String,
+    #[index(btree)]
+    pub activity_id: String,
+    #[index(btree)]
+    pub principal_id: String,
+    pub state: String,
+    pub updated_at_micros: i64,
+}
+
+#[spacetimedb::table(accessor = ui_client_context)]
+pub struct UiClientContext {
+    #[primary_key]
+    pub context_id: String,
+    #[index(btree)]
+    pub conversation_id: String,
+    #[index(btree)]
+    pub principal_id: String,
+    pub client_instance_id: String,
+    pub target_json: String,
+    pub navigation_revision: u64,
+    pub visible: bool,
+    pub updated_at_micros: i64,
+}
+
 #[spacetimedb::table(accessor = user_action)]
 pub struct UserAction {
     #[primary_key]
@@ -312,6 +369,10 @@ pub struct WorkItemSpec {
     pub entity_type: String,
     pub entity_id: String,
     pub kind: String,
+    pub display_title: String,
+    pub order_index: u32,
+    pub target_json: String,
+    pub dependency_json: String,
     pub input_json: String,
 }
 
@@ -323,12 +384,61 @@ pub struct WorkerPendingWorkItem {
     pub entity_type: String,
     pub entity_id: String,
     pub kind: String,
+    pub display_title: String,
+    pub order_index: u32,
+    pub target_json: String,
+    pub dependency_json: String,
     pub input_json: String,
     pub status: String,
     pub lease_until_micros: Option<i64>,
     pub attempt: u32,
     pub expected_context_revision: u64,
     pub expected_ui_revision: u64,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct UiTargetRef {
+    pub schema_version: u32,
+    pub view_type: String,
+    pub work_set_id: Option<String>,
+    pub entity_type: Option<String>,
+    pub entity_id: Option<String>,
+    pub slot: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ProfileDependency {
+    pub background: String,
+    pub course_interests: String,
+    pub ambitions: String,
+    pub primary_area: String,
+    pub candidate_areas: Vec<String>,
+    pub student_phrase: String,
+    pub constraints_text: String,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CourseDependency {
+    pub course_id: String,
+    pub institution_id: String,
+    pub institution_name: String,
+    pub country: String,
+    pub city: String,
+    pub name: String,
+    pub area: String,
+    pub level: String,
+    pub tuition_band: String,
+    pub english_bar: String,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct CourseSummaryDependencies {
+    pub profile: ProfileDependency,
+    pub course: CourseDependency,
 }
 
 fn caller(ctx: &ReducerContext) -> String {
@@ -442,10 +552,87 @@ pub fn validate_work_item_spec(spec: &WorkItemSpec) -> Result<(), &'static str> 
     if spec.kind.is_empty() || spec.kind.len() > MAX_WORK_KIND_LENGTH {
         return Err("invalid work item kind");
     }
+    if spec.display_title.is_empty() || spec.display_title.len() > MAX_UI_LABEL_LENGTH {
+        return Err("invalid work item display title");
+    }
+    validate_ui_target_json(&spec.target_json)?;
+    if spec.dependency_json.is_empty() || spec.dependency_json.len() > MAX_WORK_PAYLOAD_LENGTH {
+        return Err("work item dependencies are outside the payload bound");
+    }
+    if spec.kind == "course_fit_summary"
+        && serde_json::from_str::<CourseSummaryDependencies>(&spec.dependency_json).is_err()
+    {
+        return Err("invalid course summary dependencies");
+    }
     if spec.input_json.len() > MAX_WORK_PAYLOAD_LENGTH {
         return Err("work item input is outside the payload bound");
     }
     Ok(())
+}
+
+fn validate_work_item_target(
+    spec: &WorkItemSpec,
+    expected_work_set_id: &str,
+) -> Result<(), &'static str> {
+    let target = validate_ui_target_json(&spec.target_json)?;
+    if target.work_set_id.as_deref() != Some(expected_work_set_id) {
+        return Err("UI target does not match the work set");
+    }
+    if target.view_type == "course_summary"
+        && (target.entity_type.as_deref() != Some(spec.entity_type.as_str())
+            || target.entity_id.as_deref() != Some(spec.entity_id.as_str()))
+    {
+        return Err("UI target does not match the work entity");
+    }
+    Ok(())
+}
+
+pub fn validate_ui_target_json(target_json: &str) -> Result<UiTargetRef, &'static str> {
+    if target_json.is_empty() || target_json.len() > MAX_UI_TARGET_LENGTH {
+        return Err("UI target is outside the payload bound");
+    }
+    let target: UiTargetRef = serde_json::from_str(target_json).map_err(|_| "invalid UI target")?;
+    if target.schema_version != UI_TARGET_SCHEMA_VERSION {
+        return Err("unsupported UI target schema version");
+    }
+    for value in [
+        target.work_set_id.as_deref(),
+        target.entity_type.as_deref(),
+        target.entity_id.as_deref(),
+        target.slot.as_deref(),
+    ]
+    .into_iter()
+    .flatten()
+    {
+        validate_identifier(value, "invalid UI target identifier")?;
+    }
+    match target.view_type.as_str() {
+        "home"
+            if target.work_set_id.is_none()
+                && target.entity_type.is_none()
+                && target.entity_id.is_none()
+                && target.slot.is_none() =>
+        {
+            Ok(target)
+        }
+        "catalog" => Ok(target),
+        "course_summary"
+            if target.work_set_id.is_some()
+                && target.entity_type.as_deref() == Some("course")
+                && target.entity_id.is_some() =>
+        {
+            Ok(target)
+        }
+        "home" | "course_summary" => Err("incomplete UI target"),
+        _ => Err("unsupported UI target view type"),
+    }
+}
+
+fn validate_activity_receipt_state(state: &str) -> Result<(), &'static str> {
+    match state {
+        "observed_in_place" | "opened" | "dismissed" => Ok(()),
+        _ => Err("unsupported UI activity receipt state"),
+    }
 }
 
 pub fn validate_directive(
@@ -495,7 +682,8 @@ pub fn validate_turn_update(kind: &str, payload_json: &str) -> Result<(), &'stat
 pub fn validate_catalog_course_seed(course: &CatalogCourseSeed) -> Result<(), &'static str> {
     validate_identifier(&course.course_id, "invalid course identifier")?;
     validate_identifier(&course.institution_id, "invalid institution identifier")?;
-    if course.institution_name.is_empty() || course.institution_name.len() > MAX_CATALOG_NAME_LENGTH {
+    if course.institution_name.is_empty() || course.institution_name.len() > MAX_CATALOG_NAME_LENGTH
+    {
         return Err("invalid institution name");
     }
     if course.name.is_empty() || course.name.len() > MAX_CATALOG_NAME_LENGTH {
@@ -584,6 +772,100 @@ fn work_item_id(work_set_id: &str, index: usize) -> String {
     format!("{work_set_id}-{index}")
 }
 
+fn ui_activity_id(work_item_id: &str) -> String {
+    format!("{work_item_id}-activity")
+}
+
+fn stable_internal_id(parts: &[&str]) -> String {
+    let source = parts.join("\u{1f}");
+    blake3::hash(source.as_bytes()).to_hex().to_string()
+}
+
+fn current_course_summary_dependencies(
+    ctx: &ReducerContext,
+    item: &WorkspaceWorkItem,
+) -> Option<CourseSummaryDependencies> {
+    let profile = ctx
+        .db
+        .conversation_profile()
+        .conversation_id()
+        .find(&item.conversation_id)?;
+    let course = ctx.db.catalog_course().course_id().find(&item.entity_id)?;
+    let candidate_areas =
+        serde_json::from_str::<Vec<String>>(&profile.candidate_areas_json).ok()?;
+    Some(CourseSummaryDependencies {
+        profile: ProfileDependency {
+            background: profile.background,
+            course_interests: profile.course_interests,
+            ambitions: profile.ambitions,
+            primary_area: profile.primary_area,
+            candidate_areas,
+            student_phrase: profile.student_phrase,
+            constraints_text: profile.constraints_text,
+        },
+        course: CourseDependency {
+            course_id: course.course_id,
+            institution_id: course.institution_id,
+            institution_name: course.institution_name,
+            country: course.country,
+            city: course.city,
+            name: course.name,
+            area: course.area,
+            level: course.level,
+            tuition_band: course.tuition_band,
+            english_bar: course.english_bar,
+        },
+    })
+}
+
+fn refresh_course_summary_input(
+    item: &mut WorkspaceWorkItem,
+    control: &mut WorkspaceWorkControl,
+    dependencies: &CourseSummaryDependencies,
+) -> Result<(), &'static str> {
+    let mut input: serde_json::Value =
+        serde_json::from_str(&item.input_json).map_err(|_| "invalid course summary input")?;
+    let object = input
+        .as_object_mut()
+        .ok_or("invalid course summary input")?;
+    object.insert(
+        "profile".into(),
+        serde_json::to_value(&dependencies.profile).map_err(|_| "invalid profile dependency")?,
+    );
+    let course =
+        serde_json::to_value(&dependencies.course).map_err(|_| "invalid course dependency")?;
+    let course = course.as_object().ok_or("invalid course dependency")?;
+    for (key, value) in course {
+        object.insert(key.clone(), value.clone());
+    }
+    item.input_json = serde_json::to_string(&input).map_err(|_| "invalid course summary input")?;
+    control.dependency_json =
+        serde_json::to_string(dependencies).map_err(|_| "invalid course summary dependencies")?;
+    Ok(())
+}
+
+fn activity_label(control: &WorkspaceWorkControl, result_json: &str) -> String {
+    let title = serde_json::from_str::<serde_json::Value>(result_json)
+        .ok()
+        .and_then(|value| {
+            value
+                .get("title")
+                .and_then(|title| title.as_str())
+                .map(str::to_owned)
+        })
+        .filter(|title| !title.trim().is_empty())
+        .unwrap_or_else(|| {
+            control
+                .display_title
+                .trim_start_matches("Comparing ")
+                .to_owned()
+        });
+    format!(
+        "{} summary added",
+        title.chars().take(220).collect::<String>()
+    )
+}
+
 fn refresh_work_set_status(ctx: &ReducerContext, work_set_id: &str) {
     let mut work_set = ctx
         .db
@@ -597,7 +879,10 @@ fn refresh_work_set_status(ctx: &ReducerContext, work_set_id: &str) {
         .work_set_id()
         .filter(work_set_id)
         .collect();
-    let completed = items.iter().filter(|item| item.status == "completed").count();
+    let completed = items
+        .iter()
+        .filter(|item| item.status == "completed")
+        .count();
     let failed = items
         .iter()
         .filter(|item| item.status == "failed" || item.status == "obsolete")
@@ -646,7 +931,13 @@ fn has_active_turn(ctx: &ReducerContext, conversation_id: &str) -> bool {
 
 fn ensure_registered_worker(ctx: &ReducerContext) {
     ensure_worker_auth(ctx);
-    if ctx.db.worker_principal().worker_id().find(&caller(ctx)).is_none() {
+    if ctx
+        .db
+        .worker_principal()
+        .worker_id()
+        .find(&caller(ctx))
+        .is_none()
+    {
         panic!("worker is not registered");
     }
 }
@@ -680,7 +971,12 @@ fn finish_with_error(
 pub fn ensure_guest_journey(ctx: &ReducerContext, conversation_id: String) {
     validate_conversation_id(&conversation_id).unwrap_or_else(|error| panic!("{error}"));
     let principal_id = caller(ctx);
-    if let Some(existing) = ctx.db.conversation().conversation_id().find(&conversation_id) {
+    if let Some(existing) = ctx
+        .db
+        .conversation()
+        .conversation_id()
+        .find(&conversation_id)
+    {
         if existing.owner_principal_id != principal_id {
             panic!("conversation access denied");
         }
@@ -688,7 +984,13 @@ pub fn ensure_guest_journey(ctx: &ReducerContext, conversation_id: String) {
     }
 
     let now = now_micros(ctx);
-    if ctx.db.principal().principal_id().find(&principal_id).is_none() {
+    if ctx
+        .db
+        .principal()
+        .principal_id()
+        .find(&principal_id)
+        .is_none()
+    {
         ctx.db.principal().insert(Principal {
             principal_id: principal_id.clone(),
             kind: "guest".into(),
@@ -704,11 +1006,13 @@ pub fn ensure_guest_journey(ctx: &ReducerContext, conversation_id: String) {
         context_revision: 0,
         created_at_micros: now,
     });
-    ctx.db.conversation_membership().insert(ConversationMembership {
-        membership_id: conversation_id.clone(),
-        conversation_id: conversation_id.clone(),
-        principal_id,
-    });
+    ctx.db
+        .conversation_membership()
+        .insert(ConversationMembership {
+            membership_id: conversation_id.clone(),
+            conversation_id: conversation_id.clone(),
+            principal_id,
+        });
     ctx.db.conversation_profile().insert(ConversationProfile {
         conversation_id,
         profile_queue_key: 1,
@@ -752,7 +1056,13 @@ pub fn login(ctx: &ReducerContext, username: String, password: String) -> Result
         username: user.username,
         logged_in_at_micros: now_micros(ctx),
     };
-    if ctx.db.auth_session().identity().find(ctx.sender()).is_some() {
+    if ctx
+        .db
+        .auth_session()
+        .identity()
+        .find(ctx.sender())
+        .is_some()
+    {
         ctx.db.auth_session().identity().update(session);
     } else {
         ctx.db.auth_session().insert(session);
@@ -773,7 +1083,13 @@ pub fn send_message(
     validate_message_content(&content).unwrap_or_else(|error| panic!("{error}"));
     ensure_member(ctx, &conversation_id);
 
-    if ctx.db.command().command_id().find(&client_command_id).is_some() {
+    if ctx
+        .db
+        .command()
+        .command_id()
+        .find(&client_command_id)
+        .is_some()
+    {
         return;
     }
     if has_active_turn(ctx, &conversation_id) {
@@ -914,7 +1230,8 @@ pub fn complete_turn(
 ) {
     ensure_registered_worker(ctx);
     validate_message_content(&assistant_content).unwrap_or_else(|error| panic!("{error}"));
-    validate_identifier(&run_id, "invalid run identifier").unwrap_or_else(|error| panic!("{error}"));
+    validate_identifier(&run_id, "invalid run identifier")
+        .unwrap_or_else(|error| panic!("{error}"));
     validate_identifier(&agent_thread_id, "invalid agent thread identifier")
         .unwrap_or_else(|error| panic!("{error}"));
     validate_directive(
@@ -1001,7 +1318,13 @@ pub fn complete_turn(
     });
     let created_work_set_id = (!work_items.is_empty()).then(|| work_set_id(&turn_id));
     if let Some(ref set_id) = created_work_set_id {
-        if ctx.db.workspace_work_set().work_set_id().find(set_id).is_some() {
+        if ctx
+            .db
+            .workspace_work_set()
+            .work_set_id()
+            .find(set_id)
+            .is_some()
+        {
             panic!("work set already exists");
         }
         ctx.db.workspace_work_set().insert(WorkspaceWorkSet {
@@ -1015,8 +1338,10 @@ pub fn complete_turn(
             created_at_micros: now,
         });
         for (index, spec) in work_items.into_iter().enumerate() {
+            validate_work_item_target(&spec, set_id).unwrap_or_else(|error| panic!("{error}"));
+            let item_id = work_item_id(set_id, index);
             ctx.db.workspace_work_item().insert(WorkspaceWorkItem {
-                work_item_id: work_item_id(set_id, index),
+                work_item_id: item_id.clone(),
                 work_set_id: set_id.clone(),
                 conversation_id: job.conversation_id.clone(),
                 entity_type: spec.entity_type,
@@ -1031,6 +1356,16 @@ pub fn complete_turn(
                 expected_ui_revision: directive_ui_revision,
                 error_code: None,
             });
+            ctx.db
+                .workspace_work_control()
+                .insert(WorkspaceWorkControl {
+                    work_item_id: item_id,
+                    conversation_id: job.conversation_id.clone(),
+                    display_title: spec.display_title,
+                    order_index: spec.order_index,
+                    target_json: spec.target_json,
+                    dependency_json: spec.dependency_json,
+                });
         }
     }
     let directive = ActiveDirective {
@@ -1050,7 +1385,10 @@ pub fn complete_turn(
         .find(&directive.conversation_id)
         .is_some()
     {
-        ctx.db.active_directive().conversation_id().update(directive);
+        ctx.db
+            .active_directive()
+            .conversation_id()
+            .update(directive);
     } else {
         ctx.db.active_directive().insert(directive);
     }
@@ -1156,7 +1494,13 @@ pub fn upsert_conversation_profile(
         validate_profile_field(field).unwrap_or_else(|error| panic!("{error}"));
     }
     validate_student_phrase(&student_phrase).unwrap_or_else(|error| panic!("{error}"));
-    if ctx.db.conversation().conversation_id().find(&conversation_id).is_none() {
+    if ctx
+        .db
+        .conversation()
+        .conversation_id()
+        .find(&conversation_id)
+        .is_none()
+    {
         panic!("conversation not found");
     }
     let now = now_micros(ctx);
@@ -1215,7 +1559,13 @@ pub fn update_discovery_profile(
         validate_profile_field(field).unwrap_or_else(|error| panic!("{error}"));
     }
     validate_student_phrase(&student_phrase).unwrap_or_else(|error| panic!("{error}"));
-    if ctx.db.command().command_id().find(&client_command_id).is_some() {
+    if ctx
+        .db
+        .command()
+        .command_id()
+        .find(&client_command_id)
+        .is_some()
+    {
         return;
     }
     let now = now_micros(ctx);
@@ -1385,7 +1735,10 @@ pub fn claim_work_item(
     item.status = "claimed".into();
     item.worker_id = Some(caller(ctx));
     item.lease_until_micros = Some(now + (lease_seconds * 1_000_000) as i64);
-    item.attempt = item.attempt.checked_add(1).expect("work item attempt exhausted");
+    item.attempt = item
+        .attempt
+        .checked_add(1)
+        .expect("work item attempt exhausted");
     item.error_code = None;
     ctx.db.workspace_work_item().work_item_id().update(item);
 }
@@ -1475,7 +1828,8 @@ pub fn complete_work_item(
         panic!("work result is outside the payload bound");
     }
     if let Some(ref value) = run_id {
-        validate_identifier(value, "invalid run identifier").unwrap_or_else(|error| panic!("{error}"));
+        validate_identifier(value, "invalid run identifier")
+            .unwrap_or_else(|error| panic!("{error}"));
     }
     let now = now_micros(ctx);
     let mut item = ctx
@@ -1487,41 +1841,151 @@ pub fn complete_work_item(
     if !work_item_lease_owner_matches(&item, &caller(ctx), attempt, now) {
         panic!("stale or unauthorized work item attempt");
     }
-    let conversation = ctx
+    let mut control = ctx
         .db
-        .conversation()
-        .conversation_id()
-        .find(&item.conversation_id)
-        .expect("conversation not found");
-    let directive = ctx
-        .db
-        .active_directive()
-        .conversation_id()
-        .find(&item.conversation_id)
-        .expect("active directive not found");
-    let applicable = conversation.context_revision == item.expected_context_revision
-        && conversation.ui_revision == item.expected_ui_revision
-        && directive.ui_revision == item.expected_ui_revision
-        && directive.work_set_id.as_deref() == Some(item.work_set_id.as_str());
+        .workspace_work_control()
+        .work_item_id()
+        .find(&work_item_id)
+        .expect("work item control not found");
     let set_id = item.work_set_id.clone();
-    if applicable {
-        ctx.db.workspace_result().insert(WorkspaceResult {
-            work_item_id: item.work_item_id.clone(),
-            work_set_id: set_id.clone(),
-            conversation_id: item.conversation_id.clone(),
-            result_revision: 1,
-            result_json,
-            run_id,
-            completed_at_micros: now,
-        });
-        item.status = "completed".into();
-    } else {
-        item.status = "obsolete".into();
-        item.error_code = Some("stale_context".into());
+    if item.kind == "course_fit_summary" {
+        let expected: CourseSummaryDependencies = serde_json::from_str(&control.dependency_json)
+            .unwrap_or_else(|_| panic!("invalid course summary dependencies"));
+        let Some(current) = current_course_summary_dependencies(ctx, &item) else {
+            item.status = "obsolete".into();
+            item.worker_id = None;
+            item.lease_until_micros = None;
+            item.error_code = Some("dependencies_unavailable".into());
+            ctx.db.workspace_work_item().work_item_id().update(item);
+            refresh_work_set_status(ctx, &set_id);
+            return;
+        };
+        if expected != current {
+            refresh_course_summary_input(&mut item, &mut control, &current)
+                .unwrap_or_else(|error| panic!("{error}"));
+            item.status = "retrying".into();
+            item.worker_id = None;
+            item.lease_until_micros = None;
+            item.error_code = Some("dependencies_changed".into());
+            item.expected_context_revision = ctx
+                .db
+                .conversation()
+                .conversation_id()
+                .find(&item.conversation_id)
+                .expect("conversation not found")
+                .context_revision;
+            ctx.db
+                .workspace_work_control()
+                .work_item_id()
+                .update(control);
+            ctx.db.workspace_work_item().work_item_id().update(item);
+            refresh_work_set_status(ctx, &set_id);
+            return;
+        }
     }
+
+    let label = activity_label(&control, &result_json);
+    ctx.db.workspace_result().insert(WorkspaceResult {
+        work_item_id: item.work_item_id.clone(),
+        work_set_id: set_id.clone(),
+        conversation_id: item.conversation_id.clone(),
+        result_revision: 1,
+        result_json,
+        run_id,
+        completed_at_micros: now,
+    });
+    ctx.db.ui_activity().insert(UiActivity {
+        activity_id: ui_activity_id(&item.work_item_id),
+        conversation_id: item.conversation_id.clone(),
+        work_item_id: item.work_item_id.clone(),
+        kind: "content_updated".into(),
+        label,
+        target_json: control.target_json,
+        created_at_micros: now,
+    });
+    item.status = "completed".into();
     item.lease_until_micros = None;
     ctx.db.workspace_work_item().work_item_id().update(item);
     refresh_work_set_status(ctx, &set_id);
+}
+
+#[spacetimedb::reducer]
+pub fn publish_ui_context(
+    ctx: &ReducerContext,
+    conversation_id: String,
+    client_instance_id: String,
+    target_json: String,
+    navigation_revision: u64,
+    visible: bool,
+) {
+    validate_conversation_id(&conversation_id).unwrap_or_else(|error| panic!("{error}"));
+    validate_identifier(&client_instance_id, "invalid UI client identifier")
+        .unwrap_or_else(|error| panic!("{error}"));
+    validate_ui_target_json(&target_json).unwrap_or_else(|error| panic!("{error}"));
+    ensure_member(ctx, &conversation_id);
+    let principal_id = caller(ctx);
+    let context_id = stable_internal_id(&[&principal_id, &conversation_id, &client_instance_id]);
+    let next = UiClientContext {
+        context_id: context_id.clone(),
+        conversation_id,
+        principal_id,
+        client_instance_id,
+        target_json,
+        navigation_revision,
+        visible,
+        updated_at_micros: now_micros(ctx),
+    };
+    if let Some(existing) = ctx.db.ui_client_context().context_id().find(&context_id) {
+        if navigation_revision < existing.navigation_revision {
+            panic!("stale UI navigation revision");
+        }
+        ctx.db.ui_client_context().context_id().update(next);
+    } else {
+        ctx.db.ui_client_context().insert(next);
+    }
+}
+
+#[spacetimedb::reducer]
+pub fn acknowledge_ui_activity(
+    ctx: &ReducerContext,
+    conversation_id: String,
+    activity_id: String,
+    state: String,
+) {
+    validate_conversation_id(&conversation_id).unwrap_or_else(|error| panic!("{error}"));
+    validate_identifier(&activity_id, "invalid UI activity identifier")
+        .unwrap_or_else(|error| panic!("{error}"));
+    validate_activity_receipt_state(&state).unwrap_or_else(|error| panic!("{error}"));
+    ensure_member(ctx, &conversation_id);
+    let activity = ctx
+        .db
+        .ui_activity()
+        .activity_id()
+        .find(&activity_id)
+        .expect("UI activity not found");
+    if activity.conversation_id != conversation_id {
+        panic!("UI activity does not belong to the conversation");
+    }
+    let principal_id = caller(ctx);
+    let receipt_id = stable_internal_id(&[&activity_id, &principal_id]);
+    let receipt = UiActivityReceipt {
+        receipt_id: receipt_id.clone(),
+        activity_id,
+        principal_id,
+        state,
+        updated_at_micros: now_micros(ctx),
+    };
+    if ctx
+        .db
+        .ui_activity_receipt()
+        .receipt_id()
+        .find(&receipt_id)
+        .is_some()
+    {
+        ctx.db.ui_activity_receipt().receipt_id().update(receipt);
+    } else {
+        ctx.db.ui_activity_receipt().insert(receipt);
+    }
 }
 
 fn caller_conversation_ids(ctx: &ViewContext) -> Vec<String> {
@@ -1538,7 +2002,12 @@ fn caller_conversation_ids(ctx: &ViewContext) -> Vec<String> {
 fn my_conversations(ctx: &ViewContext) -> Vec<Conversation> {
     caller_conversation_ids(ctx)
         .into_iter()
-        .filter_map(|conversation_id| ctx.db.conversation().conversation_id().find(&conversation_id))
+        .filter_map(|conversation_id| {
+            ctx.db
+                .conversation()
+                .conversation_id()
+                .find(&conversation_id)
+        })
         .collect()
 }
 
@@ -1625,6 +2094,20 @@ fn my_workspace_work_items(ctx: &ViewContext) -> Vec<WorkspaceWorkItem> {
         .collect()
 }
 
+#[spacetimedb::view(accessor = my_workspace_work_controls, public)]
+fn my_workspace_work_controls(ctx: &ViewContext) -> Vec<WorkspaceWorkControl> {
+    caller_conversation_ids(ctx)
+        .into_iter()
+        .flat_map(|conversation_id| {
+            ctx.db
+                .workspace_work_control()
+                .conversation_id()
+                .filter(&conversation_id)
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
 #[spacetimedb::view(accessor = my_workspace_results, public)]
 fn my_workspace_results(ctx: &ViewContext) -> Vec<WorkspaceResult> {
     caller_conversation_ids(ctx)
@@ -1636,6 +2119,40 @@ fn my_workspace_results(ctx: &ViewContext) -> Vec<WorkspaceResult> {
                 .filter(&conversation_id)
                 .collect::<Vec<_>>()
         })
+        .collect()
+}
+
+#[spacetimedb::view(accessor = my_ui_activities, public)]
+fn my_ui_activities(ctx: &ViewContext) -> Vec<UiActivity> {
+    caller_conversation_ids(ctx)
+        .into_iter()
+        .flat_map(|conversation_id| {
+            ctx.db
+                .ui_activity()
+                .conversation_id()
+                .filter(&conversation_id)
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
+#[spacetimedb::view(accessor = my_ui_activity_receipts, public)]
+fn my_ui_activity_receipts(ctx: &ViewContext) -> Vec<UiActivityReceipt> {
+    let principal_id = ctx.sender().to_string();
+    ctx.db
+        .ui_activity_receipt()
+        .principal_id()
+        .filter(&principal_id)
+        .collect()
+}
+
+#[spacetimedb::view(accessor = my_ui_client_contexts, public)]
+fn my_ui_client_contexts(ctx: &ViewContext) -> Vec<UiClientContext> {
+    let principal_id = ctx.sender().to_string();
+    ctx.db
+        .ui_client_context()
+        .principal_id()
+        .filter(&principal_id)
         .collect()
 }
 
@@ -1738,19 +2255,30 @@ fn worker_pending_work_items(ctx: &ViewContext) -> Vec<WorkerPendingWorkItem> {
     ["pending", "retrying", "claimed"]
         .into_iter()
         .flat_map(|status| ctx.db.workspace_work_item().status().filter(status))
-        .map(|item| WorkerPendingWorkItem {
-            work_item_id: item.work_item_id,
-            work_set_id: item.work_set_id,
-            conversation_id: item.conversation_id,
-            entity_type: item.entity_type,
-            entity_id: item.entity_id,
-            kind: item.kind,
-            input_json: item.input_json,
-            status: item.status,
-            lease_until_micros: item.lease_until_micros,
-            attempt: item.attempt,
-            expected_context_revision: item.expected_context_revision,
-            expected_ui_revision: item.expected_ui_revision,
+        .filter_map(|item| {
+            let control = ctx
+                .db
+                .workspace_work_control()
+                .work_item_id()
+                .find(&item.work_item_id)?;
+            Some(WorkerPendingWorkItem {
+                work_item_id: item.work_item_id,
+                work_set_id: item.work_set_id,
+                conversation_id: item.conversation_id,
+                entity_type: item.entity_type,
+                entity_id: item.entity_id,
+                kind: item.kind,
+                display_title: control.display_title,
+                order_index: control.order_index,
+                target_json: control.target_json,
+                dependency_json: control.dependency_json,
+                input_json: item.input_json,
+                status: item.status,
+                lease_until_micros: item.lease_until_micros,
+                attempt: item.attempt,
+                expected_context_revision: item.expected_context_revision,
+                expected_ui_revision: item.expected_ui_revision,
+            })
         })
         .collect()
 }
@@ -1786,11 +2314,17 @@ mod tests {
         CATALOG_VIEW, DISCOVERY_VIEW, TurnJob, WorkItemSpec, WorkspaceWorkItem, lease_is_expired,
         lease_owner_matches, turn_is_claimable, validate_command_id, validate_conversation_id,
         validate_directive, validate_directive_revision, validate_error_code,
-        validate_message_content, validate_turn_update, validate_work_item_spec,
-        work_item_is_claimable, work_item_lease_owner_matches,
+        validate_message_content, validate_turn_update, validate_ui_target_json,
+        validate_work_item_spec, validate_work_item_target, work_item_is_claimable,
+        work_item_lease_owner_matches,
     };
 
-    fn turn(status: &str, worker_id: Option<&str>, lease_until_micros: Option<i64>, attempt: u32) -> TurnJob {
+    fn turn(
+        status: &str,
+        worker_id: Option<&str>,
+        lease_until_micros: Option<i64>,
+        attempt: u32,
+    ) -> TurnJob {
         TurnJob {
             turn_id: "turn-1".into(),
             conversation_id: "conversation-1".into(),
@@ -1807,7 +2341,12 @@ mod tests {
         }
     }
 
-    fn work_item(status: &str, worker_id: Option<&str>, lease_until_micros: Option<i64>, attempt: u32) -> WorkspaceWorkItem {
+    fn work_item(
+        status: &str,
+        worker_id: Option<&str>,
+        lease_until_micros: Option<i64>,
+        attempt: u32,
+    ) -> WorkspaceWorkItem {
         WorkspaceWorkItem {
             work_item_id: "turn-1-work-0".into(),
             work_set_id: "turn-1-work".into(),
@@ -1837,23 +2376,58 @@ mod tests {
         assert!(validate_message_content(&"x".repeat(16_001)).is_err());
         assert!(validate_error_code("agent_unavailable").is_ok());
         assert!(validate_error_code(&"x".repeat(513)).is_err());
-        assert!(validate_work_item_spec(&WorkItemSpec {
-            entity_type: "discovery_topic".into(),
-            entity_id: "goals".into(),
-            kind: "advisor_prompt".into(),
+        assert!(
+            validate_work_item_spec(&WorkItemSpec {
+                entity_type: "discovery_topic".into(),
+                entity_id: "goals".into(),
+                kind: "advisor_prompt".into(),
+                display_title: "Preparing goals".into(),
+                order_index: 0,
+                target_json: r#"{"schemaVersion":1,"viewType":"catalog"}"#.into(),
+                dependency_json: "{}".into(),
+                input_json: "{}".into(),
+            })
+            .is_ok()
+        );
+        assert!(validate_ui_target_json(r#"{"schemaVersion":1,"viewType":"home"}"#).is_ok());
+        assert!(validate_ui_target_json(r#"{"schemaVersion":1,"viewType":"course_summary","entityType":"course","entityId":"course-1"}"#).is_err());
+        assert!(
+            validate_ui_target_json(r#"{"schemaVersion":1,"viewType":"react_component"}"#).is_err()
+        );
+
+        let course_spec = WorkItemSpec {
+            entity_type: "course".into(),
+            entity_id: "course-1".into(),
+            kind: "course_fit_summary".into(),
+            display_title: "Comparing Course 1".into(),
+            order_index: 0,
+            target_json: r#"{"schemaVersion":1,"viewType":"course_summary","workSetId":"turn-1-work","entityType":"course","entityId":"course-1","slot":"summary"}"#.into(),
+            dependency_json: r#"{"profile":{"background":"","courseInterests":"","ambitions":"","primaryArea":"","candidateAreas":[],"studentPhrase":"","constraintsText":""},"course":{"courseId":"course-1","institutionId":"institution-1","institutionName":"Institution","country":"Country","city":"City","name":"Course 1","area":"computing","level":"bachelor","tuitionBand":"","englishBar":""}}"#.into(),
             input_json: "{}".into(),
-        }).is_ok());
+        };
+        assert!(validate_work_item_target(&course_spec, "turn-1-work").is_ok());
+        let mut mismatched = course_spec;
+        mismatched.target_json = r#"{"schemaVersion":1,"viewType":"course_summary","workSetId":"turn-1-work","entityType":"course","entityId":"course-2","slot":"summary"}"#.into();
+        assert!(validate_work_item_target(&mismatched, "turn-1-work").is_err());
     }
 
     #[test]
     fn accepts_discovery_and_catalog_directive_contracts() {
         assert!(validate_directive(1, DISCOVERY_VIEW, "Ready to help.").is_ok());
-        assert!(validate_directive(1, CATALOG_VIEW, "Showing courses related to programming.").is_ok());
+        assert!(
+            validate_directive(1, CATALOG_VIEW, "Showing courses related to programming.").is_ok()
+        );
         assert!(validate_directive(2, DISCOVERY_VIEW, "Ready").is_err());
         assert!(validate_directive(1, "compare", "Ready").is_err());
         assert!(validate_directive(1, DISCOVERY_VIEW, &"x".repeat(513)).is_err());
         assert!(validate_turn_update("turn_started", "{}").is_ok());
-        assert!(validate_turn_update("course_search_started", r#"{"studentPhrase":"programming"}"#).is_ok());
+        assert!(
+            validate_turn_update(
+                "course_search_started",
+                r#"{"studentPhrase":"programming"}"#
+            )
+            .is_ok()
+        );
         assert!(validate_turn_update("unknown", "{}").is_err());
     }
 

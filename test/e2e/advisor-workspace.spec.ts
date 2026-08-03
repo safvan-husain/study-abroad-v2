@@ -19,9 +19,18 @@ test('direct advisor turn publishes progressive search and independent course fi
   await page.getByRole('button', { name: 'Send message' }).click();
 
   await expect(page.getByText('I am interested in programming and want help getting started.')).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Course matches for you' })).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByText('Your workspace is ready')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Course matches for you' })).toHaveCount(0);
+  const openSummary = page.getByRole('button', { name: 'Open summary' }).first();
+  await expect(openSummary).toBeVisible({ timeout: 60_000 });
+  await openSummary.click();
+  await expect(page.getByRole('heading', { name: 'Course matches for you' })).toBeVisible({ timeout: 20_000 });
   await expect(page.getByText(/Showing courses related to/i).first()).toBeVisible({ timeout: 60_000 });
   await expect(page.getByText(/Computer Science|Computer Systems|indicative fit/i).first()).toBeVisible({ timeout: 60_000 });
   await expect(page.getByRole('complementary', { name: 'Study advisor' }).getByText(/Computer Science|indicative fit/i)).toHaveCount(0);
+
+  await page.goBack();
+  await expect(page.getByText('Your workspace is ready')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Open again' }).first()).toBeVisible();
   expect(transcriptRequests).toEqual([]);
 });
