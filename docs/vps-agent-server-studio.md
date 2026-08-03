@@ -153,10 +153,12 @@ The secret lives only in `AGENT_SERVER_ACCESS_TOKEN` in the VPS `.env` and the
 authorized user's Studio connection settings. It must not be committed, placed
 in trace metadata, or added to `AGENT_SERVER_PUBLIC_URL`.
 
-Caddy allows unauthenticated `OPTIONS` requests to reach the Agent Server so
-browser CORS preflight continues to work, while requiring the token on actual
-API requests. The internal worker keeps using `http://agent-server:2024`; it
-does not pass through the public Caddy proxy and does not need the token.
+Caddy allows unauthenticated `OPTIONS` requests so browser CORS preflight
+continues to work. It also allows Studio's initial `/info` bootstrap request;
+that endpoint exposes runtime metadata but no thread or run data. All other
+public API requests require the token. The internal worker keeps using
+`http://agent-server:2024`; it does not pass through the public Caddy proxy and
+does not need the token.
 
 Every browser that uses Studio must configure:
 
