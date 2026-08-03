@@ -17,3 +17,6 @@ __pycache__/
 *.egg-info/
 artifacts/
 test-results/
+
+# Contains the live VPS Agent Server secret. Never commit this private skill.
+.agents/skills/connect-langsmith-agent-server/
