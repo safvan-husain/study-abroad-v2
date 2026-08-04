@@ -146,4 +146,42 @@ describe('advisor workspace UI', () => {
     expect(card).toContain('Open again');
     expect(transcript).toContain('Computer Science summary added');
   });
+
+  it('shows the parent catalogue area as a badge under the composer when families are presented', () => {
+    const rail = renderToStaticMarkup(<AdvisorRail
+      connectionState="ready"
+      messages={[]}
+      turns={[]}
+      turnUpdates={[]}
+      selection={{
+        revision: 1n,
+        presentedFamilyIds: ['computer-science', 'mathematical-and-computing-sciences-for-artificial-intelligence'],
+        presentedOfferingIds: [],
+        provisionalOfferingIds: [],
+        suppressedOfferingIds: [],
+        confirmedOfferingIds: [],
+        confirmedSnapshotId: null,
+        comparisonCriterion: '',
+      }}
+      catalogFamilies={[
+        {
+          familyId: 'computer-science', areaId: 'computing-technology', name: 'Computer Science',
+          aliasesJson: '[]', description: '', typicalSubjectsJson: '[]', careerDirectionsJson: '[]', relatedFamilyIdsJson: '[]',
+        },
+        {
+          familyId: 'mathematical-and-computing-sciences-for-artificial-intelligence',
+          areaId: 'computing-technology',
+          name: 'Mathematical and Computing Sciences for Artificial Intelligence',
+          aliasesJson: '[]', description: '', typicalSubjectsJson: '[]', careerDirectionsJson: '[]', relatedFamilyIdsJson: '[]',
+        },
+      ]}
+      onSend={async () => undefined}
+      onUpdateProfile={async () => undefined}
+    />);
+    expect(rail).toContain('Computer Science');
+    expect(rail).toContain('Mathematical and Computing Sciences for Artificial Intelligence');
+    expect(rail).toContain('composer-area-badge');
+    expect(rail).toContain('Computing and Technology');
+    expect(rail.match(/Computing and Technology/g)?.length).toBe(1);
+  });
 });
