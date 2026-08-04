@@ -20,8 +20,6 @@ from langchain_core.messages import HumanMessage
 from agent_server.graph import route_intent
 from agent_server.initial_state import initial_discover_state
 
-from tests.catalog_fixtures import COURSES, FAMILIES, COMPUTING_AREA_ID
-
 INTEREST_MESSAGE = "Hi, I like to learn computer programming or computer science."
 
 
@@ -45,9 +43,6 @@ def test_programming_interest_statement_routes_to_discovery_live():
     """Broad subject interest must not be classified as guidance."""
     state = initial_discover_state(
         messages=[HumanMessage(content=INTEREST_MESSAGE)],
-        catalog_areas=[COMPUTING_AREA_ID],
-        catalog_families=FAMILIES,
-        catalog_courses=COURSES,
     )
     update = route_intent(state)
     route = update["route_decision"]

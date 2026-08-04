@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { Client } from '@langchain/langgraph-sdk';
-import type { AdvisorTurnResult, CatalogFamilyView, ChatMessage, DiscoveryTurnResult, CourseFitResult, CatalogCourseView, DiscoveryProfilePatch, UserUiState } from '@study-abroad/contracts';
+import type { AdvisorTurnResult, CatalogCourseView, ChatMessage, DiscoveryProfilePatch, DiscoveryTurnResult, CourseFitResult, UserUiState } from '@study-abroad/contracts';
 import { advisorTurnResult, discoveryTurnResult, courseFitResult } from '@study-abroad/contracts';
 import type { WorkerConfig } from '../config.js';
 
@@ -36,9 +36,6 @@ export interface AgentClient {
     input: ChatMessage[],
     ids: { conversationId: string; turnId: string; correlationId: string },
     context?: {
-      catalogAreas: string[];
-      catalogFamilies: CatalogFamilyView[];
-      catalogCourses: CatalogCourseView[];
       profile: DiscoveryProfilePatch;
       uiContext: UserUiState;
       selectionContext: AgentSelectionContext;
@@ -86,9 +83,6 @@ export class AgentServerClient implements AgentClient {
     messages: ChatMessage[],
     ids: { conversationId: string; turnId: string; correlationId: string },
     context?: {
-      catalogAreas: string[];
-      catalogFamilies: CatalogFamilyView[];
-      catalogCourses: CatalogCourseView[];
       profile: DiscoveryProfilePatch;
       uiContext: UserUiState;
       selectionContext: AgentSelectionContext;
@@ -107,17 +101,12 @@ export class AgentServerClient implements AgentClient {
       correlation_id: ids.correlationId,
       ...(this.config.LANGGRAPH_API_URL ? { LANGGRAPH_API_URL: this.config.LANGGRAPH_API_URL } : {}),
     };
+    // Catalog lives in the agent-server process index — do not dump into checkpoint state.
     const input = {
       messages: messages.slice(-1).map(({ content }) => ({ role: 'human', content })),
-      catalog_areas: context?.catalogAreas ?? [],
-      catalog_families: (context?.catalogFamilies ?? []).map((family) => ({
-        ...family,
-        aliases: JSON.parse(family.aliasesJson || '[]'),
-        typicalSubjects: JSON.parse(family.typicalSubjectsJson || '[]'),
-        careerDirections: JSON.parse(family.careerDirectionsJson || '[]'),
-        relatedFamilyIds: JSON.parse(family.relatedFamilyIdsJson || '[]'),
-      })),
-      catalog_courses: context?.catalogCourses ?? [],
+      catalog_areas: [],
+      catalog_families: [],
+      catalog_courses: [],
       profile: context?.profile ?? {},
       ui_context: context?.uiContext ? uiContextForGraph(context.uiContext) : {},
       selection_context: context?.selectionContext ? {

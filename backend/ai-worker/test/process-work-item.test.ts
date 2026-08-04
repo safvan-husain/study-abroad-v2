@@ -26,6 +26,37 @@ describe('processWorkItem', () => {
     expect(coordinator.completeWorkItem).toHaveBeenCalledWith('item-1', 1, expect.stringContaining('Share your grades.'));
   });
 
+  it('writes a deterministic area overview for program_area_overview items', async () => {
+    const coordinator = { claimWorkItem: vi.fn().mockResolvedValue(1), completeWorkItem: vi.fn(), retryWorkItem: vi.fn() };
+    await processWorkItem({
+      ...item,
+      entityType: 'area',
+      entityId: 'computing-technology',
+      kind: 'program_area_overview',
+      displayTitle: 'Computing and Technology',
+      inputJson: JSON.stringify({
+        areaId: 'computing-technology',
+        name: 'Computing and Technology',
+        description: 'Includes course types such as Computer Science.',
+        familyCount: 5,
+        sampleFamilyNames: ['Computer Science', 'Data Science'],
+        offeringCount: 12,
+      }),
+    }, coordinator);
+    expect(coordinator.completeWorkItem).toHaveBeenCalledWith(
+      'item-1',
+      1,
+      expect.stringContaining('Computing and Technology'),
+    );
+    const payload = JSON.parse(coordinator.completeWorkItem.mock.calls[0][2] as string);
+    expect(payload).toMatchObject({
+      entityType: 'area',
+      entityId: 'computing-technology',
+      familyCount: 5,
+      offeringCount: 12,
+    });
+  });
+
   it('writes an indicative course fit summary for course_fit_summary items', async () => {
     const coordinator = { claimWorkItem: vi.fn().mockResolvedValue(1), completeWorkItem: vi.fn(), retryWorkItem: vi.fn() };
     await processWorkItem({

@@ -340,16 +340,17 @@ def route_after_intent(state):
         ],
         stateWrites: ['scope_decision'],
         deterministic: [
-          'Allowed scopes: area_overview, family_offerings, all_area_offerings, compare_offerings, personalize_selection, clarify.',
+          'Allowed scopes: areas_overview, area_overview, family_offerings, all_area_offerings, compare_offerings, personalize_selection, clarify.',
           'areaId / familyIds / offeringIds must exist in catalog.',
           'compare_offerings: 2–4 offerings + comparisonCriterion; message must contain compare cues.',
           'personalize_selection requires offeringIds; family_offerings requires familyIds.',
           '_requests_all_presented override wins over model.',
-          'Fallback scope=clarify if model fails.',
+          'Offline fallback: mapped interest → area_overview; cold-start browse without offering context → areas_overview; else clarify.',
         ],
         pitfalls: [
           'UI context must not continue an old comparison unless the current message asks.',
           'Negative preferences ("dislike coding") are prompt-enforced, not code-enforced.',
+          'Confusion mid-comparison must not reset to areas_overview.',
         ],
         code: `def resolve_catalog_scope(state: AdvisorState) -> dict[str, Any]:
     decision = _ollama_json(
@@ -369,6 +370,31 @@ def route_after_intent(state):
 def route_after_scope(state):
     return state["scope_decision"]["scope"]`,
         lines: '150–194, 268–319',
+      },
+      {
+        id: 'list_catalog_areas',
+        label: 'list_catalog_areas',
+        kind: 'deterministic',
+        x: 220, y: 580, w: 180, h: 52,
+        summary: 'areas_overview leaf: present every top-level catalog area.',
+        does: [
+          'Loads all area IDs from the process catalog index.',
+          'Template acknowledgement inviting the student to pick a field.',
+          'workKind = areas_overview; directive catalog; presented IDs empty.',
+        ],
+        stateReads: ['scope_decision'],
+        stateWrites: ['branch_result'],
+        deterministic: [
+          'No LLM. Count-based copy only.',
+          'Worker derives program_area_overview items from catalog families.',
+        ],
+        pitfalls: [
+          'Does not persist presentedAreaIds yet — follow-ups use interest mapping / chat.',
+        ],
+        code: `def list_catalog_areas(state: AdvisorState) -> dict[str, Any]:
+    areas = get_catalog_index().list_areas()
+    return set_branch_result(build_branch_areas_overview(len(areas)))`,
+        lines: 'list_catalog_areas',
       },
       {
         id: 'explain_course_types',
@@ -661,12 +687,14 @@ graph = builder.compile()`,
       { id: 'e9', from: 'guidance_agent', to: 'validate_guidance', label: '', kind: 'fixed' },
       { id: 'e10', from: 'validate_guidance', to: 'END', label: '', kind: 'fixed' },
       { id: 'e11', from: 'clarification', to: 'validate_discovery', label: '', kind: 'fixed' },
+      { id: 'e12a', from: 'resolve_catalog_scope', to: 'list_catalog_areas', label: 'areas_overview', kind: 'cond' },
       { id: 'e12', from: 'resolve_catalog_scope', to: 'explain_course_types', label: 'area_overview', kind: 'cond' },
       { id: 'e13', from: 'resolve_catalog_scope', to: 'load_all_family_offerings', label: 'family_offerings', kind: 'cond' },
       { id: 'e14', from: 'resolve_catalog_scope', to: 'load_all_area_offerings', label: 'all_area_offerings', kind: 'cond' },
       { id: 'e15', from: 'resolve_catalog_scope', to: 'personalize_selection', label: 'personalize_selection', kind: 'cond' },
       { id: 'e16', from: 'resolve_catalog_scope', to: 'compare_offerings', label: 'compare_offerings', kind: 'cond' },
       { id: 'e17', from: 'resolve_catalog_scope', to: 'clarify_catalog_scope', label: 'clarify', kind: 'cond' },
+      { id: 'e18a', from: 'list_catalog_areas', to: 'validate_discovery', label: '', kind: 'fixed' },
       { id: 'e18', from: 'explain_course_types', to: 'validate_discovery', label: '', kind: 'fixed' },
       { id: 'e19', from: 'load_all_family_offerings', to: 'validate_discovery', label: '', kind: 'fixed' },
       { id: 'e20', from: 'load_all_area_offerings', to: 'validate_discovery', label: '', kind: 'fixed' },

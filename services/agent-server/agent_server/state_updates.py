@@ -45,6 +45,7 @@ __all__ = [
     "append_assistant_message",
     "build_advisor_result",
     "build_branch_area_overview",
+    "build_branch_areas_overview",
     "build_branch_clarification",
     "build_branch_comparison",
     "build_branch_family_offerings",
@@ -148,6 +149,22 @@ def build_branch_guidance(content: str) -> BranchResult:
         "presentedFamilyIds": [],
         "presentedOfferingIds": [],
         "workKind": "",
+    }
+
+
+def build_branch_areas_overview(area_count: int) -> BranchResult:
+    content = (
+        f"I’ve opened the {area_count} main course area{'s' if area_count != 1 else ''} in your workspace — "
+        "fields like Computing, Health, Business, Engineering, and Society. "
+        "Tell me which one you want to explore and I’ll show the course types inside it."
+    )
+    return {
+        "assistantContent": content,
+        "directive": _catalog_directive("Showing the main course areas."),
+        "proposal": _empty_proposal(),
+        "presentedFamilyIds": [],
+        "presentedOfferingIds": [],
+        "workKind": "areas_overview",
     }
 
 

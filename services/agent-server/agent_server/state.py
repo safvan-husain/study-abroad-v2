@@ -14,6 +14,7 @@ class RouteDecision(TypedDict):
 
 class ScopeDecision(TypedDict):
     scope: Literal[
+        "areas_overview",
         "area_overview",
         "family_offerings",
         "all_area_offerings",

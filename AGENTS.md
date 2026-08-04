@@ -26,10 +26,11 @@ When working on Version 1 or comparing behavior with the previous implementation
 ## Agent Server Tests
 
 - Default pytest runs must stay **offline**: mock Ollama (`OLLAMA_DISABLED=true`) or monkeypatch `_ollama_json` / `_ollama_chat`. CI and routine `uv run pytest` must never call a live model.
+- The course catalog is a **process-level index** (`agent_server/catalog_index.py`) loaded from seed JSON (`CATALOG_SEED_DIR`, Docker `/app/catalog`). Tests seed it via `tests/conftest.py`; do not rely on per-turn `catalog_courses` in invoke state.
 - **Live LLM tests** live in `services/agent-server/tests/test_graph_live.py`. They are marked `@pytest.mark.live_llm` and skipped unless `RUN_LIVE_LLM_TESTS=1` (or `true`/`yes`) **and** `OLLAMA_HOST` is set, with `OLLAMA_DISABLED` unset.
 - When changing advisor routing, scope resolution, or graph prompts in `services/agent-server/agent_server/graph.py`, update the matching deterministic tests in `tests/test_graph.py` and, when behavior depends on real model output, the opt-in live test in `tests/test_graph_live.py`.
 - Run live tests explicitly from `services/agent-server`::
 
-      RUN_LIVE_LLM_TESTS=1 OLLAMA_HOST=https://… uv run pytest tests/test_graph_live.py -v
+    RUN_LIVE_LLM_TESTS=1 OLLAMA_HOST=https://… uv run pytest tests/test_graph_live.py -v
 
   Do not add live LLM tests to default CI jobs or pre-commit hooks.

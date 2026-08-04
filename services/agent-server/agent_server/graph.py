@@ -1,18 +1,16 @@
-"""Advisor LangGraph — routing, discovery, and guidance over catalog state.
+"""Advisor LangGraph — routing, discovery, and guidance over catalog tools.
 
-Canonical context is **not** loaded inside this graph. Before every invoke the AI
-worker reads a fresh SpacetimeDB snapshot and passes it as input state:
+Per-turn invoke carries conversation truth only:
 
-- ``catalog_areas``, ``catalog_families``, ``catalog_courses`` — catalogue tables
-- ``profile``, ``selection_context``, ``ui_context`` — per-conversation truth
+- ``profile``, ``selection_context``, ``ui_context`` — from the AI worker
 - ``task``, ``graph_version`` — which top-level path ``route_task`` selects
+
+The full course catalog lives in a **process-level** index
+(``agent_server.catalog_index``), loaded at agent-server startup from seed JSON.
+Discovery tools read that index; catalog rows are not dumped into checkpoint state.
 
 See ``agent_server.initial_state`` for documented invoke shapes
 (``initial_discover_state``, ``initial_course_fit_state``).
-
-Checkpoint / thread history may retain past messages, but catalog and selection
-channels on each run reflect the worker's latest read — never stale checkpoint
-catalog as authoritative truth.
 """
 
 from __future__ import annotations
@@ -22,13 +20,16 @@ import os
 import re
 from typing import Any, Callable
 
-from langchain_core.messages import BaseMessage, HumanMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langgraph.graph import END, START, StateGraph
 
+from agent_server.catalog_index import AREA_ALIASES, ensure_catalog_loaded, get_catalog_index
+from agent_server.catalog_tools import TOOL_SPECS, dispatch_catalog_tool
 from agent_server.state import AdvisorState, RouteDecision, ScopeDecision
 from agent_server.state_updates import (
     build_advisor_result,
     build_branch_area_overview,
+    build_branch_areas_overview,
     build_branch_clarification,
     build_branch_comparison,
     build_branch_family_offerings,
@@ -43,15 +44,53 @@ from agent_server.state_updates import (
     set_scope_decision,
 )
 
+MAX_SCOPE_TOOL_ROUNDS = 5
+MAX_ROUTER_HISTORY_MESSAGES = 20
+MAX_ROUTER_HISTORY_CONTENT_CHARS = 4000
+
+
+def _message_content(message: BaseMessage | Any) -> str:
+    content = getattr(message, "content", None) or (message.get("content") if isinstance(message, dict) else "")
+    return content if isinstance(content, str) else str(content)
+
+
+def _message_role(message: BaseMessage | Any) -> str | None:
+    message_type = getattr(message, "type", None) or (message.get("type") if isinstance(message, dict) else None)
+    role = getattr(message, "role", None) or (message.get("role") if isinstance(message, dict) else None)
+    if isinstance(message, HumanMessage) or message_type == "human" or role == "human":
+        return "human"
+    if isinstance(message, AIMessage) or message_type == "ai" or role in {"ai", "assistant"}:
+        return "assistant"
+    return None
+
 
 def _latest_human_text(messages: list[BaseMessage] | list[Any]) -> str:
     for message in reversed(messages):
-        message_type = getattr(message, "type", None) or (message.get("type") if isinstance(message, dict) else None)
-        role = getattr(message, "role", None) or (message.get("role") if isinstance(message, dict) else None)
-        if isinstance(message, HumanMessage) or message_type == "human" or role == "human":
-            content = getattr(message, "content", None) or (message.get("content") if isinstance(message, dict) else "")
-            return content if isinstance(content, str) else str(content)
+        if _message_role(message) == "human":
+            return _message_content(message)
     return ""
+
+
+def _conversation_history(
+    messages: list[BaseMessage] | list[Any],
+    *,
+    max_messages: int = MAX_ROUTER_HISTORY_MESSAGES,
+    max_content_chars: int = MAX_ROUTER_HISTORY_CONTENT_CHARS,
+) -> list[dict[str, str]]:
+    history: list[dict[str, str]] = []
+    for message in messages:
+        role = _message_role(message)
+        if role is None:
+            continue
+        content = _message_content(message).strip()
+        if not content:
+            continue
+        if len(content) > max_content_chars:
+            content = content[: max_content_chars - 1] + "…"
+        history.append({"role": role, "content": content})
+    if len(history) > max_messages:
+        history = history[-max_messages:]
+    return history
 
 
 def _extract_json(text: str) -> dict[str, Any] | None:
@@ -135,15 +174,38 @@ def _validate_route(value: dict[str, Any]) -> RouteDecision | None:
     return {"intent": intent, "reason": reason[:512], "clarificationQuestion": str(question)[:512]}
 
 
+def _catalog_id_sets(state: AdvisorState) -> tuple[set[str], set[str], set[str]]:
+    """Prefer the process index; merge legacy per-turn catalog_* if present."""
+    index = get_catalog_index()
+    areas = set(index.area_ids)
+    families = set(index.family_ids())
+    offerings = set(index.course_ids())
+    for row in state.get("catalog_families", []) or []:
+        if row.get("areaId"):
+            areas.add(str(row.get("areaId")))
+        if row.get("familyId"):
+            families.add(str(row.get("familyId")))
+    for row in state.get("catalog_courses", []) or []:
+        if row.get("courseId"):
+            offerings.add(str(row.get("courseId")))
+    return areas, families, offerings
+
+
 def _validate_scope(value: dict[str, Any], state: AdvisorState) -> ScopeDecision | None:
-    allowed = {"area_overview", "family_offerings", "all_area_offerings", "compare_offerings", "personalize_selection", "clarify"}
+    allowed = {
+        "areas_overview",
+        "area_overview",
+        "family_offerings",
+        "all_area_offerings",
+        "compare_offerings",
+        "personalize_selection",
+        "clarify",
+    }
     scope = value.get("scope")
     explanation = value.get("explanation")
     if scope not in allowed or not isinstance(explanation, str) or not explanation.strip():
         return None
-    areas = {str(row.get("areaId")) for row in state.get("catalog_families", [])}
-    families = {str(row.get("familyId")) for row in state.get("catalog_families", [])}
-    offerings = {str(row.get("courseId")) for row in state.get("catalog_courses", [])}
+    areas, families, offerings = _catalog_id_sets(state)
     area_id = str(value.get("areaId") or "")
     family_ids = [str(row) for row in (value.get("familyIds") or [])]
     offering_ids = [str(row) for row in (value.get("offeringIds") or [])]
@@ -182,6 +244,21 @@ def _validate_scope(value: dict[str, Any], state: AdvisorState) -> ScopeDecision
     }
 
 
+def _validate_scope_tool_turn(value: dict[str, Any], state: AdvisorState) -> dict[str, Any] | None:
+    """Accept either a tool call or a final scope_decision JSON object."""
+    tool_name = value.get("tool")
+    if isinstance(tool_name, str) and tool_name.strip():
+        allowed = {row["name"] for row in TOOL_SPECS}
+        if tool_name not in allowed:
+            return None
+        args = value.get("args") if isinstance(value.get("args"), dict) else {}
+        return {"kind": "tool", "tool": tool_name, "args": args}
+    scope = _validate_scope(value, state)
+    if scope is None:
+        return None
+    return {"kind": "scope", "decision": scope}
+
+
 def _requests_all_presented(message: str, selection: dict[str, Any]) -> bool:
     normalized = " ".join(message.lower().split())
     references_presented = bool(re.search(r"\b(these|those|them)\b", normalized))
@@ -189,22 +266,72 @@ def _requests_all_presented(message: str, selection: dict[str, Any]) -> bool:
     return references_presented and asks_to_show_all and bool(selection.get("presentedFamilyIds"))
 
 
+def _has_active_offering_context(selection: dict[str, Any]) -> bool:
+    return bool(selection.get("presentedOfferingIds") or selection.get("provisionalOfferingIds"))
+
+
+def _looks_like_broad_catalog_browse(message: str) -> bool:
+    normalized = " ".join(message.lower().split())
+    browse_cues = (
+        "show me different",
+        "different courses",
+        "different categories",
+        "course categories",
+        "what categories",
+        "what fields",
+        "fields of study",
+        "course areas",
+        "browse courses",
+        "explore courses",
+        "show me courses",
+        "show courses",
+        "what courses do you",
+        "options available",
+    )
+    if any(cue in normalized for cue in browse_cues):
+        return True
+    cold_start_cues = (
+        "confused",
+        "don't know",
+        "dont know",
+        "do not know",
+        "no idea",
+        "not sure what",
+        "don't know what to do",
+        "dont know what to do",
+        "no idea what",
+    )
+    return any(cue in normalized for cue in cold_start_cues)
+
+
 def route_intent(state: AdvisorState) -> dict[str, Any]:
     text = _latest_human_text(state.get("messages", []))
     selection = state.get("selection_context", {})
     decision = _ollama_json(
-        "Classify the latest student message. "
+        "Classify the latest student message using the full conversationHistory for context. "
+        "The message field repeats the latest human turn; conversationHistory is the transcript the student saw. "
+        "Short replies such as 'yes', 'so', 'sure', or 'ok' must be interpreted from the most recent assistant message, not in isolation. "
         "guidance means general study-abroad process knowledge, journey steps, document or eligibility logistics at a high level, or help using this advisor — not naming or exploring academic subjects. "
         "discovery means any request to explore, find, compare, recommend, or express interest in course areas, fields of study, course types, or exact university offerings — "
         "including broad interest statements such as 'I like computer science', 'I want to learn programming', or 'I'm interested in business', even when the student does not yet ask to show courses. "
+        "Cold-start or open-ended explore without a named subject — for example 'I'm confused and want to study abroad', "
+        "'I don't know what to do', 'show me different courses', or 'what categories do you have' — is discovery "
+        "(the scope resolver will choose areas_overview or a narrower scope). "
         "When the student names or implies a subject or course direction, choose discovery; the scope resolver will pick area_overview or a narrower scope. "
+        "Context matters: if the student says they are confused or unsure while already comparing offerings, reviewing presented offerings, "
+        "or working on a provisional list (see presentedOfferingIds / provisionalOfferingIds), do NOT treat that as a fresh catalog browse — "
+        "prefer clarify with one question about the current workspace context, or discovery scoped to that context. "
         "A command such as 'show all these' is discovery when presentedFamilyIds are supplied; the scope resolver will resolve what 'these' means. "
-        "If both guidance and discovery are materially requested, or the request cannot safely be assigned, choose clarify and ask one concise question. "
+        "If both guidance and discovery are materially requested, or the request cannot safely be assigned even with conversationHistory, choose clarify and ask one concise question. "
         "Schema: {intent: guidance|discovery|clarify, reason: string, clarificationQuestion: string}.",
         {
-            "message": text, "uiContext": state.get("ui_context", {}), "profile": state.get("profile", {}),
+            "message": text,
+            "conversationHistory": _conversation_history(state.get("messages", [])),
+            "uiContext": state.get("ui_context", {}),
+            "profile": state.get("profile", {}),
             "presentedFamilyIds": selection.get("presentedFamilyIds", []),
             "presentedOfferingIds": selection.get("presentedOfferingIds", []),
+            "provisionalOfferingIds": selection.get("provisionalOfferingIds", []),
         },
         os.getenv("ROUTER_MODEL", "gpt-oss:20b"),
         _validate_route,
@@ -244,57 +371,111 @@ def guidance_agent(state: AdvisorState) -> dict[str, Any]:
 
 
 def resolve_catalog_scope(state: AdvisorState) -> dict[str, Any]:
-    families = state.get("catalog_families", [])
-    courses = state.get("catalog_courses", [])
-    compact_families = [{
-        "familyId": row.get("familyId"), "areaId": row.get("areaId"), "name": row.get("name"),
-        "aliases": row.get("aliases", []), "offeringCount": sum(1 for course in courses if course.get("familyId") == row.get("familyId")),
-    } for row in families]
+    ensure_catalog_loaded()
     selection = state.get("selection_context", {})
     message = _latest_human_text(state.get("messages", []))
-    decision = _ollama_json(
-        "Resolve the current message's catalog exploration scope using only supplied IDs. The current message is authoritative. UI context and presented IDs exist only "
-        "to resolve references such as 'these' or 'the two'; never continue or repeat an earlier comparison unless the current message asks for comparison. "
-        "area_overview: broad interest or an interest statement such as 'I want computer science', including when the current UI happens to show exact offerings; "
-        "include every relevant nearby course type so differences can be explained. family_offerings: explicit display command for one or more exact course types. "
-        "all_area_offerings: explicit request to show all offerings in an area or all previously presented types. compare_offerings: compare 2-4 exact university offerings; "
-        "facts and rankings must come only from supplied offerings, and comparisonCriterion names the requested fact or 'overall'. personalize_selection: preference, recommendation, "
-        "or explicit choice; propose 1-5 exact offering IDs. clarify: 'show me courses' without usable context or an ambiguous scope. Negative preferences must affect the decision; "
-        "do not map 'I dislike coding' to computing merely because coding appears. For compare_offerings, comparisonCriterion is required and must name "
-        "the user's requested criterion (for example, 'ranking'); use 'overall' only when the user did not specify one. For all other scopes, return an empty string. "
-        "Schema: {scope, areaId, familyIds, offeringIds, explanation, clarificationQuestion, comparisonCriterion}.",
-        {
-            "message": message,
-            "families": compact_families,
-            "offerings": courses,
-            "profile": state.get("profile", {}),
-            "uiContext": state.get("ui_context", {}),
-            "presentedFamilyIds": selection.get("presentedFamilyIds", []),
-            "presentedOfferingIds": selection.get("presentedOfferingIds", []),
-            "provisionalOfferingIds": selection.get("provisionalOfferingIds", []),
-            "suppressedOfferingIds": selection.get("suppressedOfferingIds", []),
-        },
-        os.getenv("DISCOVERY_MODEL", "qwen3.5:397b"),
-        lambda value: _validate_scope(value, state),
-    )
     if _requests_all_presented(message, selection):
-        decision = {
+        decision: ScopeDecision = {
             "scope": "all_area_offerings", "areaId": "",
             "familyIds": [str(row) for row in selection.get("presentedFamilyIds", [])],
             "offeringIds": [], "explanation": "Show every offering from the previously presented course types.",
             "clarificationQuestion": "", "comparisonCriterion": "",
         }
+        return set_scope_decision(decision)
+
+    tool_trace: list[dict[str, Any]] = []
+    decision = None
+    system = (
+        "Resolve the current message's catalog exploration scope. Use catalog tools to look up areas, "
+        "course types, offerings, and institutions — do not invent IDs. The current message is authoritative. "
+        "UI context and presented IDs exist only to resolve references such as 'these' or 'the two'; never "
+        "continue or repeat an earlier comparison unless the current message asks for comparison. "
+        "areas_overview: cold-start or open-ended browse with no named subject — show every top-level course area "
+        "(Computing, Health, Business, Engineering, Society). Use for 'I'm confused', 'I don't know what to study', "
+        "'show me different courses', or 'what categories do you have' when the student is not referring to "
+        "current presented offerings or an active comparison. "
+        "area_overview: broad interest or an interest statement such as 'I want computer science' mapped to one areaId; "
+        "family_offerings: explicit display command for one or more exact course types. "
+        "all_area_offerings: explicit request to show all offerings in an area or all previously presented types. "
+        "compare_offerings: compare 2-4 exact university offerings; comparisonCriterion is required "
+        "(requested fact or 'overall'). personalize_selection: propose 1-5 exact offering IDs. "
+        "clarify: ambiguous scope — include clarificationQuestion. Negative preferences must affect the decision. "
+        "Do not choose areas_overview when presentedOfferingIds or provisionalOfferingIds are active and the student "
+        "is only expressing confusion about the current comparison or selection. "
+        "Each turn return ONE JSON object: either a tool call "
+        '{"tool":"<name>","args":{...}} or a final scope '
+        '{"scope","areaId","familyIds","offeringIds","explanation","clarificationQuestion","comparisonCriterion"}. '
+        f"Tools: {json.dumps(TOOL_SPECS, separators=(',', ':'))}."
+    )
+    for _round in range(MAX_SCOPE_TOOL_ROUNDS):
+        turn = _ollama_json(
+            system,
+            {
+                "message": message,
+                "profile": state.get("profile", {}),
+                "uiContext": state.get("ui_context", {}),
+                "presentedFamilyIds": selection.get("presentedFamilyIds", []),
+                "presentedOfferingIds": selection.get("presentedOfferingIds", []),
+                "provisionalOfferingIds": selection.get("provisionalOfferingIds", []),
+                "suppressedOfferingIds": selection.get("suppressedOfferingIds", []),
+                "toolResults": tool_trace,
+                "availableAreaIds": get_catalog_index().area_ids,
+            },
+            os.getenv("DISCOVERY_MODEL", "qwen3.5:397b"),
+            lambda value: _validate_scope_tool_turn(value, state),
+        )
+        if turn is None:
+            break
+        if turn.get("kind") == "scope":
+            decision = turn["decision"]
+            break
+        tool_name = str(turn.get("tool") or "")
+        args = turn.get("args") if isinstance(turn.get("args"), dict) else {}
+        result = dispatch_catalog_tool(tool_name, args)
+        tool_trace.append({"tool": tool_name, "args": args, "result": result})
+
     if decision is None:
-        decision = {
-            "scope": "clarify", "areaId": "", "familyIds": [], "offeringIds": [],
-            "explanation": "The discovery model did not return a valid decision after one correction.",
-            "clarificationQuestion": "Would you like to explore course areas, one course type, or every course within an area?", "comparisonCriterion": "",
-        }
+        # Offline / failed model: deterministic area map for broad interest statements.
+        mapped = dispatch_catalog_tool("map_interest_to_area", {"phrase": message})
+        area_id = str(mapped.get("areaId") or "")
+        if area_id and mapped.get("confidence") in {"high", "medium"} and "dislike" not in message.lower():
+            decision = {
+                "scope": "area_overview", "areaId": area_id, "familyIds": [], "offeringIds": [],
+                "explanation": f"Mapped interest to {area_id} via catalog tools.",
+                "clarificationQuestion": "", "comparisonCriterion": "",
+            }
+        elif _looks_like_broad_catalog_browse(message) and not _has_active_offering_context(selection):
+            decision = {
+                "scope": "areas_overview", "areaId": "", "familyIds": [], "offeringIds": [],
+                "explanation": "Broad catalog browse or cold-start without a mapped subject.",
+                "clarificationQuestion": "", "comparisonCriterion": "",
+            }
+        else:
+            decision = {
+                "scope": "clarify", "areaId": "", "familyIds": [], "offeringIds": [],
+                "explanation": "The discovery model did not return a valid decision after tool use.",
+                "clarificationQuestion": "Would you like to explore course areas, one course type, or every course within an area?",
+                "comparisonCriterion": "",
+            }
     return set_scope_decision(decision)
 
 
 def route_after_scope(state: AdvisorState) -> str:
     return str(state.get("scope_decision", {}).get("scope") or "clarify")
+
+
+def _families_from_state_or_index(state: AdvisorState) -> list[dict[str, Any]]:
+    rows = list(state.get("catalog_families", []) or [])
+    if rows:
+        return rows
+    return list(get_catalog_index().families)
+
+
+def _courses_from_state_or_index(state: AdvisorState) -> list[dict[str, Any]]:
+    rows = list(state.get("catalog_courses", []) or [])
+    if rows:
+        return rows
+    return list(get_catalog_index().courses)
 
 
 def _family_ids_for_scope(state: AdvisorState) -> list[str]:
@@ -303,22 +484,28 @@ def _family_ids_for_scope(state: AdvisorState) -> list[str]:
     if supplied:
         return supplied
     area_id = str(scope.get("areaId") or "")
-    return [str(row.get("familyId")) for row in state.get("catalog_families", []) if row.get("areaId") == area_id]
+    return [str(row.get("familyId")) for row in _families_from_state_or_index(state) if row.get("areaId") == area_id]
 
 
 def explain_course_types(state: AdvisorState) -> dict[str, Any]:
     area_id = str(state.get("scope_decision", {}).get("areaId") or "")
     family_ids = [
-        str(row.get("familyId")) for row in state.get("catalog_families", [])
+        str(row.get("familyId")) for row in _families_from_state_or_index(state)
         if row.get("areaId") == area_id
     ]
-    families = [row for row in state.get("catalog_families", []) if row.get("familyId") in family_ids]
+    families = [row for row in _families_from_state_or_index(state) if row.get("familyId") in family_ids]
     return set_branch_result(build_branch_area_overview(family_ids, len(families)))
+
+
+def list_catalog_areas(state: AdvisorState) -> dict[str, Any]:
+    ensure_catalog_loaded()
+    areas = get_catalog_index().list_areas()
+    return set_branch_result(build_branch_areas_overview(len(areas)))
 
 
 def _load_offerings(state: AdvisorState, all_area: bool) -> dict[str, Any]:
     family_ids = _family_ids_for_scope(state)
-    courses = [row for row in state.get("catalog_courses", []) if row.get("familyId") in family_ids]
+    courses = [row for row in _courses_from_state_or_index(state) if row.get("familyId") in family_ids]
     offering_ids = [str(row.get("courseId")) for row in courses]
     return set_branch_result(
         build_branch_family_offerings(
@@ -341,7 +528,7 @@ def load_all_area_offerings(state: AdvisorState) -> dict[str, Any]:
 def personalize_selection(state: AdvisorState) -> dict[str, Any]:
     scope = state.get("scope_decision", {})
     offering_ids = [str(row) for row in scope.get("offeringIds", [])][:5]
-    courses = [row for row in state.get("catalog_courses", []) if row.get("courseId") in offering_ids]
+    courses = [row for row in _courses_from_state_or_index(state) if row.get("courseId") in offering_ids]
     ordered = sorted(courses, key=lambda row: offering_ids.index(str(row.get("courseId"))))
     offering_ids = [str(row.get("courseId")) for row in ordered]
     return set_branch_result(
@@ -356,7 +543,11 @@ def personalize_selection(state: AdvisorState) -> dict[str, Any]:
 def compare_offerings(state: AdvisorState) -> dict[str, Any]:
     scope = state.get("scope_decision", {})
     offering_ids = [str(row) for row in scope.get("offeringIds", [])][:4]
-    courses = [row for offering_id in offering_ids for row in state.get("catalog_courses", []) if row.get("courseId") == offering_id]
+    courses = [
+        row for offering_id in offering_ids
+        for row in _courses_from_state_or_index(state)
+        if row.get("courseId") == offering_id
+    ]
     criterion = str(scope.get("comparisonCriterion") or "overall")
     return set_branch_result(
         build_branch_comparison(
@@ -394,25 +585,23 @@ def validate_guidance(state: AdvisorState) -> dict[str, Any]:
 
 
 # Legacy path remains selectable while the specialist graph is rolled out.
-AREA_ALIASES: dict[str, list[str]] = {
-    "computing": ["programming", "computer science", "software", "coding", "tech", "it"],
-    "business": ["business", "management", "mba", "entrepreneur", "commerce"],
-    "engineering": ["engineering", "mechanical", "civil engineering", "electrical"],
-}
+
+_DISALLOWED_FIT_CLAIMS = re.compile(
+    r"\b(admission|admitted|visa|scholarship|eligible|eligibility|approved|approval|guaranteed?|guarantee)\b",
+    re.I,
+)
 
 
 def _map_phrase(phrase: str, catalog_areas: list[str]) -> dict[str, Any]:
     raw = phrase.strip()[:256]
     normalized = raw.lower()
     matches = []
-    for area in catalog_areas:
-        labels = [area.lower().replace("_", " "), *AREA_ALIASES.get(area.lower(), [])]
+    areas = catalog_areas or get_catalog_index().area_ids
+    for area in areas:
+        labels = [area.lower().replace("_", " ").replace("-", " "), *AREA_ALIASES.get(area, []), *AREA_ALIASES.get(area.lower(), [])]
         if any(re.search(rf"(?:^|[^a-z0-9_]){re.escape(label)}(?:$|[^a-z0-9_])", normalized, re.I) for label in labels if label):
             matches.append(area)
-    return {"studentPhrase": raw, "catalogAreas": matches[:8], "status": "mapped" if matches else "unmapped"}
-
-
-_DISALLOWED_FIT_CLAIMS = re.compile(r"\b(admission|admitted|visa|scholarship|eligible|eligibility|approved|approval|guaranteed?|guarantee)\b", re.I)
+    return {"studentPhrase": raw, "catalogAreas": list(dict.fromkeys(matches))[:8], "status": "mapped" if matches else "unmapped"}
 
 
 def _is_indicative_fit_text(text: str) -> bool:
@@ -422,7 +611,8 @@ def _is_indicative_fit_text(text: str) -> bool:
 
 def run_discovery(state: AdvisorState) -> dict[str, Any]:
     text = _latest_human_text(state.get("messages", []))
-    intent = _map_phrase(text, state.get("catalog_areas", []))
+    catalog_areas = state.get("catalog_areas", []) or get_catalog_index().area_ids
+    intent = _map_phrase(text, catalog_areas)
     mapped = intent["status"] == "mapped"
     phrase = intent["studentPhrase"] or "that interest"
     assistant = f"Thanks — I am looking through partner courses related to {phrase}." if mapped else f"I could not map {phrase} to an exact catalogue area yet."
@@ -458,7 +648,7 @@ def run_course_fit(state: AdvisorState) -> dict[str, Any]:
 
 
 def route_task(state: AdvisorState) -> str:
-    # Specialist path assumes catalog/profile/selection were injected at invoke — see module docstring.
+    # Discover path uses process catalog index + worker-injected profile/selection/ui.
     if state.get("task") == "course_fit":
         return "course_fit"
     version = str(state.get("graph_version") or os.getenv("ADVISOR_GRAPH_VERSION", "specialist"))
@@ -471,6 +661,7 @@ builder.add_node("course_fit", run_course_fit)
 builder.add_node("route_intent", route_intent)
 builder.add_node("guidance_agent", guidance_agent)
 builder.add_node("resolve_catalog_scope", resolve_catalog_scope)
+builder.add_node("list_catalog_areas", list_catalog_areas)
 builder.add_node("explain_course_types", explain_course_types)
 builder.add_node("load_all_family_offerings", load_all_family_offerings)
 builder.add_node("load_all_area_offerings", load_all_area_offerings)
@@ -492,12 +683,21 @@ builder.add_edge("guidance_agent", "validate_guidance")
 builder.add_edge("validate_guidance", END)
 builder.add_edge("clarification", "validate_discovery")
 builder.add_conditional_edges("resolve_catalog_scope", route_after_scope, {
+    "areas_overview": "list_catalog_areas",
     "area_overview": "explain_course_types", "family_offerings": "load_all_family_offerings",
     "all_area_offerings": "load_all_area_offerings", "personalize_selection": "personalize_selection",
     "compare_offerings": "compare_offerings",
     "clarify": "clarify_catalog_scope",
 })
-for node in ["explain_course_types", "load_all_family_offerings", "load_all_area_offerings", "compare_offerings", "personalize_selection", "clarify_catalog_scope"]:
+for node in [
+    "list_catalog_areas",
+    "explain_course_types",
+    "load_all_family_offerings",
+    "load_all_area_offerings",
+    "compare_offerings",
+    "personalize_selection",
+    "clarify_catalog_scope",
+]:
     builder.add_edge(node, "validate_discovery")
 builder.add_edge("validate_discovery", END)
 graph = builder.compile()

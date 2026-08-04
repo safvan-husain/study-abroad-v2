@@ -1,5 +1,6 @@
 from agent_server.state_updates import (
     build_branch_area_overview,
+    build_branch_areas_overview,
     complete_advisor_turn,
     set_route_decision,
     set_scope_decision,
@@ -51,3 +52,7 @@ def test_branch_builders_do_not_touch_graph_state():
     branch = build_branch_area_overview(["computer-science"], 1)
     assert branch["workKind"] == "area_overview"
     assert branch["presentedFamilyIds"] == ["computer-science"]
+    areas = build_branch_areas_overview(5)
+    assert areas["workKind"] == "areas_overview"
+    assert areas["presentedFamilyIds"] == []
+    assert areas["directive"]["type"] == "catalog"

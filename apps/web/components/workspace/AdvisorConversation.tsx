@@ -48,7 +48,13 @@ export function AdvisorConversation({ messages, turns, turnUpdates = [], uiActio
       ) : latestTurn?.status === 'completed' ? (
         <section className="turn-activity turn-activity-completed" aria-label="Advisor activity complete"><p className="turn-status">✓ Done</p></section>
       ) : null}
-      {latestTurn?.status === 'failed' ? <p className="inline-error">The advisor could not finish that turn. Your message is still saved.</p> : null}
+      {latestTurn?.status === 'failed' ? (
+        <p className="inline-error">
+          {latestTurn.errorCode === 'catalog_unavailable'
+            ? 'The course catalog is not ready yet, so the advisor could not search offerings. Please try again in a moment.'
+            : 'The advisor could not finish that turn. Your message is still saved.'}
+        </p>
+      ) : null}
     </section>
   );
 }

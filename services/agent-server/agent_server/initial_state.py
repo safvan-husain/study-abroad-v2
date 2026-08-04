@@ -40,9 +40,9 @@ ADVISOR_STATE_FIELD_NOTES: dict[str, str] = {
         "When task is not course_fit: 'specialist' (default) or 'legacy'. "
         "Usually supplied from ADVISOR_GRAPH_VERSION on the worker."
     ),
-    "catalog_areas": "Canonical area ids from SpacetimeDB. Required for discover; unused on course_fit.",
-    "catalog_families": "Course-type rows (with aliases / offering counts). Discover only.",
-    "catalog_courses": "Exact university offerings. Discover only.",
+    "catalog_areas": "Optional/legacy. Prefer process catalog index area ids.",
+    "catalog_families": "Optional/legacy. Full catalog lives in agent_server.catalog_index.",
+    "catalog_courses": "Optional/legacy. Full catalog lives in agent_server.catalog_index.",
     "profile": "Student profile patch shape — see empty_profile(). Canonical truth from worker.",
     "ui_context": "Current UI focus (view, selected ids). Resolves pronouns like 'these'.",
     "selection_context": (
@@ -85,19 +85,18 @@ INVOKE_CASE_NOTES: dict[str, InvokeCaseNotes] = {
             "messages",
             "task",
             "graph_version",
-            "catalog_areas",
-            "catalog_families",
-            "catalog_courses",
             "profile",
             "ui_context",
             "selection_context",
         ],
         "unused_or_empty": [
             "course (always {})",
+            "catalog_areas / catalog_families / catalog_courses (empty — process index owns catalog)",
             "route_decision / scope_decision / branch_result (filled during the run)",
         ],
         "notes": [
-            "Worker injects a fresh SpacetimeDB snapshot every turn — checkpoint is not catalog truth.",
+            "Catalog tools read agent_server.catalog_index (seeded at agent-server startup).",
+            "Worker injects profile/ui/selection every turn — checkpoint is not selection truth.",
             "Only the latest human message is sent (messages.slice(-1)).",
             "selection_context.revision is stringified for JSON transport.",
         ],
@@ -118,8 +117,7 @@ INVOKE_CASE_NOTES: dict[str, InvokeCaseNotes] = {
         ],
         "unused_or_empty": [
             "messages ([])",
-            "catalog_areas ([])",
-            "catalog_families / catalog_courses (omitted)",
+            "catalog_areas / catalog_families / catalog_courses (omitted — process index)",
             "selection_context (omitted)",
             "graph_version (ignored when task is course_fit)",
         ],

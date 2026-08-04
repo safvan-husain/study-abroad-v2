@@ -46,7 +46,15 @@ export const routeDecision = z.object({
 });
 
 export const catalogScopeDecision = z.object({
-  scope: z.enum(['area_overview', 'family_offerings', 'all_area_offerings', 'compare_offerings', 'personalize_selection', 'clarify']),
+  scope: z.enum([
+    'areas_overview',
+    'area_overview',
+    'family_offerings',
+    'all_area_offerings',
+    'compare_offerings',
+    'personalize_selection',
+    'clarify',
+  ]),
   areaId: z.string().max(128).default(''),
   familyIds: z.array(z.string().min(1).max(128)).max(100).default([]),
   offeringIds: z.array(z.string().min(1).max(128)).max(100).default([]),
@@ -165,6 +173,23 @@ export type FamilyOfferings = z.infer<typeof familyOfferings>;
 export type DiscoveryProposal = z.infer<typeof discoveryProposal>;
 export type GuidanceResult = z.infer<typeof guidanceResult>;
 export type AdvisorTurnResult = z.infer<typeof advisorTurnResult>;
+
+/** Stable display names for catalog area IDs (mirrors scripts/catalog/families.ts). */
+export const CATALOG_AREA_NAMES: Record<string, string> = {
+  'computing-technology': 'Computing and Technology',
+  'engineering-science': 'Engineering and Science',
+  'business-economics': 'Business and Economics',
+  'health-medicine': 'Health and Medicine',
+  'society-humanities': 'Society and Humanities',
+};
+
+export function catalogAreaDisplayName(areaId: string): string {
+  const key = areaId.trim();
+  if (CATALOG_AREA_NAMES[key]) return CATALOG_AREA_NAMES[key];
+  return key
+    ? key.split('-').filter(Boolean).map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(' ')
+    : '';
+}
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

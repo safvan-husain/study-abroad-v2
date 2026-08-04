@@ -1,8 +1,17 @@
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage
 
-from agent_server.graph import _map_phrase, _ollama_chat, _validate_scope, graph, run_course_fit, run_discovery
+from agent_server.graph import (
+    _conversation_history,
+    _map_phrase,
+    _ollama_chat,
+    _validate_scope,
+    graph,
+    route_intent,
+    run_course_fit,
+    run_discovery,
+)
 from agent_server.initial_state import initial_course_fit_state, initial_discover_state
-from tests.catalog_fixtures import COURSES, FAMILIES, COMPUTING_AREA_ID
+from tests.catalog_fixtures import COMPUTING_AREA_ID, COMPUTING_COURSES, COMPUTING_FAMILIES
 
 
 INTEREST_MESSAGE = "Hi, I like to learn computer programming or computer science."
@@ -13,10 +22,9 @@ def invoke_specialist(monkeypatch, message, scope_decision, selection=None):
         raw = {"intent": "discovery", "reason": "Course exploration", "clarificationQuestion": ""} if "Classify" in system else scope_decision
         return validate(raw)
     monkeypatch.setattr("agent_server.graph._ollama_json", fake_json)
+    # Catalog comes from the process index (conftest); keep optional state channels empty.
     return graph.invoke(initial_discover_state(
         messages=[HumanMessage(content=message)],
-        catalog_families=FAMILIES,
-        catalog_courses=COURSES,
         selection_context=selection or {},
     ))["advisor_result"]
 
@@ -48,6 +56,47 @@ def test_ollama_boundary_is_non_streaming_and_time_bounded(monkeypatch):
     assert captured["url"] == "https://ollama.example/api/chat"
     assert captured["json"]["stream"] is False
     assert captured["timeout"] == 12
+
+
+def test_route_intent_passes_conversation_history_to_router(monkeypatch):
+    captured: dict[str, object] = {}
+
+    def fake_json(system, payload, model, validate):
+        captured["payload"] = payload
+        return validate(
+            {
+                "intent": "discovery",
+                "reason": "The student affirmed the assistant's offer to explore courses.",
+                "clarificationQuestion": "",
+            }
+        )
+
+    monkeypatch.setattr("agent_server.graph._ollama_json", fake_json)
+    update = route_intent(
+        initial_discover_state(
+            messages=[
+                HumanMessage(content="I'm confused about studying abroad."),
+                AIMessage(content="Would you like to explore different types of courses available?"),
+                HumanMessage(content="so"),
+            ],
+        )
+    )
+    payload = captured["payload"]
+    assert payload["message"] == "so"
+    assert payload["conversationHistory"] == [
+        {"role": "human", "content": "I'm confused about studying abroad."},
+        {"role": "assistant", "content": "Would you like to explore different types of courses available?"},
+        {"role": "human", "content": "so"},
+    ]
+    assert update["route_decision"]["intent"] == "discovery"
+
+
+def test_conversation_history_truncates_to_recent_messages():
+    messages = [HumanMessage(content=f"turn-{index}") for index in range(25)]
+    history = _conversation_history(messages, max_messages=20)
+    assert len(history) == 20
+    assert history[0]["content"] == "turn-5"
+    assert history[-1]["content"] == "turn-24"
 
 
 def test_maps_programming_to_computing():
@@ -112,7 +161,7 @@ def test_interest_statement_explains_every_nearby_course_type_without_shortlisti
         "scope": "area_overview", "areaId": COMPUTING_AREA_ID, "familyIds": ["computer-science"], "offeringIds": [],
         "explanation": "Explain nearby types first", "clarificationQuestion": "", "comparisonCriterion": "",
     })
-    assert result["presentedFamilyIds"] == [row["familyId"] for row in FAMILIES]
+    assert result["presentedFamilyIds"] == [row["familyId"] for row in COMPUTING_FAMILIES]
     assert result["proposal"]["mode"] == "none"
 
 
@@ -124,10 +173,9 @@ def test_programming_interest_statement_uses_area_overview_when_routed_as_discov
     })
     assert result["route"]["intent"] == "discovery"
     assert result["scope"]["scope"] == "area_overview"
-    assert result["presentedFamilyIds"] == [row["familyId"] for row in FAMILIES]
+    assert result["presentedFamilyIds"] == [row["familyId"] for row in COMPUTING_FAMILIES]
     assert result["directive"]["type"] == "catalog"
     assert result["proposal"]["mode"] == "none"
-
 
 def test_explicit_family_command_loads_every_exact_offering(monkeypatch):
     result = invoke_specialist(monkeypatch, "Show Computer Science courses", {
@@ -140,20 +188,19 @@ def test_explicit_family_command_loads_every_exact_offering(monkeypatch):
 
 def test_show_all_uses_previously_presented_families_without_a_limit(monkeypatch):
     result = invoke_specialist(monkeypatch, "Show all these", {
-        "scope": "all_area_offerings", "areaId": "", "familyIds": [row["familyId"] for row in FAMILIES], "offeringIds": [],
+        "scope": "all_area_offerings", "areaId": "", "familyIds": [row["familyId"] for row in COMPUTING_FAMILIES], "offeringIds": [],
         "explanation": "Use presented families", "clarificationQuestion": "", "comparisonCriterion": "",
-    }, {"presentedFamilyIds": [row["familyId"] for row in FAMILIES]})
-    assert result["presentedOfferingIds"] == [row["courseId"] for row in COURSES]
+    }, {"presentedFamilyIds": [row["familyId"] for row in COMPUTING_FAMILIES]})
+    assert result["presentedOfferingIds"] == [row["courseId"] for row in COMPUTING_COURSES]
 
 
 def test_show_all_resolves_presented_families_even_when_model_asks_to_clarify(monkeypatch):
     result = invoke_specialist(monkeypatch, "Show all these", {
         "scope": "clarify", "areaId": "", "familyIds": [], "offeringIds": [],
         "explanation": "Reference appeared ambiguous", "clarificationQuestion": "Which items?", "comparisonCriterion": "",
-    }, {"presentedFamilyIds": [row["familyId"] for row in FAMILIES]})
-    assert result["presentedOfferingIds"] == [row["courseId"] for row in COURSES]
+    }, {"presentedFamilyIds": [row["familyId"] for row in COMPUTING_FAMILIES]})
+    assert result["presentedOfferingIds"] == [row["courseId"] for row in COMPUTING_COURSES]
     assert result["scope"]["scope"] == "all_area_offerings"
-
 
 def test_negative_coding_preference_does_not_map_to_computing(monkeypatch):
     result = invoke_specialist(monkeypatch, "I dislike coding", {
@@ -179,7 +226,7 @@ def test_recommendation_creates_exact_provisional_ids_and_comparison_does_not(mo
 
 
 def test_comparison_requires_an_explicit_or_overall_criterion():
-    state = {"catalog_families": FAMILIES, "catalog_courses": COURSES, "messages": [HumanMessage(content="Compare the two courses")]}
+    state = {"messages": [HumanMessage(content="Compare the two courses")]}
     decision = {
         "scope": "compare_offerings", "areaId": "", "familyIds": [], "offeringIds": ["cs-lu", "cs-charles"],
         "explanation": "Compare the exact offerings", "clarificationQuestion": "", "comparisonCriterion": "",
@@ -190,9 +237,96 @@ def test_comparison_requires_an_explicit_or_overall_criterion():
 
 
 def test_prior_comparison_cannot_override_a_new_interest_statement():
-    state = {"catalog_families": FAMILIES, "catalog_courses": COURSES, "messages": [HumanMessage(content="I want computer science")]}
+    state = {"messages": [HumanMessage(content="I want computer science")]}
     decision = {
         "scope": "compare_offerings", "areaId": "", "familyIds": [], "offeringIds": ["cs-lu", "cs-charles"],
         "explanation": "Continue the prior comparison", "clarificationQuestion": "", "comparisonCriterion": "ranking",
     }
     assert _validate_scope(decision, state) is None
+
+
+def test_resolve_scope_without_catalog_in_invoke_uses_process_index(monkeypatch):
+    """Studio-style invoke: message only; tools/index supply catalog ids."""
+    result = invoke_specialist(monkeypatch, "I want computer science", {
+        "scope": "area_overview", "areaId": COMPUTING_AREA_ID, "familyIds": [], "offeringIds": [],
+        "explanation": "Broad computing interest", "clarificationQuestion": "", "comparisonCriterion": "",
+    })
+    assert result["scope"]["areaId"] == COMPUTING_AREA_ID
+    assert result["presentedFamilyIds"] == [row["familyId"] for row in COMPUTING_FAMILIES]
+
+
+def test_cold_start_confusion_opens_areas_overview(monkeypatch):
+    result = invoke_specialist(
+        monkeypatch,
+        "Hi, I just wanna see. I don't know what to do. I'm really confused right now. I definitely want to go abroad and study.",
+        {
+            "scope": "areas_overview", "areaId": "", "familyIds": [], "offeringIds": [],
+            "explanation": "Cold-start browse of catalog areas", "clarificationQuestion": "", "comparisonCriterion": "",
+        },
+    )
+    assert result["route"]["intent"] == "discovery"
+    assert result["scope"]["scope"] == "areas_overview"
+    assert result["workKind"] == "areas_overview"
+    assert result["directive"]["type"] == "catalog"
+    assert result["presentedFamilyIds"] == []
+    assert result["presentedOfferingIds"] == []
+    assert result["proposal"]["mode"] == "none"
+    assert "course area" in result["assistantContent"].lower() or "main course area" in result["assistantContent"].lower()
+
+
+def test_show_different_courses_opens_areas_overview(monkeypatch):
+    result = invoke_specialist(monkeypatch, "Show me different courses", {
+        "scope": "areas_overview", "areaId": "", "familyIds": [], "offeringIds": [],
+        "explanation": "Broad catalog browse request", "clarificationQuestion": "", "comparisonCriterion": "",
+    })
+    assert result["scope"]["scope"] == "areas_overview"
+    assert result["workKind"] == "areas_overview"
+    assert result["directive"]["type"] == "catalog"
+
+
+def test_offline_fallback_uses_areas_overview_for_cold_start_without_subject(monkeypatch):
+    """When the scope model fails, cold-start browse must not fall through to clarify."""
+    def fake_json(system, payload, model, validate):
+        if "Classify" in system:
+            return validate({"intent": "discovery", "reason": "Cold-start explore", "clarificationQuestion": ""})
+        return None
+
+    monkeypatch.setattr("agent_server.graph._ollama_json", fake_json)
+    result = graph.invoke(initial_discover_state(
+        messages=[HumanMessage(content="I'm confused and don't know what to study abroad.")],
+    ))["advisor_result"]
+    assert result["scope"]["scope"] == "areas_overview"
+    assert result["workKind"] == "areas_overview"
+
+
+def test_offline_fallback_does_not_reset_to_areas_overview_mid_comparison(monkeypatch):
+    def fake_json(system, payload, model, validate):
+        if "Classify" in system:
+            return validate({
+                "intent": "clarify",
+                "reason": "Confusion about the current comparison",
+                "clarificationQuestion": "Which of the two offerings are you unsure about?",
+            })
+        return None
+
+    monkeypatch.setattr("agent_server.graph._ollama_json", fake_json)
+    result = graph.invoke(initial_discover_state(
+        messages=[HumanMessage(content="I don't know, I'm confused.")],
+        selection_context={
+            "presentedOfferingIds": ["cs-lu", "cs-charles"],
+            "presentedFamilyIds": ["computer-science"],
+            "provisionalOfferingIds": [],
+        },
+    ))["advisor_result"]
+    assert result["route"]["intent"] == "clarify"
+    assert result.get("scope") is None or result["scope"]["scope"] != "areas_overview"
+    assert result["workKind"] == ""
+
+
+def test_areas_overview_scope_validates_without_area_id():
+    state = {"messages": [HumanMessage(content="Show me different courses")]}
+    decision = {
+        "scope": "areas_overview", "areaId": "", "familyIds": [], "offeringIds": [],
+        "explanation": "Catalog-wide browse", "clarificationQuestion": "", "comparisonCriterion": "",
+    }
+    assert _validate_scope(decision, state)["scope"] == "areas_overview"

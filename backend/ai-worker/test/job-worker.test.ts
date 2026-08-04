@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { processChatTurn } from '../src/services/process-chat-turn.js';
+import { MIN_CATALOG_COURSES, processChatTurn } from '../src/services/process-chat-turn.js';
 import { JobWorker } from '../src/services/job-worker.js';
 
 const turn = (overrides: Partial<{
@@ -25,19 +25,25 @@ const turn = (overrides: Partial<{
   ...overrides,
 });
 
+const baseCourse = {
+  courseId: 'lu-computer-science-bsc',
+  institutionId: 'university-of-latvia',
+  institutionName: 'University of Latvia',
+  country: 'Latvia',
+  city: 'Riga',
+  name: 'Computer Science',
+  area: 'computing',
+  level: 'undergraduate',
+  tuitionBand: 'moderate',
+  englishBar: 'IELTS 6.0',
+};
+
 const computingCatalog = {
-  listCourses: () => [{
-    courseId: 'lu-computer-science-bsc',
-    institutionId: 'university-of-latvia',
-    institutionName: 'University of Latvia',
-    country: 'Latvia',
-    city: 'Riga',
-    name: 'Computer Science',
-    area: 'computing',
-    level: 'undergraduate',
-    tuitionBand: 'moderate',
-    englishBar: 'IELTS 6.0',
-  }],
+  listCourses: () => Array.from({ length: MIN_CATALOG_COURSES }, (_, index) => ({
+    ...baseCourse,
+    courseId: index === 0 ? baseCourse.courseId : `course-${index}`,
+    name: index === 0 ? baseCourse.name : `Course ${index}`,
+  })),
   getProfile: () => undefined,
 };
 
@@ -85,9 +91,80 @@ describe('AI worker chat turn', () => {
     expect(coordinator.complete).toHaveBeenCalledWith('t1', 1, expect.objectContaining({
       directiveType: 'catalog',
       workKind: 'course_fit_summaries',
-      workItems: [expect.objectContaining({ entityId: 'lu-computer-science-bsc', kind: 'course_fit_summary' })],
+      workItems: expect.arrayContaining([
+        expect.objectContaining({ entityId: 'lu-computer-science-bsc', kind: 'course_fit_summary' }),
+      ]),
     }));
     expect(upsertConversationProfile).toHaveBeenCalled();
+  });
+
+  it('builds program_area_overview work items for areas_overview without shortlisting', async () => {
+    const coordinator = {
+      claim: vi.fn().mockResolvedValue(1),
+      complete: vi.fn(),
+      retry: vi.fn(),
+      publishTurnUpdate: vi.fn(),
+      upsertConversationProfile: vi.fn(),
+    };
+    const families = [
+      {
+        familyId: 'computer-science', areaId: 'computing-technology', name: 'Computer Science',
+        aliasesJson: '[]', description: 'Software and theory.', typicalSubjectsJson: '[]',
+        careerDirectionsJson: '[]', relatedFamilyIdsJson: '[]', active: true,
+      },
+      {
+        familyId: 'nursing', areaId: 'health-medicine', name: 'Nursing',
+        aliasesJson: '[]', description: 'Clinical care.', typicalSubjectsJson: '[]',
+        careerDirectionsJson: '[]', relatedFamilyIdsJson: '[]', active: true,
+      },
+    ];
+    const catalog = {
+      listCourses: () => Array.from({ length: MIN_CATALOG_COURSES }, (_, index) => ({
+        ...baseCourse,
+        courseId: index === 0 ? baseCourse.courseId : `course-${index}`,
+        familyId: index === 0 ? 'computer-science' : 'nursing',
+        name: index === 0 ? baseCourse.name : `Course ${index}`,
+      })),
+      listFamilies: () => families,
+      getProfile: () => undefined,
+    };
+    const agent = {
+      run: vi.fn().mockResolvedValue({
+        threadId: 'c1',
+        runId: 'r1',
+        content: 'Here are the main course areas.',
+        metadata: {},
+        advisor: {
+          assistantContent: 'I’ve opened the main course areas in your workspace.',
+          route: { intent: 'discovery', reason: 'Cold-start browse', clarificationQuestion: '' },
+          scope: {
+            scope: 'areas_overview', areaId: '', familyIds: [], offeringIds: [],
+            explanation: 'Catalog-wide browse', clarificationQuestion: '', comparisonCriterion: '',
+          },
+          proposal: { mode: 'none', offeringIds: [], rationale: '' },
+          presentedFamilyIds: [],
+          presentedOfferingIds: [],
+          directive: { type: 'catalog', awareness: 'Showing the main course areas.' },
+          workItems: [],
+          workKind: 'areas_overview',
+          profilePatch: {
+            background: '', courseInterests: '', ambitions: '', primaryArea: '',
+            candidateAreas: [], studentPhrase: "I'm confused", constraintsText: '',
+          },
+        },
+      }),
+    };
+    await processChatTurn(turn({ userContent: "I'm confused and want to go abroad" }), agent, coordinator, undefined, catalog);
+    expect(coordinator.complete).toHaveBeenCalledWith('t1', 1, expect.objectContaining({
+      directiveType: 'catalog',
+      workKind: 'areas_overview',
+      presentedFamilyIds: [],
+      presentedOfferingIds: [],
+      workItems: expect.arrayContaining([
+        expect.objectContaining({ entityType: 'area', entityId: 'computing-technology', kind: 'program_area_overview' }),
+        expect.objectContaining({ entityType: 'area', entityId: 'health-medicine', kind: 'program_area_overview' }),
+      ]),
+    }));
   });
 
   it('keeps discovery without invented courses for unmapped phrases', async () => {
@@ -98,6 +175,17 @@ describe('AI worker chat turn', () => {
       directiveType: 'discovery',
       workItems: [],
     }));
+  });
+
+  it('fails the turn without invoking the agent when the catalog is too small', async () => {
+    const fail = vi.fn();
+    const coordinator = { claim: vi.fn().mockResolvedValue(1), complete: vi.fn(), retry: vi.fn(), fail, publishTurnUpdate: vi.fn() };
+    const agent = { run: vi.fn() };
+    const thinCatalog = { listCourses: () => [baseCourse], getProfile: () => undefined };
+    await processChatTurn(turn({ userContent: 'I like programming' }), agent, coordinator, undefined, thinCatalog);
+    expect(agent.run).not.toHaveBeenCalled();
+    expect(fail).toHaveBeenCalledWith('t1', 1, 'catalog_unavailable');
+    expect(coordinator.complete).not.toHaveBeenCalled();
   });
 
   it('subscribes, deduplicates delivery, renews leases, and stops cleanly', async () => {

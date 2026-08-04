@@ -7,9 +7,13 @@ import {
   type TurnUpdatePayload,
   type UserUiState,
   advisorTurnResult,
+  catalogAreaDisplayName,
   rankCoursesForAreas,
 } from '@study-abroad/contracts';
 import type { AgentClient, AgentSelectionContext } from './agent-server-client.js';
+
+/** Specialist discovery requires a usable catalog snapshot; below this, skip the graph. */
+export const MIN_CATALOG_COURSES = 10;
 
 export interface Coordinator {
   claim(turn: ChatTurn): Promise<number | undefined>;
@@ -128,6 +132,42 @@ function buildWorkItems(
   families: CatalogFamilyView[],
 ): WorkItemSpec[] {
   const workSetId = `${turn.turnId}-work`;
+  if (advisor.workKind === 'areas_overview') {
+    const byArea = new Map<string, CatalogFamilyView[]>();
+    for (const family of families) {
+      if (!family.areaId) continue;
+      const list = byArea.get(family.areaId) ?? [];
+      list.push(family);
+      byArea.set(family.areaId, list);
+    }
+    return [...byArea.entries()]
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([areaId, areaFamilies], orderIndex) => {
+        const sampleFamilyNames = areaFamilies.slice(0, 4).map((row) => row.name).filter(Boolean);
+        const name = catalogAreaDisplayName(areaId);
+        const familyIds = new Set(areaFamilies.map((row) => row.familyId));
+        const offeringCount = courses.filter((row) => familyIds.has(row.familyId)).length;
+        const description = sampleFamilyNames.length
+          ? `Includes course types such as ${sampleFamilyNames.join(', ')}.`
+          : 'Browse course types in this field of study.';
+        const input = {
+          areaId,
+          name,
+          description,
+          familyCount: areaFamilies.length,
+          sampleFamilyNames,
+          offeringCount,
+        };
+        return {
+          entityType: 'area', entityId: areaId, kind: 'program_area_overview',
+          displayTitle: name, orderIndex,
+          targetJson: JSON.stringify({
+            schemaVersion: 1, viewType: 'area', workSetId, entityType: 'area', entityId: areaId,
+          }),
+          dependencyJson: JSON.stringify(input), inputJson: JSON.stringify(input),
+        };
+      });
+  }
   if (advisor.workKind === 'area_overview') {
     return advisor.presentedFamilyIds
       .map((familyId) => families.find((row) => row.familyId === familyId))
@@ -196,7 +236,15 @@ export async function processChatTurn(
     await publish({ kind: 'turn_started' });
     const courses = catalog?.listCourses() ?? [];
     const families = catalog?.listFamilies?.() ?? [];
-    const catalogAreas = [...new Set(families.map((row) => row.areaId))];
+    if (courses.length < MIN_CATALOG_COURSES) {
+      const errorCode = 'catalog_unavailable';
+      if (coordinator.fail) {
+        await coordinator.fail(turn.turnId, attempt, errorCode);
+      } else {
+        await coordinator.retry(turn.turnId, attempt, errorCode);
+      }
+      return;
+    }
     const profile = catalog?.getProfile(turn.conversationId) ?? emptyProfile();
     const selectionContext = catalog?.getSelection?.(turn.conversationId) ?? emptySelection();
     const userMessage: ChatMessage = {
@@ -204,7 +252,6 @@ export async function processChatTurn(
       role: 'user', content: turn.userContent, createdAt: new Date().toISOString(),
     };
     const result = await agent.run([userMessage], turn, {
-      catalogAreas, catalogFamilies: families, catalogCourses: courses,
       profile, uiContext: turn.uiContext, selectionContext,
     });
     catalog?.getUiState?.(turn.conversationId, turn.uiContext.clientInstanceId);

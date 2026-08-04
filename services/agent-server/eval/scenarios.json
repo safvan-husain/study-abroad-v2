@@ -1,0 +1,111 @@
+[
+  {
+    "id": "computing-interest-cold-start",
+    "message": "Hi, I like to learn computer programming or computer science.",
+    "uiContext": {},
+    "selectionContext": {},
+    "expect": {
+      "routeIntent": "discovery",
+      "scope": "area_overview",
+      "areaId": "computing-technology"
+    }
+  },
+  {
+    "id": "health-nursing-interest",
+    "message": "I am interested in nursing and healthcare programmes.",
+    "uiContext": {},
+    "selectionContext": {},
+    "expect": {
+      "routeIntent": "discovery",
+      "scope": "area_overview",
+      "areaId": "health-medicine"
+    }
+  },
+  {
+    "id": "business-mba-interest",
+    "message": "I want an MBA or business management degree abroad.",
+    "uiContext": {},
+    "selectionContext": {},
+    "expect": {
+      "routeIntent": "discovery",
+      "scope": "area_overview",
+      "areaId": "business-economics"
+    }
+  },
+  {
+    "id": "show-all-these-families",
+    "message": "Please show all these course types.",
+    "uiContext": {},
+    "selectionContext": {
+      "presentedFamilyIds": [
+        "computer-science",
+        "computer-systems",
+        "cyber-security-engineering"
+      ],
+      "presentedOfferingIds": [],
+      "provisionalOfferingIds": [],
+      "suppressedOfferingIds": []
+    },
+    "expect": {
+      "routeIntent": "discovery",
+      "scope": "all_area_offerings",
+      "familyIds": [
+        "computer-science",
+        "computer-systems",
+        "cyber-security-engineering"
+      ]
+    }
+  },
+  {
+    "id": "institution-computing-probe",
+    "message": "Does the University of Latvia have a computer science course?",
+    "uiContext": {},
+    "selectionContext": {},
+    "expect": {
+      "routeIntent": "discovery",
+      "scopeIn": ["family_offerings", "area_overview", "all_area_offerings"],
+      "areaId": "computing-technology"
+    }
+  },
+  {
+    "id": "compare-two-offerings",
+    "message": "Compare these two courses for me.",
+    "uiContext": {},
+    "selectionContext": {
+      "presentedFamilyIds": ["computer-science", "computer-systems"],
+      "presentedOfferingIds": [
+        "lu-computer-science-bsc",
+        "rtu-computer-systems-bsc"
+      ],
+      "provisionalOfferingIds": [],
+      "suppressedOfferingIds": []
+    },
+    "expect": {
+      "routeIntent": "discovery",
+      "scope": "compare_offerings",
+      "offeringIds": [
+        "lu-computer-science-bsc",
+        "rtu-computer-systems-bsc"
+      ]
+    }
+  },
+  {
+    "id": "guidance-visa-process",
+    "message": "How does the student visa process work for studying abroad?",
+    "uiContext": {},
+    "selectionContext": {},
+    "expect": {
+      "routeIntent": "guidance"
+    }
+  },
+  {
+    "id": "ambiguous-show-courses",
+    "message": "Show me courses.",
+    "uiContext": {},
+    "selectionContext": {},
+    "expect": {
+      "routeIntentIn": ["clarify", "discovery"],
+      "scopeIn": ["clarify"]
+    }
+  }
+]

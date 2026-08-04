@@ -63,6 +63,24 @@ export async function processWorkItem(
 
   try {
     const input = JSON.parse(item.inputJson) as Record<string, unknown>;
+    if (item.kind === 'program_area_overview') {
+      const sampleFamilyNames = Array.isArray(input.sampleFamilyNames)
+        ? input.sampleFamilyNames.map(String)
+        : [];
+      const result = {
+        entityType: 'area',
+        entityId: item.entityId,
+        title: String(input.name ?? item.displayTitle),
+        detail: String(input.description ?? ''),
+        areaId: String(input.areaId ?? item.entityId),
+        familyCount: Number(input.familyCount ?? 0),
+        sampleFamilyNames,
+        offeringCount: Number(input.offeringCount ?? 0),
+      };
+      await coordinator.completeWorkItem(item.workItemId, attempt, JSON.stringify(result));
+      return;
+    }
+
     if (item.kind === 'program_family_overview') {
       const result = {
         entityType: 'family',

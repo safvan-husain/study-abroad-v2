@@ -78,6 +78,45 @@ describe('advisor workspace UI', () => {
     expect(markup).toContain('no longer matches');
   });
 
+  it('renders course area cards for program_area_overview work items', () => {
+    const markup = renderToStaticMarkup(<WorkspaceView
+      directive={{ viewType: 'catalog', awareness: 'Showing the main course areas.', uiRevision: 1n, workSetId: 'set-1' }}
+      workSets={[{ workSetId: 'set-1', status: 'partial', kind: 'areas_overview' }]}
+      target={{ schemaVersion: 1, viewType: 'catalog', workSetId: 'set-1' }}
+      workItems={[
+        {
+          workItemId: 'a1', workSetId: 'set-1', entityId: 'computing-technology', kind: 'program_area_overview',
+          displayTitle: 'Computing and Technology', orderIndex: 0,
+          target: { schemaVersion: 1, viewType: 'area', workSetId: 'set-1', entityType: 'area', entityId: 'computing-technology' },
+          status: 'completed', errorCode: null,
+        },
+        {
+          workItemId: 'a2', workSetId: 'set-1', entityId: 'health-medicine', kind: 'program_area_overview',
+          displayTitle: 'Health and Medicine', orderIndex: 1,
+          target: { schemaVersion: 1, viewType: 'area', workSetId: 'set-1', entityType: 'area', entityId: 'health-medicine' },
+          status: 'completed', errorCode: null,
+        },
+      ]}
+      workResults={[
+        {
+          workItemId: 'a1',
+          resultJson: '{"title":"Computing and Technology","detail":"Includes course types such as Computer Science.","familyCount":5,"sampleFamilyNames":["Computer Science","Data Science"]}',
+          target: { schemaVersion: 1, viewType: 'area', workSetId: 'set-1', entityType: 'area', entityId: 'computing-technology' },
+        },
+        {
+          workItemId: 'a2',
+          resultJson: '{"title":"Health and Medicine","detail":"Includes course types such as Nursing.","familyCount":1,"sampleFamilyNames":["Nursing"]}',
+          target: { schemaVersion: 1, viewType: 'area', workSetId: 'set-1', entityType: 'area', entityId: 'health-medicine' },
+        },
+      ]}
+    />);
+    expect(markup).toContain('Course areas');
+    expect(markup).toContain('Computing and Technology');
+    expect(markup).toContain('Health and Medicine');
+    expect(markup).toContain('5 course types');
+    expect(markup).toContain('Computer Science');
+  });
+
   it('keeps a completed action card available regardless of the current workspace', () => {
     const action = {
       actionId: 'a1', clientInstanceId: 'tab-1', sourceKind: 'work_item', sourceId: 'i1', kind: 'open_course_summary',

@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  catalogAreaDisplayName,
+  catalogScopeDecision,
   discoveryTurnResult,
   mapPhraseToCatalogAreas,
   matchesCatalogLabel,
@@ -19,6 +21,14 @@ describe('discovery contracts', () => {
     expect(intent.status).toBe('mapped');
     expect(intent.catalogAreas).toEqual(['computing']);
     expect(intent.studentPhrase).toBe('programming');
+  });
+
+  it('accepts areas_overview as a catalog scope', () => {
+    expect(catalogScopeDecision.parse({
+      scope: 'areas_overview',
+      explanation: 'Cold-start browse',
+    }).scope).toBe('areas_overview');
+    expect(catalogAreaDisplayName('computing-technology')).toBe('Computing and Technology');
   });
 
   it('reports unmapped phrases without inventing areas', () => {

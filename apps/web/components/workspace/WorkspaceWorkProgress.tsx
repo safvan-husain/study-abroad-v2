@@ -79,6 +79,7 @@ export function WorkspaceWorkProgress({
   const activeItems = activeSet ? items.filter((item) => item.workSetId === activeSet.workSetId) : [];
   if (!activeSet) return null;
   const familyItems = activeItems.filter((item) => item.kind === 'program_family_overview');
+  const areaItems = activeItems.filter((item) => item.kind === 'program_area_overview');
   const offeringItems = activeItems.filter((item) => ['program_offering', 'course_fit_summary'].includes(item.kind));
   const offeringEntries = offeringItems.map((item) => ({ item, data: resultData(results.find((entry) => entry.workItemId === item.workItemId)) }));
   const offeringGroups = [...offeringEntries.reduce((groups, entry) => {
@@ -89,8 +90,17 @@ export function WorkspaceWorkProgress({
     groups.set(familyId, group);
     return groups;
   }, new Map<string, { familyId: string; familyName: string; entries: typeof offeringEntries }>()).values()];
-  const otherItems = activeItems.filter((item) => item.kind !== 'program_family_overview' && !['program_offering', 'course_fit_summary'].includes(item.kind));
-  const title = activeSet.kind === 'comparison' ? 'University offering comparison' : familyItems.length ? 'Course types in this area' : 'University offerings';
+  const otherItems = activeItems.filter((item) =>
+    item.kind !== 'program_family_overview'
+    && item.kind !== 'program_area_overview'
+    && !['program_offering', 'course_fit_summary'].includes(item.kind));
+  const title = activeSet.kind === 'comparison'
+    ? 'University offering comparison'
+    : areaItems.length
+      ? 'Course areas'
+      : familyItems.length
+        ? 'Course types in this area'
+        : 'University offerings';
   const selectedIds = new Set([...(selection?.provisionalOfferingIds ?? []), ...(selection?.confirmedOfferingIds ?? [])]);
   const relatedIds = [...new Set(offeringItems.flatMap((item) => {
     const data = resultData(results.find((entry) => entry.workItemId === item.workItemId));
@@ -100,6 +110,10 @@ export function WorkspaceWorkProgress({
   return (
     <section className="work-progress" aria-labelledby="work-progress-title">
       <div className="section-heading"><div><span className="eyebrow">ADVISOR WORKSPACE</span><h3 id="work-progress-title">{title}</h3></div><span className={`work-set-status status-${activeSet.status}`}>{activeSet.status.replaceAll('_', ' ')}</span></div>
+      {areaItems.length ? <div className="work-grid area-grid">{areaItems.map((item) => {
+        const result = resultData(results.find((entry) => entry.workItemId === item.workItemId));
+        return <article id={`workspace-item-${item.workItemId}`} className={`work-card area-card work-card-${item.status}`} key={item.workItemId}><span className="work-card-label">{Number(result?.familyCount ?? 0)} course types</span><h4>{String(result?.title ?? item.displayTitle)}</h4><p>{String(result?.detail ?? 'Loading the course area overview…')}</p>{stringArray(result?.sampleFamilyNames).length ? <p><strong>Examples:</strong> {stringArray(result?.sampleFamilyNames).join(', ')}</p> : null}</article>;
+      })}</div> : null}
       {familyItems.length ? <div className="work-grid family-grid">{familyItems.map((item) => {
         const result = resultData(results.find((entry) => entry.workItemId === item.workItemId));
         return <article id={`workspace-item-${item.workItemId}`} className={`work-card family-card work-card-${item.status}`} key={item.workItemId}><span className="work-card-label">{Number(result?.offeringCount ?? 0)} university offerings</span><h4>{String(result?.title ?? item.displayTitle)}</h4><p>{String(result?.detail ?? 'Loading the reviewed course-type description…')}</p>{stringArray(result?.typicalSubjects).length ? <p><strong>Typical subjects:</strong> {stringArray(result?.typicalSubjects).join(', ')}</p> : null}{stringArray(result?.careerDirections).length ? <p><strong>Career directions:</strong> {stringArray(result?.careerDirections).join(', ')}</p> : null}</article>;

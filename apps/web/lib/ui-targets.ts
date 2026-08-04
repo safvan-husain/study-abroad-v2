@@ -24,6 +24,7 @@ export function workspaceContainsTarget(current: UiTargetRef, candidate: UiTarge
 export function targetBreadcrumb(target: UiTargetRef): string {
   if (target.viewType === 'home') return 'DISCOVERY';
   if (target.viewType === 'catalog') return 'EXPLORE';
+  if (target.viewType === 'area') return 'EXPLORE / COURSE AREA';
   if (target.viewType === 'family') return 'EXPLORE / COURSE TYPE';
   if (target.viewType === 'comparison') return 'EXPLORE / COMPARISON';
   if (target.viewType === 'shortlist') return 'SHORTLIST';

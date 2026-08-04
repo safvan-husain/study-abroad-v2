@@ -19,6 +19,8 @@ describe('AgentServerClient', () => {
     await subject.run([{ messageId: 'newer', conversationId: 'conversation-1', turnId: 'turn-2', role: 'user', content: 'newer', createdAt: '' }], { ...ids, turnId: 'turn-2' });
     expect(client.assistants.create).toHaveBeenCalledTimes(1);
     expect(wait.mock.calls[0][2].input.messages).toEqual([{ role: 'human', content: 'new' }]);
+    expect(wait.mock.calls[0][2].input.catalog_courses).toEqual([]);
+    expect(wait.mock.calls[0][2].input.catalog_families).toEqual([]);
     expect(client.threads.create.mock.calls[0][0].metadata).toEqual({ conversation_id: 'conversation-1' });
     expect(wait.mock.calls[0][2].metadata).toMatchObject({
       conversation_id: 'conversation-1',
