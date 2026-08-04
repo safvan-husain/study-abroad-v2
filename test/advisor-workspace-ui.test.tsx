@@ -8,6 +8,22 @@ import { WorkspaceView } from '../apps/web/components/workspace/WorkspaceView';
 const summaryTarget = (entityId: string) => ({ schemaVersion: 1 as const, viewType: 'course_summary' as const, workSetId: 'set-1', entityType: 'course', entityId, slot: 'summary' });
 
 describe('advisor workspace UI', () => {
+  it('opens with Explore-first progress and no Discovery step', () => {
+    const markup = renderToStaticMarkup(<WorkspaceView
+      workSets={[]}
+      workItems={[]}
+      workResults={[]}
+      target={{ schemaVersion: 1, viewType: 'home' }}
+    />);
+    expect(markup).toContain('Explore courses that fit your story.');
+    expect(markup).toContain('Ready to explore');
+    expect(markup).toContain('<b>Explore</b>');
+    expect(markup).toContain('<b>Shortlist</b>');
+    expect(markup).toContain('<b>Documents</b>');
+    expect(markup).not.toContain('Discovery');
+    expect(markup).toContain('YOUR JOURNEY <b>/</b> EXPLORE');
+  });
+
   it('opens with a hard-coded background and interests ask instead of starter chips', () => {
     const welcome = renderToStaticMarkup(<AdvisorConversation messages={[]} turns={[]} />);
     const rail = renderToStaticMarkup(<AdvisorRail
