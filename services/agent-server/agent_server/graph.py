@@ -193,10 +193,13 @@ def route_intent(state: AdvisorState) -> dict[str, Any]:
     text = _latest_human_text(state.get("messages", []))
     selection = state.get("selection_context", {})
     decision = _ollama_json(
-        "Classify the latest student message. guidance means general study-abroad knowledge, journey help, or help using the advisor. "
-        "discovery means exploring course areas, course types, exact university offerings, comparisons, preferences, or recommendations. "
+        "Classify the latest student message. "
+        "guidance means general study-abroad process knowledge, journey steps, document or eligibility logistics at a high level, or help using this advisor — not naming or exploring academic subjects. "
+        "discovery means any request to explore, find, compare, recommend, or express interest in course areas, fields of study, course types, or exact university offerings — "
+        "including broad interest statements such as 'I like computer science', 'I want to learn programming', or 'I'm interested in business', even when the student does not yet ask to show courses. "
+        "When the student names or implies a subject or course direction, choose discovery; the scope resolver will pick area_overview or a narrower scope. "
         "A command such as 'show all these' is discovery when presentedFamilyIds are supplied; the scope resolver will resolve what 'these' means. "
-        "If both are materially requested, or the request cannot safely be assigned, choose clarify and ask one concise question. "
+        "If both guidance and discovery are materially requested, or the request cannot safely be assigned, choose clarify and ask one concise question. "
         "Schema: {intent: guidance|discovery|clarify, reason: string, clarificationQuestion: string}.",
         {
             "message": text, "uiContext": state.get("ui_context", {}), "profile": state.get("profile", {}),

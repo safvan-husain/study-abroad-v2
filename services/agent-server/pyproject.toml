@@ -17,5 +17,11 @@ dependencies = [
 [project.optional-dependencies]
 test = ["pytest>=8"]
 
+[tool.pytest.ini_options]
+pythonpath = ["."]
+markers = [
+    "live_llm: calls a real Ollama endpoint; requires RUN_LIVE_LLM_TESTS=1 and OLLAMA_HOST",
+]
+
 [tool.setuptools.packages.find]
 include = ["agent_server*"]

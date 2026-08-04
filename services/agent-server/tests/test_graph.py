@@ -2,23 +2,10 @@ from langchain_core.messages import HumanMessage
 
 from agent_server.graph import _map_phrase, _ollama_chat, _validate_scope, graph, run_course_fit, run_discovery
 from agent_server.initial_state import initial_course_fit_state, initial_discover_state
+from tests.catalog_fixtures import COURSES, FAMILIES, COMPUTING_AREA_ID
 
 
-FAMILIES = [
-    {"familyId": "computer-science", "areaId": "computing-technology", "name": "Computer Science", "aliases": ["computer science"]},
-    {"familyId": "computer-systems", "areaId": "computing-technology", "name": "Computer Systems", "aliases": ["computer systems"]},
-    {"familyId": "cyber-security-engineering", "areaId": "computing-technology", "name": "Cybersecurity", "aliases": ["cybersecurity"]},
-    {"familyId": "data-science", "areaId": "computing-technology", "name": "Data Science", "aliases": ["data science"]},
-    {"familyId": "artificial-intelligence", "areaId": "computing-technology", "name": "Artificial Intelligence", "aliases": ["ai"]},
-]
-COURSES = [
-    {"courseId": "cs-lu", "familyId": "computer-science", "name": "Computer Science", "institutionName": "University of Latvia"},
-    {"courseId": "cs-charles", "familyId": "computer-science", "name": "Computer Science", "institutionName": "Charles University"},
-    {"courseId": "systems-rtu", "familyId": "computer-systems", "name": "Computer Systems", "institutionName": "RTU"},
-    {"courseId": "cyber-taltech", "familyId": "cyber-security-engineering", "name": "Cyber Security Engineering", "institutionName": "TalTech"},
-    {"courseId": "data-vienna", "familyId": "data-science", "name": "Data Science", "institutionName": "Vienna"},
-    {"courseId": "ai-bocconi", "familyId": "artificial-intelligence", "name": "AI", "institutionName": "Bocconi"},
-]
+INTEREST_MESSAGE = "Hi, I like to learn computer programming or computer science."
 
 
 def invoke_specialist(monkeypatch, message, scope_decision, selection=None):
@@ -122,16 +109,29 @@ def test_rejects_guarantee_claims_in_model_fit_text():
 
 def test_interest_statement_explains_every_nearby_course_type_without_shortlisting(monkeypatch):
     result = invoke_specialist(monkeypatch, "I want computer science", {
-        "scope": "area_overview", "areaId": "computing-technology", "familyIds": ["computer-science"], "offeringIds": [],
+        "scope": "area_overview", "areaId": COMPUTING_AREA_ID, "familyIds": ["computer-science"], "offeringIds": [],
         "explanation": "Explain nearby types first", "clarificationQuestion": "", "comparisonCriterion": "",
     })
     assert result["presentedFamilyIds"] == [row["familyId"] for row in FAMILIES]
     assert result["proposal"]["mode"] == "none"
 
 
+def test_programming_interest_statement_uses_area_overview_when_routed_as_discovery(monkeypatch):
+    """Deterministic regression for the exact mis-routed message; live check in test_graph_live.py."""
+    result = invoke_specialist(monkeypatch, INTEREST_MESSAGE, {
+        "scope": "area_overview", "areaId": COMPUTING_AREA_ID, "familyIds": ["computer-science"], "offeringIds": [],
+        "explanation": "Broad computing interest", "clarificationQuestion": "", "comparisonCriterion": "",
+    })
+    assert result["route"]["intent"] == "discovery"
+    assert result["scope"]["scope"] == "area_overview"
+    assert result["presentedFamilyIds"] == [row["familyId"] for row in FAMILIES]
+    assert result["directive"]["type"] == "catalog"
+    assert result["proposal"]["mode"] == "none"
+
+
 def test_explicit_family_command_loads_every_exact_offering(monkeypatch):
     result = invoke_specialist(monkeypatch, "Show Computer Science courses", {
-        "scope": "family_offerings", "areaId": "computing-technology", "familyIds": ["computer-science"], "offeringIds": [],
+        "scope": "family_offerings", "areaId": COMPUTING_AREA_ID, "familyIds": ["computer-science"], "offeringIds": [],
         "explanation": "Explicit display command", "clarificationQuestion": "", "comparisonCriterion": "",
     })
     assert result["presentedOfferingIds"] == ["cs-lu", "cs-charles"]

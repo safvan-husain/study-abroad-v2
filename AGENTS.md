@@ -22,3 +22,14 @@ When working on Version 1 or comparing behavior with the previous implementation
 - Persist UI-originated filter, context, shortlist, and navigation changes through authorized reducers. Record a typed user-action event in the same transaction when provenance is useful, but do not manufacture a chat message, system message, or immediate agent turn for routine removals.
 - Before every parent or child agent execution, read the latest canonical state and treat it as authoritative over checkpoint state. Typed recent user actions may be supplied through a separate graph-state channel; stale child output must not restore removed context or steal focus from newer user navigation.
 - Keep chat prose and workspace payloads distinct. Chat may explain genuinely conversational answers, but commands whose purpose is to change or populate the left workspace should acknowledge the action without duplicating course cards, comparisons, or personalized summaries in the transcript.
+
+## Agent Server Tests
+
+- Default pytest runs must stay **offline**: mock Ollama (`OLLAMA_DISABLED=true`) or monkeypatch `_ollama_json` / `_ollama_chat`. CI and routine `uv run pytest` must never call a live model.
+- **Live LLM tests** live in `services/agent-server/tests/test_graph_live.py`. They are marked `@pytest.mark.live_llm` and skipped unless `RUN_LIVE_LLM_TESTS=1` (or `true`/`yes`) **and** `OLLAMA_HOST` is set, with `OLLAMA_DISABLED` unset.
+- When changing advisor routing, scope resolution, or graph prompts in `services/agent-server/agent_server/graph.py`, update the matching deterministic tests in `tests/test_graph.py` and, when behavior depends on real model output, the opt-in live test in `tests/test_graph_live.py`.
+- Run live tests explicitly from `services/agent-server`::
+
+      RUN_LIVE_LLM_TESTS=1 OLLAMA_HOST=https://… uv run pytest tests/test_graph_live.py -v
+
+  Do not add live LLM tests to default CI jobs or pre-commit hooks.
