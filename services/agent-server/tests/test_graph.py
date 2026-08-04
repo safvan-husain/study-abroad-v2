@@ -1,6 +1,7 @@
 from langchain_core.messages import HumanMessage
 
 from agent_server.graph import _map_phrase, _ollama_chat, _validate_scope, graph, run_course_fit, run_discovery
+from agent_server.initial_state import initial_course_fit_state, initial_discover_state
 
 
 FAMILIES = [
@@ -25,11 +26,12 @@ def invoke_specialist(monkeypatch, message, scope_decision, selection=None):
         raw = {"intent": "discovery", "reason": "Course exploration", "clarificationQuestion": ""} if "Classify" in system else scope_decision
         return validate(raw)
     monkeypatch.setattr("agent_server.graph._ollama_json", fake_json)
-    return graph.invoke({
-        "messages": [HumanMessage(content=message)], "task": "discover", "graph_version": "specialist",
-        "catalog_families": FAMILIES, "catalog_courses": COURSES, "profile": {}, "ui_context": {},
-        "selection_context": selection or {},
-    })["advisor_result"]
+    return graph.invoke(initial_discover_state(
+        messages=[HumanMessage(content=message)],
+        catalog_families=FAMILIES,
+        catalog_courses=COURSES,
+        selection_context=selection or {},
+    ))["advisor_result"]
 
 
 def test_ollama_can_be_disabled(monkeypatch):
@@ -95,21 +97,16 @@ def test_discovery_returns_catalog_directive_for_mapped_interest():
 
 def test_course_fit_stays_indicative():
     result = run_course_fit(
-        {
-            "messages": [],
-            "catalog_areas": [],
-            "profile": {"studentPhrase": "programming"},
-            "task": "course_fit",
-            "course": {
+        initial_course_fit_state(
+            profile={"studentPhrase": "programming"},
+            course={
                 "courseId": "lu-computer-science-bsc",
                 "name": "Computer Science",
                 "institutionName": "University of Latvia",
                 "area": "computing",
                 "country": "Latvia",
             },
-            "discovery_result": {},
-            "course_fit_result": {},
-        }
+        )
     )
     fit = result["course_fit_result"]
     assert fit["entityId"] == "lu-computer-science-bsc"

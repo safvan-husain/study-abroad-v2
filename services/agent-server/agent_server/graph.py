@@ -1,33 +1,47 @@
+"""Advisor LangGraph — routing, discovery, and guidance over catalog state.
+
+Canonical context is **not** loaded inside this graph. Before every invoke the AI
+worker reads a fresh SpacetimeDB snapshot and passes it as input state:
+
+- ``catalog_areas``, ``catalog_families``, ``catalog_courses`` — catalogue tables
+- ``profile``, ``selection_context``, ``ui_context`` — per-conversation truth
+- ``task``, ``graph_version`` — which top-level path ``route_task`` selects
+
+See ``agent_server.initial_state`` for documented invoke shapes
+(``initial_discover_state``, ``initial_course_fit_state``).
+
+Checkpoint / thread history may retain past messages, but catalog and selection
+channels on each run reflect the worker's latest read — never stale checkpoint
+catalog as authoritative truth.
+"""
+
 from __future__ import annotations
 
 import json
 import os
 import re
-from typing import Annotated, Any, Callable, TypedDict
+from typing import Any, Callable
 
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
+from langchain_core.messages import BaseMessage, HumanMessage
 from langgraph.graph import END, START, StateGraph
-from langgraph.graph.message import add_messages
 
-
-class AdvisorState(TypedDict, total=False):
-    messages: Annotated[list[BaseMessage], add_messages]
-    task: str
-    graph_version: str
-    catalog_areas: list[str]
-    catalog_families: list[dict[str, Any]]
-    catalog_courses: list[dict[str, Any]]
-    profile: dict[str, Any]
-    ui_context: dict[str, Any]
-    selection_context: dict[str, Any]
-    course: dict[str, Any]
-    canonical_context_loaded: bool
-    route_decision: dict[str, Any]
-    scope_decision: dict[str, Any]
-    branch_result: dict[str, Any]
-    advisor_result: dict[str, Any]
-    discovery_result: dict[str, Any]
-    course_fit_result: dict[str, Any]
+from agent_server.state import AdvisorState, RouteDecision, ScopeDecision
+from agent_server.state_updates import (
+    build_advisor_result,
+    build_branch_area_overview,
+    build_branch_clarification,
+    build_branch_comparison,
+    build_branch_family_offerings,
+    build_branch_guidance,
+    build_branch_selection_proposal,
+    complete_advisor_turn,
+    complete_course_fit_turn,
+    complete_discovery_turn,
+    empty_profile,
+    set_branch_result,
+    set_route_decision,
+    set_scope_decision,
+)
 
 
 def _latest_human_text(messages: list[BaseMessage] | list[Any]) -> str:
@@ -110,33 +124,7 @@ def _ollama_json(
     return None
 
 
-def _empty_profile(existing: dict[str, Any] | None = None) -> dict[str, Any]:
-    existing = existing or {}
-    return {
-        "background": str(existing.get("background") or "")[:1024],
-        "courseInterests": str(existing.get("courseInterests") or "")[:1024],
-        "ambitions": str(existing.get("ambitions") or "")[:1024],
-        "primaryArea": str(existing.get("primaryArea") or "")[:64],
-        "candidateAreas": [str(row)[:64] for row in (existing.get("candidateAreas") or [])][:8],
-        "studentPhrase": str(existing.get("studentPhrase") or "")[:256],
-        "constraintsText": str(existing.get("constraintsText") or "")[:1024],
-    }
-
-
-def _safe_clarification(question: str, reason: str = "The advisor needs one choice before continuing.") -> dict[str, Any]:
-    return {
-        "assistantContent": question,
-        "route": {"intent": "clarify", "reason": reason, "clarificationQuestion": question},
-        "proposal": {"mode": "none", "offeringIds": [], "rationale": ""},
-        "presentedFamilyIds": [],
-        "presentedOfferingIds": [],
-        "directive": {"type": "discovery", "awareness": "Waiting for your choice."},
-        "workItems": [],
-        "workKind": "",
-    }
-
-
-def _validate_route(value: dict[str, Any]) -> dict[str, Any] | None:
+def _validate_route(value: dict[str, Any]) -> RouteDecision | None:
     intent = value.get("intent")
     reason = value.get("reason")
     question = value.get("clarificationQuestion", "")
@@ -147,7 +135,7 @@ def _validate_route(value: dict[str, Any]) -> dict[str, Any] | None:
     return {"intent": intent, "reason": reason[:512], "clarificationQuestion": str(question)[:512]}
 
 
-def _validate_scope(value: dict[str, Any], state: AdvisorState) -> dict[str, Any] | None:
+def _validate_scope(value: dict[str, Any], state: AdvisorState) -> ScopeDecision | None:
     allowed = {"area_overview", "family_offerings", "all_area_offerings", "compare_offerings", "personalize_selection", "clarify"}
     scope = value.get("scope")
     explanation = value.get("explanation")
@@ -194,12 +182,6 @@ def _validate_scope(value: dict[str, Any], state: AdvisorState) -> dict[str, Any
     }
 
 
-def load_canonical_context(_state: AdvisorState) -> dict[str, Any]:
-    # The worker supplies a fresh SpacetimeDB snapshot for every run. Checkpoint state
-    # is deliberately never used as the source of catalog, selection, or UI truth.
-    return {"canonical_context_loaded": True}
-
-
 def _requests_all_presented(message: str, selection: dict[str, Any]) -> bool:
     normalized = " ".join(message.lower().split())
     references_presented = bool(re.search(r"\b(these|those|them)\b", normalized))
@@ -236,7 +218,7 @@ def route_intent(state: AdvisorState) -> dict[str, Any]:
             "reason": "The router model did not return a valid decision after one correction.",
             "clarificationQuestion": "Would you like help understanding the study-abroad process, or would you like to explore courses?",
         }
-    return {"route_decision": decision}
+    return set_route_decision(decision)
 
 
 def route_after_intent(state: AdvisorState) -> str:
@@ -255,14 +237,7 @@ def guidance_agent(state: AdvisorState) -> dict[str, Any]:
     )
     if not content:
         content = "I could not complete that guidance response safely. Please try again or ask a more specific question about the process or how to use the advisor."
-    return {"branch_result": {
-        "assistantContent": content[:16000],
-        "directive": {"type": "discovery", "awareness": "Guidance only; your workspace selection was not changed."},
-        "proposal": {"mode": "none", "offeringIds": [], "rationale": ""},
-        "presentedFamilyIds": [],
-        "presentedOfferingIds": [],
-        "workKind": "",
-    }}
+    return set_branch_result(build_branch_guidance(content))
 
 
 def resolve_catalog_scope(state: AdvisorState) -> dict[str, Any]:
@@ -312,7 +287,7 @@ def resolve_catalog_scope(state: AdvisorState) -> dict[str, Any]:
             "explanation": "The discovery model did not return a valid decision after one correction.",
             "clarificationQuestion": "Would you like to explore course areas, one course type, or every course within an area?", "comparisonCriterion": "",
         }
-    return {"scope_decision": decision}
+    return set_scope_decision(decision)
 
 
 def route_after_scope(state: AdvisorState) -> str:
@@ -335,32 +310,21 @@ def explain_course_types(state: AdvisorState) -> dict[str, Any]:
         if row.get("areaId") == area_id
     ]
     families = [row for row in state.get("catalog_families", []) if row.get("familyId") in family_ids]
-    count = len(families)
-    content = f"I found {count} course type{'s' if count != 1 else ''} in that direction. I’ve shown their focus, typical subjects, career directions, and offering counts so you can decide which type to explore."
-    return {"branch_result": {
-        "assistantContent": content,
-        "directive": {"type": "catalog", "awareness": "Showing every relevant course type."},
-        "proposal": {"mode": "none", "offeringIds": [], "rationale": ""},
-        "presentedFamilyIds": family_ids,
-        "presentedOfferingIds": [],
-        "workKind": "area_overview",
-    }}
+    return set_branch_result(build_branch_area_overview(family_ids, len(families)))
 
 
 def _load_offerings(state: AdvisorState, all_area: bool) -> dict[str, Any]:
     family_ids = _family_ids_for_scope(state)
     courses = [row for row in state.get("catalog_courses", []) if row.get("familyId") in family_ids]
     offering_ids = [str(row.get("courseId")) for row in courses]
-    label = "selected course types" if all_area or len(family_ids) > 1 else "course type"
-    content = f"I found {len(courses)} active university offering{'s' if len(courses) != 1 else ''} for that {label}. They’re grouped by course type in your workspace, with missing catalog facts left visibly unavailable."
-    return {"branch_result": {
-        "assistantContent": content,
-        "directive": {"type": "catalog", "awareness": "Showing every matching active university offering."},
-        "proposal": {"mode": "none", "offeringIds": [], "rationale": ""},
-        "presentedFamilyIds": family_ids,
-        "presentedOfferingIds": offering_ids,
-        "workKind": "all_area_offerings" if all_area else "family_offerings",
-    }}
+    return set_branch_result(
+        build_branch_family_offerings(
+            family_ids,
+            offering_ids,
+            len(courses),
+            all_area=all_area,
+        )
+    )
 
 
 def load_all_family_offerings(state: AdvisorState) -> dict[str, Any]:
@@ -377,15 +341,13 @@ def personalize_selection(state: AdvisorState) -> dict[str, Any]:
     courses = [row for row in state.get("catalog_courses", []) if row.get("courseId") in offering_ids]
     ordered = sorted(courses, key=lambda row: offering_ids.index(str(row.get("courseId"))))
     offering_ids = [str(row.get("courseId")) for row in ordered]
-    content = f"I’ve prepared {len(offering_ids)} exact university offering{'s' if len(offering_ids) != 1 else ''} as a provisional selection. Review the changes below the composer; confirmation remains a separate action."
-    return {"branch_result": {
-        "assistantContent": content,
-        "directive": {"type": "catalog", "awareness": "Proposing an editable course selection."},
-        "proposal": {"mode": "replace_provisional", "offeringIds": offering_ids, "rationale": str(scope.get("explanation") or "")[:4000]},
-        "presentedFamilyIds": list(dict.fromkeys(str(row.get("familyId")) for row in ordered)),
-        "presentedOfferingIds": offering_ids,
-        "workKind": "selection_proposal",
-    }}
+    return set_branch_result(
+        build_branch_selection_proposal(
+            offering_ids,
+            list(dict.fromkeys(str(row.get("familyId")) for row in ordered)),
+            str(scope.get("explanation") or ""),
+        )
+    )
 
 
 def compare_offerings(state: AdvisorState) -> dict[str, Any]:
@@ -393,49 +355,31 @@ def compare_offerings(state: AdvisorState) -> dict[str, Any]:
     offering_ids = [str(row) for row in scope.get("offeringIds", [])][:4]
     courses = [row for offering_id in offering_ids for row in state.get("catalog_courses", []) if row.get("courseId") == offering_id]
     criterion = str(scope.get("comparisonCriterion") or "overall")
-    content = f"I’ve put {len(courses)} exact university offerings side by side using {criterion}. The facts, ranking labels, and missing-data markers are deterministic; {str(scope.get('explanation') or 'I can explain the trade-offs in your context.')}"
-    return {"branch_result": {
-        "assistantContent": content[:16000],
-        "directive": {"type": "catalog", "awareness": "Comparing exact university offerings."},
-        "proposal": {"mode": "none", "offeringIds": [], "rationale": ""},
-        "presentedFamilyIds": list(dict.fromkeys(str(row.get("familyId")) for row in courses)),
-        "presentedOfferingIds": offering_ids,
-        "workKind": "comparison",
-    }}
+    return set_branch_result(
+        build_branch_comparison(
+            offering_ids,
+            list(dict.fromkeys(str(row.get("familyId")) for row in courses)),
+            len(courses),
+            criterion,
+            str(scope.get("explanation") or "I can explain the trade-offs in your context."),
+        )
+    )
 
 
 def clarification(state: AdvisorState) -> dict[str, Any]:
     question = str(state.get("route_decision", {}).get("clarificationQuestion") or "Would you like guidance or course discovery?")
-    return {"branch_result": _safe_clarification(question)}
+    return set_branch_result(build_branch_clarification(question))
 
 
 def clarify_catalog_scope(state: AdvisorState) -> dict[str, Any]:
     question = str(state.get("scope_decision", {}).get("clarificationQuestion") or "Would you like course areas, one course type, or everything within an area?")
-    return {"branch_result": _safe_clarification(question, str(state.get("scope_decision", {}).get("explanation") or "Catalog scope is unclear."))}
+    return set_branch_result(build_branch_clarification(question))
 
 
 def _finalize(state: AdvisorState) -> dict[str, Any]:
-    branch = state.get("branch_result", {})
-    route = state.get("route_decision", {"intent": "clarify", "reason": "No valid route.", "clarificationQuestion": ""})
-    profile = _empty_profile(state.get("profile"))
-    text = _latest_human_text(state.get("messages", []))
-    if route.get("intent") == "discovery" and text:
-        profile["studentPhrase"] = text[:256]
-        profile["courseInterests"] = profile["courseInterests"] or text[:1024]
-    result = {
-        "assistantContent": str(branch.get("assistantContent") or "Please tell me what you would like to explore.")[:16000],
-        "route": route,
-        "proposal": branch.get("proposal") or {"mode": "none", "offeringIds": [], "rationale": ""},
-        "presentedFamilyIds": branch.get("presentedFamilyIds") or [],
-        "presentedOfferingIds": branch.get("presentedOfferingIds") or [],
-        "directive": branch.get("directive") or {"type": "discovery", "awareness": "Waiting for your choice."},
-        "workItems": [],
-        "workKind": str(branch.get("workKind") or ""),
-        "profilePatch": profile,
-    }
-    if state.get("scope_decision"):
-        result["scope"] = state["scope_decision"]
-    return {"messages": [AIMessage(content=result["assistantContent"])], "advisor_result": result}
+    return complete_advisor_turn(
+        build_advisor_result(state, latest_human_text=_latest_human_text(state.get("messages", [])))
+    )
 
 
 def validate_discovery(state: AdvisorState) -> dict[str, Any]:
@@ -479,11 +423,16 @@ def run_discovery(state: AdvisorState) -> dict[str, Any]:
     mapped = intent["status"] == "mapped"
     phrase = intent["studentPhrase"] or "that interest"
     assistant = f"Thanks — I am looking through partner courses related to {phrase}." if mapped else f"I could not map {phrase} to an exact catalogue area yet."
-    result = {
-        "assistantContent": assistant, "profilePatch": _empty_profile(state.get("profile")), "discoveryIntent": intent,
-        "directive": {"type": "catalog" if mapped else "discovery", "awareness": assistant}, "workItems": [], "workKind": "",
-    }
-    return {"messages": [AIMessage(content=assistant)], "discovery_result": result}
+    return complete_discovery_turn(
+        {
+            "assistantContent": assistant,
+            "profilePatch": empty_profile(state.get("profile")),
+            "discoveryIntent": intent,
+            "directive": {"type": "catalog" if mapped else "discovery", "awareness": assistant},
+            "workItems": [],
+            "workKind": "",
+        }
+    )
 
 
 def run_course_fit(state: AdvisorState) -> dict[str, Any]:
@@ -491,15 +440,22 @@ def run_course_fit(state: AdvisorState) -> dict[str, Any]:
     profile = state.get("profile", {})
     phrase = str(profile.get("studentPhrase") or course.get("studentPhrase") or "your interests")
     detail = f"This {course.get('area') or 'partner'} programme at {course.get('institutionName') or 'a partner university'} is an indicative fit for someone interested in {phrase}."
-    result = {
-        "entityType": "course", "entityId": str(course.get("courseId") or ""), "title": str(course.get("name") or "Course match")[:256],
-        "detail": detail, "institutionName": str(course.get("institutionName") or "")[:256], "area": str(course.get("area") or "")[:64],
-        "country": str(course.get("country") or "")[:64], "studentPhrase": phrase[:256],
-    }
-    return {"messages": [AIMessage(content=detail)], "course_fit_result": result}
+    return complete_course_fit_turn(
+        {
+            "entityType": "course",
+            "entityId": str(course.get("courseId") or ""),
+            "title": str(course.get("name") or "Course match")[:256],
+            "detail": detail,
+            "institutionName": str(course.get("institutionName") or "")[:256],
+            "area": str(course.get("area") or "")[:64],
+            "country": str(course.get("country") or "")[:64],
+            "studentPhrase": phrase[:256],
+        }
+    )
 
 
 def route_task(state: AdvisorState) -> str:
+    # Specialist path assumes catalog/profile/selection were injected at invoke — see module docstring.
     if state.get("task") == "course_fit":
         return "course_fit"
     version = str(state.get("graph_version") or os.getenv("ADVISOR_GRAPH_VERSION", "specialist"))
@@ -509,7 +465,6 @@ def route_task(state: AdvisorState) -> str:
 builder = StateGraph(AdvisorState)
 builder.add_node("legacy_discover", run_discovery)
 builder.add_node("course_fit", run_course_fit)
-builder.add_node("load_canonical_context", load_canonical_context)
 builder.add_node("route_intent", route_intent)
 builder.add_node("guidance_agent", guidance_agent)
 builder.add_node("resolve_catalog_scope", resolve_catalog_scope)
@@ -523,11 +478,10 @@ builder.add_node("clarify_catalog_scope", clarify_catalog_scope)
 builder.add_node("validate_discovery", validate_discovery)
 builder.add_node("validate_guidance", validate_guidance)
 builder.add_conditional_edges(START, route_task, {
-    "legacy": "legacy_discover", "course_fit": "course_fit", "specialist": "load_canonical_context",
+    "legacy": "legacy_discover", "course_fit": "course_fit", "specialist": "route_intent",
 })
 builder.add_edge("legacy_discover", END)
 builder.add_edge("course_fit", END)
-builder.add_edge("load_canonical_context", "route_intent")
 builder.add_conditional_edges("route_intent", route_after_intent, {
     "guidance": "guidance_agent", "discovery": "resolve_catalog_scope", "clarify": "clarification",
 })

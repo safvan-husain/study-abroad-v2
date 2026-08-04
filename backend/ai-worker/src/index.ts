@@ -12,6 +12,8 @@ import { JobWorker } from './services/job-worker.js';
 import type { CatalogStore, Coordinator } from './services/process-chat-turn.js';
 import type { PendingJobSource, PendingWorkItemSource } from './services/coordinator-adapter.js';
 
+// The host supplies the generated SpacetimeDB connection.
+// Keeping this factory injectable makes local tests independent of live services.
 export function createWorker(deps: { coordinator: Coordinator; jobs?: PendingJobSource; workItems?: PendingWorkItemSource }, config = loadConfig()) {
   const maybeCatalog = deps.coordinator as unknown as Partial<CatalogStore>;
   const catalog = typeof maybeCatalog.listCourses === 'function' && typeof maybeCatalog.getProfile === 'function'
@@ -27,15 +29,4 @@ export function createWorker(deps: { coordinator: Coordinator; jobs?: PendingJob
     subscribeWorkItems: deps.workItems?.subscribe,
     catalog,
   });
-}
-
-// The host supplies the generated SpacetimeDB connection.
-// Keeping this factory injectable makes local tests independent of live services.
-export async function startWorker(deps: { coordinator: Coordinator; jobs?: PendingJobSource }) {
-  const worker = createWorker(deps);
-  worker.start();
-  const shutdown = () => void worker.stop();
-  process.once('SIGINT', shutdown);
-  process.once('SIGTERM', shutdown);
-  return worker;
 }

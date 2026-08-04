@@ -1,0 +1,1149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Advisor Graph Explorer</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
+
+    :root {
+      --bg: #0c1117;
+      --panel: #121920;
+      --stroke: #243041;
+      --muted: #8b9bb0;
+      --text: #e8eef6;
+    }
+
+    * { box-sizing: border-box; }
+    html, body, #root { height: 100%; margin: 0; }
+    body {
+      font-family: 'IBM Plex Sans', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      overflow: hidden;
+    }
+    code, pre, .mono { font-family: 'IBM Plex Mono', ui-monospace, monospace; }
+
+    .canvas-viewport {
+      cursor: grab;
+      touch-action: none;
+      background-color: #0c1117;
+      background-image: radial-gradient(circle at 1px 1px, rgba(36, 48, 65, 0.9) 1px, transparent 0);
+      background-size: 24px 24px;
+    }
+    .canvas-viewport.dragging { cursor: grabbing; }
+
+    .edge-path {
+      fill: none;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      transition: stroke-opacity 0.2s, stroke-width 0.2s;
+    }
+    .edge-path.dim { stroke-opacity: 0.18; }
+    .edge-path.active {
+      stroke-width: 2.5;
+      stroke-opacity: 1;
+    }
+    .edge-flow {
+      stroke-dasharray: 6 10;
+      animation: dash-flow 1.1s linear infinite;
+    }
+    @keyframes dash-flow {
+      to { stroke-dashoffset: -16; }
+    }
+
+    .node-card {
+      transition: opacity 0.15s ease;
+      cursor: pointer;
+    }
+    .node-card.dim { opacity: 0.28; }
+
+    .panel-scroll::-webkit-scrollbar { width: 8px; }
+    .panel-scroll::-webkit-scrollbar-thumb {
+      background: #2a3a4d;
+      border-radius: 4px;
+    }
+
+    .tag {
+      font-size: 10px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      font-weight: 600;
+      padding: 2px 7px;
+      border-radius: 4px;
+      border: 1px solid;
+    }
+
+    pre.code-block {
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-size: 11.5px;
+      line-height: 1.55;
+      background: #0a0e14;
+      border: 1px solid var(--stroke);
+      border-radius: 8px;
+      padding: 12px 14px;
+      color: #c5d4e4;
+      max-height: 320px;
+      overflow: auto;
+    }
+
+    .fade-in { animation: fadeIn 0.22s ease; }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: none; }
+    }
+
+    @keyframes selectPulse {
+      0%, 100% { opacity: 0.85; }
+      50% { opacity: 0.35; }
+    }
+    .select-ring { animation: selectPulse 1.6s ease-in-out infinite; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useRef, useEffect, useCallback, useMemo } = React;
+
+    const KIND = {
+      entry: { label: 'Entry', color: '#6b7c8f', fill: '#1a222d' },
+      router: { label: 'Router', color: '#e8a838', fill: '#2a2110' },
+      llm: { label: 'LLM call', color: '#7c6cf0', fill: '#1c1833' },
+      deterministic: { label: 'Deterministic', color: '#3db88a', fill: '#10241c' },
+      validate: { label: 'Finalize', color: '#e07a5f', fill: '#2a1712' },
+      terminal: { label: 'Terminal', color: '#6b7c8f', fill: '#1a222d' },
+      legacy: { label: 'Legacy', color: '#c478a8', fill: '#281820' },
+    };
+
+    const NODES = [
+      {
+        id: 'START',
+        label: 'START',
+        kind: 'entry',
+        x: 520, y: 40, w: 120, h: 44,
+        summary: 'LangGraph entry. Immediately runs the task router — no work is done here.',
+        does: [
+          'Graph begins execution.',
+          'Conditional edge calls route_task(state) to pick one of three top-level paths.',
+        ],
+        stateReads: ['task', 'graph_version', 'ADVISOR_GRAPH_VERSION env'],
+        stateWrites: [],
+        deterministic: [
+          'If task == "course_fit" → course_fit',
+          'Else if graph_version == "legacy" (or ADVISOR_GRAPH_VERSION) → legacy_discover',
+          'Else → specialist path (route_intent)',
+        ],
+        pitfalls: [
+          'graph_version defaults to "specialist" via env ADVISOR_GRAPH_VERSION.',
+          'Catalog/profile/selection are injected by the worker before invoke — checkpoint is not catalog truth.',
+        ],
+        code: `def route_task(state: AdvisorState) -> str:
+    if state.get("task") == "course_fit":
+        return "course_fit"
+    version = str(state.get("graph_version") or os.getenv("ADVISOR_GRAPH_VERSION", "specialist"))
+    return "legacy" if version == "legacy" else "specialist"
+
+builder.add_conditional_edges(START, route_task, {
+    "legacy": "legacy_discover",
+    "course_fit": "course_fit",
+    "specialist": "route_intent",
+})`,
+        lines: '502–527',
+      },
+      {
+        id: 'legacy_discover',
+        label: 'legacy_discover',
+        kind: 'legacy',
+        x: 80, y: 160, w: 160, h: 52,
+        summary: 'Legacy discovery path: phrase → catalogue area alias matching. No LLM.',
+        does: [
+          'Maps the latest human message to catalog areas via AREA_ALIASES regex.',
+          'Emits a short acknowledgement and discovery_result.',
+          'Ends the graph.',
+        ],
+        stateReads: ['messages', 'catalog_areas', 'profile'],
+        stateWrites: ['messages (AIMessage)', 'discovery_result'],
+        deterministic: [
+          '_map_phrase with AREA_ALIASES (computing / business / engineering).',
+          'status "mapped" if any area matches, else "unmapped".',
+          'directive.type is "catalog" when mapped, else "discovery".',
+        ],
+        pitfalls: [
+          'Only three hardcoded alias families — weak coverage vs specialist path.',
+          'Does not populate presentedFamilyIds / workItems / proposals.',
+        ],
+        code: `def run_discovery(state: AdvisorState) -> dict[str, Any]:
+    text = _latest_human_text(state.get("messages", []))
+    intent = _map_phrase(text, state.get("catalog_areas", []))
+    mapped = intent["status"] == "mapped"
+    phrase = intent["studentPhrase"] or "that interest"
+    assistant = (
+        f"Thanks — I am looking through partner courses related to {phrase}."
+        if mapped else
+        f"I could not map {phrase} to an exact catalogue area yet."
+    )
+    result = {
+        "assistantContent": assistant,
+        "profilePatch": _empty_profile(state.get("profile")),
+        "discoveryIntent": intent,
+        "directive": {"type": "catalog" if mapped else "discovery", "awareness": assistant},
+        "workItems": [], "workKind": "",
+    }
+    return {"messages": [AIMessage(content=assistant)], "discovery_result": result}`,
+        lines: '449–487',
+      },
+      {
+        id: 'course_fit',
+        label: 'course_fit',
+        kind: 'legacy',
+        x: 300, y: 160, w: 140, h: 52,
+        summary: 'Per-course indicative fit blurb for a child work item. Template-only, no LLM.',
+        does: [
+          'Builds a one-sentence indicative fit detail from course + profile phrase.',
+          'Writes course_fit_result and an AIMessage, then END.',
+        ],
+        stateReads: ['course', 'profile'],
+        stateWrites: ['messages (AIMessage)', 'course_fit_result'],
+        deterministic: [
+          'Pure string template from course fields + studentPhrase.',
+          'Truncates title/institution/area/country/phrase to fixed lengths.',
+        ],
+        pitfalls: [
+          'Must not claim admission/visa/eligibility — guarded elsewhere by _is_indicative_fit_text helpers.',
+          'entityId empty string if courseId missing.',
+        ],
+        code: `def run_course_fit(state: AdvisorState) -> dict[str, Any]:
+    course = state.get("course", {})
+    profile = state.get("profile", {})
+    phrase = str(profile.get("studentPhrase") or course.get("studentPhrase") or "your interests")
+    detail = (
+        f"This {course.get('area') or 'partner'} programme at "
+        f"{course.get('institutionName') or 'a partner university'} "
+        f"is an indicative fit for someone interested in {phrase}."
+    )
+    result = {
+        "entityType": "course",
+        "entityId": str(course.get("courseId") or ""),
+        "title": str(course.get("name") or "Course match")[:256],
+        "detail": detail,
+        ...
+    }
+    return {"messages": [AIMessage(content=detail)], "course_fit_result": result}`,
+        lines: '489–499',
+      },
+      {
+        id: 'route_intent',
+        label: 'route_intent',
+        kind: 'llm',
+        x: 620, y: 160, w: 160, h: 52,
+        summary: 'LLM router: classify the latest message as guidance | discovery | clarify.',
+        does: [
+          'Calls Ollama (ROUTER_MODEL, default gpt-oss:20b) for JSON intent.',
+          'Validates with _validate_route; one correction retry.',
+          'Overrides clarify → discovery when message is "show all these" with presentedFamilyIds.',
+          'Falls back to a safe clarify question if model fails.',
+        ],
+        stateReads: ['messages', 'ui_context', 'profile', 'selection_context'],
+        stateWrites: ['route_decision'],
+        deterministic: [
+          '_validate_route: intent ∈ {guidance, discovery, clarify}; reason required; clarify needs question.',
+          '_requests_all_presented: pronouns + show/list/display + all + presentedFamilyIds → force discovery.',
+          'temperature 0; JSON-only; schema correction loop (2 attempts).',
+          'Fallback clarify if None.',
+        ],
+        pitfalls: [
+          'OLLAMA_DISABLED / missing OLLAMA_HOST → None → fallback clarify.',
+          'Ambiguous dual-intent should clarify, but model may misroute.',
+        ],
+        code: `def route_intent(state: AdvisorState) -> dict[str, Any]:
+    text = _latest_human_text(state.get("messages", []))
+    selection = state.get("selection_context", {})
+    decision = _ollama_json(
+        "Classify the latest student message. guidance|discovery|clarify ...",
+        { "message": text, "uiContext": ..., "profile": ..., "presentedFamilyIds": ..., },
+        os.getenv("ROUTER_MODEL", "gpt-oss:20b"),
+        _validate_route,
+    )
+    if decision is not None and decision["intent"] == "clarify" and _requests_all_presented(text, selection):
+        decision = {"intent": "discovery", "reason": "...", "clarificationQuestion": ""}
+    if decision is None:
+        decision = { "intent": "clarify", "reason": "...", "clarificationQuestion": "..." }
+    return {"route_decision": decision}
+
+# Conditional: route_after_intent → guidance | discovery | clarify
+def route_after_intent(state):
+    return state["route_decision"]["intent"]`,
+        lines: '210–243',
+      },
+      {
+        id: 'guidance_agent',
+        label: 'guidance_agent',
+        kind: 'llm',
+        x: 360, y: 420, w: 160, h: 52,
+        summary: 'Study-abroad process / how-to-use-advisor specialist. No catalog mutation.',
+        does: [
+          'Ollama chat (GUIDANCE_MODEL, default gemma4:31b).',
+          'Explains journey; forbids selecting courses, comparing unis, claiming outcomes.',
+          'Writes branch_result with empty presented IDs and mode none proposal.',
+        ],
+        stateReads: ['messages', 'profile', 'ui_context'],
+        stateWrites: ['branch_result'],
+        deterministic: [
+          'Hard fallback string if Ollama returns empty.',
+          'assistantContent truncated to 16000.',
+          'directive.awareness states workspace selection was not changed.',
+          'workKind "".',
+        ],
+        pitfalls: [
+          'Must not invent course cards in chat — workspace stays untouched.',
+          'Document review / eligibility not available; prompt says so.',
+        ],
+        code: `def guidance_agent(state: AdvisorState) -> dict[str, Any]:
+    content = _ollama_chat(
+        "You are the guidance specialist. ... Do not select courses...",
+        json.dumps({"message": text, "profile": ..., "uiContext": ...}),
+        os.getenv("GUIDANCE_MODEL", "gemma4:31b"),
+    )
+    if not content:
+        content = "I could not complete that guidance response safely. ..."
+    return {"branch_result": {
+        "assistantContent": content[:16000],
+        "directive": {"type": "discovery", "awareness": "Guidance only; ..."},
+        "proposal": {"mode": "none", "offeringIds": [], "rationale": ""},
+        "presentedFamilyIds": [], "presentedOfferingIds": [], "workKind": "",
+    }}`,
+        lines: '246–265',
+      },
+      {
+        id: 'resolve_catalog_scope',
+        label: 'resolve_catalog_scope',
+        kind: 'llm',
+        x: 760, y: 420, w: 200, h: 52,
+        summary: 'Discovery scope resolver: which catalog operation to run next.',
+        does: [
+          'Builds compact family list with offering counts.',
+          'Ollama JSON (DISCOVERY_MODEL, default qwen3.5:397b) → scope decision.',
+          'Validates IDs against catalog; rejects bogus compare without comparison cues.',
+          'Forces all_area_offerings for "show all these" with presented families.',
+        ],
+        stateReads: [
+          'messages', 'catalog_families', 'catalog_courses', 'profile',
+          'ui_context', 'selection_context',
+        ],
+        stateWrites: ['scope_decision'],
+        deterministic: [
+          'Allowed scopes: area_overview, family_offerings, all_area_offerings, compare_offerings, personalize_selection, clarify.',
+          'areaId / familyIds / offeringIds must exist in catalog.',
+          'compare_offerings: 2–4 offerings + comparisonCriterion; message must contain compare cues.',
+          'personalize_selection requires offeringIds; family_offerings requires familyIds.',
+          '_requests_all_presented override wins over model.',
+          'Fallback scope=clarify if model fails.',
+        ],
+        pitfalls: [
+          'UI context must not continue an old comparison unless the current message asks.',
+          'Negative preferences ("dislike coding") are prompt-enforced, not code-enforced.',
+        ],
+        code: `def resolve_catalog_scope(state: AdvisorState) -> dict[str, Any]:
+    decision = _ollama_json(
+        "Resolve ... scope ... Schema: {scope, areaId, familyIds, offeringIds, ...}",
+        { "message", "families", "offerings", "profile", "uiContext",
+          "presentedFamilyIds", "presentedOfferingIds",
+          "provisionalOfferingIds", "suppressedOfferingIds" },
+        os.getenv("DISCOVERY_MODEL", "qwen3.5:397b"),
+        lambda value: _validate_scope(value, state),
+    )
+    if _requests_all_presented(message, selection):
+        decision = { "scope": "all_area_offerings", "familyIds": presented..., ... }
+    if decision is None:
+        decision = { "scope": "clarify", ... }
+    return {"scope_decision": decision}
+
+def route_after_scope(state):
+    return state["scope_decision"]["scope"]`,
+        lines: '150–194, 268–319',
+      },
+      {
+        id: 'explain_course_types',
+        label: 'explain_course_types',
+        kind: 'deterministic',
+        x: 420, y: 580, w: 180, h: 52,
+        summary: 'area_overview leaf: present every family in the chosen area.',
+        does: [
+          'Collects all families for scope.areaId.',
+          'Template acknowledgement; presentedFamilyIds = those families.',
+          'workKind = area_overview; directive catalog.',
+        ],
+        stateReads: ['scope_decision', 'catalog_families'],
+        stateWrites: ['branch_result'],
+        deterministic: [
+          'No LLM. Count-based copy only.',
+          'presentedOfferingIds empty; proposal mode none.',
+        ],
+        pitfalls: [
+          'If areaId empty / wrong, family list is empty — still returns a message.',
+        ],
+        code: `def explain_course_types(state: AdvisorState) -> dict[str, Any]:
+    area_id = str(state.get("scope_decision", {}).get("areaId") or "")
+    family_ids = [
+        str(row.get("familyId")) for row in state.get("catalog_families", [])
+        if row.get("areaId") == area_id
+    ]
+    content = f"I found {len(family_ids)} course type(s) in that direction. ..."
+    return {"branch_result": {
+        "assistantContent": content,
+        "directive": {"type": "catalog", "awareness": "Showing every relevant course type."},
+        "presentedFamilyIds": family_ids, "presentedOfferingIds": [],
+        "workKind": "area_overview", ...
+    }}`,
+        lines: '331–347',
+      },
+      {
+        id: 'load_all_family_offerings',
+        label: 'load_all_family_offerings',
+        kind: 'deterministic',
+        x: 620, y: 580, w: 210, h: 52,
+        summary: 'family_offerings leaf: list offerings for selected course type(s).',
+        does: [
+          'Resolves family IDs from scope (or all families in areaId).',
+          'Filters catalog_courses; sets presented offering + family IDs.',
+          'workKind = family_offerings.',
+        ],
+        stateReads: ['scope_decision', 'catalog_families', 'catalog_courses'],
+        stateWrites: ['branch_result'],
+        deterministic: [
+          '_load_offerings(state, all_area=False).',
+          'Label singular "course type" vs plural based on family count.',
+        ],
+        pitfalls: ['Missing catalog facts stay unavailable in workspace — not hallucinated here.'],
+        code: `def _load_offerings(state, all_area: bool) -> dict:
+    family_ids = _family_ids_for_scope(state)
+    courses = [row for row in catalog_courses if row.familyId in family_ids]
+    workKind = "all_area_offerings" if all_area else "family_offerings"
+    ...
+
+def load_all_family_offerings(state):
+    return _load_offerings(state, False)`,
+        lines: '322–367',
+      },
+      {
+        id: 'load_all_area_offerings',
+        label: 'load_all_area_offerings',
+        kind: 'deterministic',
+        x: 850, y: 580, w: 200, h: 52,
+        summary: 'all_area_offerings leaf: every offering for the resolved families/area.',
+        does: [
+          'Same helper as family offerings with all_area=True.',
+          'Used for "show all these" override and explicit all-in-area asks.',
+        ],
+        stateReads: ['scope_decision', 'catalog_families', 'catalog_courses'],
+        stateWrites: ['branch_result'],
+        deterministic: [
+          '_load_offerings(state, True) → workKind all_area_offerings.',
+          '_family_ids_for_scope prefers explicit familyIds, else areaId expansion.',
+        ],
+        pitfalls: [],
+        code: `def load_all_area_offerings(state: AdvisorState) -> dict[str, Any]:
+    return _load_offerings(state, True)`,
+        lines: '370–371',
+      },
+      {
+        id: 'personalize_selection',
+        label: 'personalize_selection',
+        kind: 'deterministic',
+        x: 1070, y: 580, w: 190, h: 52,
+        summary: 'Propose 1–5 offerings as replace_provisional selection (not confirmed).',
+        does: [
+          'Takes offeringIds from scope_decision (order-preserving).',
+          'proposal.mode = replace_provisional with rationale from explanation.',
+          'workKind = selection_proposal.',
+        ],
+        stateReads: ['scope_decision', 'catalog_courses'],
+        stateWrites: ['branch_result'],
+        deterministic: [
+          'Caps at 5 IDs; sorts courses to match proposed order.',
+          'Confirmation is a separate UI action — browsing never creates a shortlist.',
+          'presentedFamilyIds derived from ordered courses.',
+        ],
+        pitfalls: [
+          'IDs already validated in _validate_scope; orphan IDs drop out of ordered list.',
+        ],
+        code: `def personalize_selection(state: AdvisorState) -> dict[str, Any]:
+    offering_ids = [str(row) for row in scope.get("offeringIds", [])][:5]
+    courses = [row for row in catalog_courses if row.courseId in offering_ids]
+    ordered = sorted(courses, key=lambda row: offering_ids.index(...))
+    return {"branch_result": {
+        "proposal": {
+            "mode": "replace_provisional",
+            "offeringIds": offering_ids,
+            "rationale": explanation[:4000],
+        },
+        "workKind": "selection_proposal", ...
+    }}`,
+        lines: '374–388',
+      },
+      {
+        id: 'compare_offerings',
+        label: 'compare_offerings',
+        kind: 'deterministic',
+        x: 1280, y: 580, w: 170, h: 52,
+        summary: 'Side-by-side comparison of 2–4 offerings; facts are workspace-side deterministic.',
+        does: [
+          'Loads courses in offeringIds order (max 4).',
+          'Uses comparisonCriterion (default overall) in chat acknowledgement.',
+          'workKind = comparison.',
+        ],
+        stateReads: ['scope_decision', 'catalog_courses'],
+        stateWrites: ['branch_result'],
+        deterministic: [
+          'Chat only acknowledges; ranking labels / missing-data markers are not invented here.',
+          'proposal mode none.',
+        ],
+        pitfalls: [
+          'Scope validator already blocked compare without lexical comparison cues.',
+        ],
+        code: `def compare_offerings(state: AdvisorState) -> dict[str, Any]:
+    offering_ids = [str(row) for row in scope.get("offeringIds", [])][:4]
+    courses = [row for offering_id in offering_ids
+               for row in catalog_courses if row.courseId == offering_id]
+    criterion = str(scope.get("comparisonCriterion") or "overall")
+    content = f"I've put {len(courses)} ... side by side using {criterion}. ..."
+    return {"branch_result": { "workKind": "comparison", ... }}`,
+        lines: '391–404',
+      },
+      {
+        id: 'clarification',
+        label: 'clarification',
+        kind: 'deterministic',
+        x: 200, y: 520, w: 140, h: 52,
+        summary: 'Intent-level clarify: ask one question from route_decision.',
+        does: [
+          'Builds _safe_clarification from route clarificationQuestion.',
+          'No catalog presentation; workItems empty.',
+        ],
+        stateReads: ['route_decision'],
+        stateWrites: ['branch_result'],
+        deterministic: [
+          '_safe_clarification sets intent clarify, proposal none, directive discovery waiting.',
+        ],
+        pitfalls: [],
+        code: `def clarification(state: AdvisorState) -> dict[str, Any]:
+    question = str(state.get("route_decision", {}).get("clarificationQuestion")
+                   or "Would you like guidance or course discovery?")
+    return {"branch_result": _safe_clarification(question)}`,
+        lines: '126–136, 407–409',
+      },
+      {
+        id: 'clarify_catalog_scope',
+        label: 'clarify_catalog_scope',
+        kind: 'deterministic',
+        x: 1480, y: 580, w: 190, h: 52,
+        summary: 'Scope-level clarify when discovery cannot safely pick a catalog operation.',
+        does: [
+          'Question from scope_decision.clarificationQuestion.',
+          'Reason from scope explanation.',
+        ],
+        stateReads: ['scope_decision'],
+        stateWrites: ['branch_result'],
+        deterministic: ['_safe_clarification(question, explanation).'],
+        pitfalls: [],
+        code: `def clarify_catalog_scope(state: AdvisorState) -> dict[str, Any]:
+    question = str(scope.get("clarificationQuestion") or "Would you like course areas...")
+    return {"branch_result": _safe_clarification(
+        question, str(scope.get("explanation") or "Catalog scope is unclear.")
+    )}`,
+        lines: '412–414',
+      },
+      {
+        id: 'validate_guidance',
+        label: 'validate_guidance',
+        kind: 'validate',
+        x: 360, y: 700, w: 160, h: 52,
+        summary: 'Finalize guidance branch into advisor_result + AIMessage.',
+        does: [
+          'Calls shared _finalize.',
+          'Merges branch_result + route_decision into advisor_result.',
+        ],
+        stateReads: ['branch_result', 'route_decision', 'profile', 'messages', 'scope_decision'],
+        stateWrites: ['messages', 'advisor_result'],
+        deterministic: [
+          '_empty_profile clamp/truncate fields.',
+          'assistantContent fallback if empty.',
+          'Attaches scope only if scope_decision present.',
+        ],
+        pitfalls: [],
+        code: `def _finalize(state) -> dict:
+    branch = state.get("branch_result", {})
+    route = state.get("route_decision", ...)
+    profile = _empty_profile(state.get("profile"))
+    if route.get("intent") == "discovery" and text:
+        profile["studentPhrase"] = text[:256]
+        profile["courseInterests"] = profile["courseInterests"] or text[:1024]
+    result = {
+        "assistantContent": ..., "route": route, "proposal": ...,
+        "presentedFamilyIds": ..., "presentedOfferingIds": ...,
+        "directive": ..., "workItems": [], "workKind": ...,
+        "profilePatch": profile,
+    }
+    if state.get("scope_decision"):
+        result["scope"] = state["scope_decision"]
+    return {"messages": [AIMessage(...)], "advisor_result": result}
+
+def validate_guidance(state):
+    return _finalize(state)`,
+        lines: '417–446',
+      },
+      {
+        id: 'validate_discovery',
+        label: 'validate_discovery',
+        kind: 'validate',
+        x: 900, y: 740, w: 180, h: 52,
+        summary: 'Finalize discovery / clarify branches into advisor_result + AIMessage.',
+        does: [
+          'Same _finalize as validate_guidance.',
+          'On discovery intent, stamps studentPhrase / courseInterests from latest human text.',
+          'Includes scope_decision in result when present.',
+        ],
+        stateReads: ['branch_result', 'route_decision', 'profile', 'messages', 'scope_decision'],
+        stateWrites: ['messages', 'advisor_result'],
+        deterministic: [
+          'workItems always [] at this stage — child work may be planned elsewhere by the worker.',
+          'profilePatch always returned (clamped empty profile shape).',
+        ],
+        pitfalls: [
+          'Name says validate but it finalizes — no schema reject/retry here.',
+        ],
+        code: `def validate_discovery(state: AdvisorState) -> dict[str, Any]:
+    return _finalize(state)`,
+        lines: '441–442',
+      },
+      {
+        id: 'END',
+        label: 'END',
+        kind: 'terminal',
+        x: 700, y: 880, w: 100, h: 44,
+        summary: 'Graph complete. Worker publishes advisor_result / messages to SpacetimeDB.',
+        does: [
+          'No node function — LangGraph terminal.',
+          'Caller persists results; UI subscribes to committed updates.',
+        ],
+        stateReads: [],
+        stateWrites: [],
+        deterministic: [],
+        pitfalls: [
+          'Independent child work items (e.g. course_fit) are separate graph invokes, not blocked here.',
+        ],
+        code: `builder.add_edge("legacy_discover", END)
+builder.add_edge("course_fit", END)
+builder.add_edge("validate_guidance", END)
+builder.add_edge("validate_discovery", END)
+graph = builder.compile()`,
+        lines: '528–546',
+      },
+    ];
+
+    const EDGES = [
+      { id: 'e0', from: 'START', to: 'legacy_discover', label: 'legacy', kind: 'cond' },
+      { id: 'e1', from: 'START', to: 'course_fit', label: 'course_fit', kind: 'cond' },
+      { id: 'e2', from: 'START', to: 'route_intent', label: 'specialist', kind: 'cond' },
+      { id: 'e3', from: 'legacy_discover', to: 'END', label: '', kind: 'fixed' },
+      { id: 'e4', from: 'course_fit', to: 'END', label: '', kind: 'fixed' },
+      { id: 'e6', from: 'route_intent', to: 'guidance_agent', label: 'guidance', kind: 'cond' },
+      { id: 'e7', from: 'route_intent', to: 'resolve_catalog_scope', label: 'discovery', kind: 'cond' },
+      { id: 'e8', from: 'route_intent', to: 'clarification', label: 'clarify', kind: 'cond' },
+      { id: 'e9', from: 'guidance_agent', to: 'validate_guidance', label: '', kind: 'fixed' },
+      { id: 'e10', from: 'validate_guidance', to: 'END', label: '', kind: 'fixed' },
+      { id: 'e11', from: 'clarification', to: 'validate_discovery', label: '', kind: 'fixed' },
+      { id: 'e12', from: 'resolve_catalog_scope', to: 'explain_course_types', label: 'area_overview', kind: 'cond' },
+      { id: 'e13', from: 'resolve_catalog_scope', to: 'load_all_family_offerings', label: 'family_offerings', kind: 'cond' },
+      { id: 'e14', from: 'resolve_catalog_scope', to: 'load_all_area_offerings', label: 'all_area_offerings', kind: 'cond' },
+      { id: 'e15', from: 'resolve_catalog_scope', to: 'personalize_selection', label: 'personalize_selection', kind: 'cond' },
+      { id: 'e16', from: 'resolve_catalog_scope', to: 'compare_offerings', label: 'compare_offerings', kind: 'cond' },
+      { id: 'e17', from: 'resolve_catalog_scope', to: 'clarify_catalog_scope', label: 'clarify', kind: 'cond' },
+      { id: 'e18', from: 'explain_course_types', to: 'validate_discovery', label: '', kind: 'fixed' },
+      { id: 'e19', from: 'load_all_family_offerings', to: 'validate_discovery', label: '', kind: 'fixed' },
+      { id: 'e20', from: 'load_all_area_offerings', to: 'validate_discovery', label: '', kind: 'fixed' },
+      { id: 'e21', from: 'personalize_selection', to: 'validate_discovery', label: '', kind: 'fixed' },
+      { id: 'e22', from: 'compare_offerings', to: 'validate_discovery', label: '', kind: 'fixed' },
+      { id: 'e23', from: 'clarify_catalog_scope', to: 'validate_discovery', label: '', kind: 'fixed' },
+      { id: 'e24', from: 'validate_discovery', to: 'END', label: '', kind: 'fixed' },
+    ];
+
+    const WORLD = { w: 1760, h: 980 };
+    const MIN_ZOOM = 0.25;
+    const MAX_ZOOM = 2.5;
+
+    function buildNodeMap() {
+      const m = {};
+      NODES.forEach((n) => { m[n.id] = n; });
+      return m;
+    }
+
+    function relatedIds(selectedId) {
+      if (!selectedId) return null;
+      const set = new Set([selectedId]);
+      EDGES.forEach((e) => {
+        if (e.from === selectedId || e.to === selectedId) {
+          set.add(e.from);
+          set.add(e.to);
+        }
+      });
+      return set;
+    }
+
+    function edgePath(from, to) {
+      const x1 = from.x + from.w / 2;
+      const y1 = from.y + from.h;
+      const x2 = to.x + to.w / 2;
+      const y2 = to.y;
+      const dy = Math.max(40, (y2 - y1) * 0.45);
+      return `M ${x1} ${y1} C ${x1} ${y1 + dy}, ${x2} ${y2 - dy}, ${x2} ${y2}`;
+    }
+
+    function edgeLabelPos(from, to) {
+      return {
+        x: (from.x + from.w / 2 + to.x + to.w / 2) / 2,
+        y: (from.y + from.h + to.y) / 2,
+      };
+    }
+
+    function clampZoom(k) {
+      return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, k));
+    }
+
+    function Section({ title, children }) {
+      return (
+        <div className="mb-4">
+          <h3 className="text-[10px] uppercase tracking-wider text-[var(--muted)] font-semibold mb-2">{title}</h3>
+          {children}
+        </div>
+      );
+    }
+
+    function Legend() {
+      return (
+        <div className="flex flex-wrap gap-2">
+          {Object.entries(KIND).map(([k, v]) => (
+            <span key={k} className="tag" style={{ color: v.color, borderColor: v.color + '66', background: v.fill }}>
+              {v.label}
+            </span>
+          ))}
+        </div>
+      );
+    }
+
+    function DetailPanel({ node, onClose }) {
+      if (!node) {
+        return (
+          <div className="h-full flex flex-col justify-center px-6 text-[var(--muted)]">
+            <p className="text-lg text-[var(--text)] font-semibold mb-2">Advisor LangGraph</p>
+            <p className="text-sm leading-relaxed mb-4">
+              Pan with drag · Zoom with scroll / pinch / buttons · Click a node for summary, deterministic rules, state I/O, and source.
+            </p>
+            <p className="text-xs mono mb-3">Source: services/agent-server/agent_server/graph.py</p>
+            <Legend />
+          </div>
+        );
+      }
+      const meta = KIND[node.kind];
+      return (
+        <div className="h-full panel-scroll overflow-y-auto fade-in px-5 py-4">
+          <div className="flex items-start justify-between gap-3 mb-3">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="tag" style={{ color: meta.color, borderColor: meta.color + '66', background: meta.fill }}>
+                  {meta.label}
+                </span>
+                <span className="text-xs mono text-[var(--muted)]">L{node.lines}</span>
+              </div>
+              <h2 className="text-xl font-semibold tracking-tight mono">{node.label}</h2>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="text-[var(--muted)] hover:text-white text-sm px-2 py-1 rounded border border-[var(--stroke)]"
+            >
+              Close
+            </button>
+          </div>
+
+          <p className="text-sm leading-relaxed text-[#c5d0dc] mb-4">{node.summary}</p>
+
+          <Section title="What it does">
+            <ul className="space-y-1.5">
+              {node.does.map((d, i) => (
+                <li key={i} className="text-sm text-[#c5d0dc] pl-3 border-l-2 border-[var(--stroke)]">{d}</li>
+              ))}
+            </ul>
+          </Section>
+
+          {node.deterministic.length > 0 && (
+            <Section title="Deterministic logic / guards">
+              <ul className="space-y-1.5">
+                {node.deterministic.map((d, i) => (
+                  <li key={i} className="text-sm mono text-[#9fd6bc] leading-snug">{d}</li>
+                ))}
+              </ul>
+            </Section>
+          )}
+
+          <div className="grid grid-cols-1 gap-3 mb-4">
+            <Section title="State reads">
+              {node.stateReads.length ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {node.stateReads.map((s) => (
+                    <span key={s} className="mono text-xs px-2 py-0.5 rounded bg-[#1a2430] border border-[var(--stroke)] text-[#9eb6d0]">{s}</span>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-[var(--muted)]">None</p>
+              )}
+            </Section>
+            <Section title="State writes">
+              {node.stateWrites.length ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {node.stateWrites.map((s) => (
+                    <span key={s} className="mono text-xs px-2 py-0.5 rounded bg-[#1a2430] border border-[#3d9cf055] text-[#8ec4f0]">{s}</span>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-[var(--muted)]">None</p>
+              )}
+            </Section>
+          </div>
+
+          {node.pitfalls.length > 0 && (
+            <Section title="Pitfalls / system notes">
+              <ul className="space-y-1.5">
+                {node.pitfalls.map((d, i) => (
+                  <li key={i} className="text-sm text-[#e8c4a0] pl-3 border-l-2 border-[#e8a83855]">{d}</li>
+                ))}
+              </ul>
+            </Section>
+          )}
+
+          <Section title="Exact code">
+            <pre className="code-block">{node.code}</pre>
+          </Section>
+        </div>
+      );
+    }
+
+    function GraphCanvas({ selectedId, onSelect, transform, setTransform, viewportRef }) {
+      const nodes = useMemo(() => buildNodeMap(), []);
+      const related = useMemo(() => relatedIds(selectedId), [selectedId]);
+      const dragRef = useRef(null);
+      const pointersRef = useRef(new Map());
+      const pinchRef = useRef(null);
+      const [dragging, setDragging] = useState(false);
+      const transformRef = useRef(transform);
+      transformRef.current = transform;
+
+      const zoomAt = useCallback((clientX, clientY, nextK) => {
+        const el = viewportRef.current;
+        if (!el) return;
+        const rect = el.getBoundingClientRect();
+        const k = clampZoom(nextK);
+        const mx = clientX - rect.left;
+        const my = clientY - rect.top;
+        setTransform((t) => {
+          const worldX = (mx - t.x) / t.k;
+          const worldY = (my - t.y) / t.k;
+          return { k, x: mx - worldX * k, y: my - worldY * k };
+        });
+      }, [setTransform, viewportRef]);
+
+      useEffect(() => {
+        const el = viewportRef.current;
+        if (!el) return;
+        const onWheel = (e) => {
+          e.preventDefault();
+          const t = transformRef.current;
+          const factor = Math.exp(-e.deltaY * 0.0015);
+          zoomAt(e.clientX, e.clientY, t.k * factor);
+        };
+        el.addEventListener('wheel', onWheel, { passive: false });
+        return () => el.removeEventListener('wheel', onWheel);
+      }, [zoomAt, viewportRef]);
+
+      const onPointerDown = (e) => {
+        if (e.target.closest('[data-node]')) return;
+        e.currentTarget.setPointerCapture(e.pointerId);
+        pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        if (pointersRef.current.size === 1) {
+          const t = transformRef.current;
+          dragRef.current = { x: e.clientX, y: e.clientY, tx: t.x, ty: t.y };
+          setDragging(true);
+        } else if (pointersRef.current.size === 2) {
+          const pts = [...pointersRef.current.values()];
+          const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+          pinchRef.current = { dist, k: transformRef.current.k };
+          dragRef.current = null;
+        }
+      };
+
+      const onPointerMove = (e) => {
+        if (!pointersRef.current.has(e.pointerId)) return;
+        pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        if (pointersRef.current.size === 2 && pinchRef.current) {
+          const pts = [...pointersRef.current.values()];
+          const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+          const mid = { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 };
+          const ratio = dist / (pinchRef.current.dist || 1);
+          zoomAt(mid.x, mid.y, pinchRef.current.k * ratio);
+          return;
+        }
+        if (dragRef.current) {
+          const dx = e.clientX - dragRef.current.x;
+          const dy = e.clientY - dragRef.current.y;
+          setTransform({
+            k: transformRef.current.k,
+            x: dragRef.current.tx + dx,
+            y: dragRef.current.ty + dy,
+          });
+        }
+      };
+
+      const onPointerUp = (e) => {
+        pointersRef.current.delete(e.pointerId);
+        if (pointersRef.current.size < 2) pinchRef.current = null;
+        if (pointersRef.current.size === 0) {
+          dragRef.current = null;
+          setDragging(false);
+        } else if (pointersRef.current.size === 1) {
+          const pt = [...pointersRef.current.values()][0];
+          const t = transformRef.current;
+          dragRef.current = { x: pt.x, y: pt.y, tx: t.x, ty: t.y };
+        }
+      };
+
+      return (
+        <div
+          ref={viewportRef}
+          className={`canvas-viewport absolute inset-0 overflow-hidden ${dragging ? 'dragging' : ''}`}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerCancel={onPointerUp}
+          onDoubleClick={(e) => {
+            if (e.target.closest('[data-node]')) return;
+            onSelect(null);
+          }}
+        >
+          <svg width="100%" height="100%" className="block">
+            <g transform={`translate(${transform.x}, ${transform.y}) scale(${transform.k})`}>
+              {EDGES.map((edge) => {
+                const from = nodes[edge.from];
+                const to = nodes[edge.to];
+                const active = related
+                  ? related.has(edge.from) && related.has(edge.to) && (edge.from === selectedId || edge.to === selectedId)
+                  : false;
+                const dim = related && !active;
+                const color = edge.kind === 'cond' ? '#e8a838' : '#4a6280';
+                const lp = edge.label ? edgeLabelPos(from, to) : null;
+                const labelW = edge.label ? edge.label.length * 6.8 + 12 : 0;
+                return (
+                  <g key={edge.id}>
+                    <path
+                      d={edgePath(from, to)}
+                      className={`edge-path ${active ? 'active edge-flow' : ''} ${dim ? 'dim' : ''}`}
+                      stroke={color}
+                    />
+                    {edge.label && (
+                      <g transform={`translate(${lp.x}, ${lp.y})`} opacity={dim ? 0.25 : 1}>
+                        <rect x={-labelW / 2} y={-9} width={labelW} height={18} rx={4} fill="#0c1117" stroke="#243041" />
+                        <text textAnchor="middle" y={4} className="mono" fontSize="10" fill={edge.kind === 'cond' ? '#e8c878' : '#8b9bb0'}>
+                          {edge.label}
+                        </text>
+                      </g>
+                    )}
+                  </g>
+                );
+              })}
+
+              {NODES.map((n) => {
+                const meta = KIND[n.kind];
+                const selected = selectedId === n.id;
+                const dim = related && !related.has(n.id);
+                return (
+                  <g
+                    key={n.id}
+                    data-node="true"
+                    className={`node-card ${dim ? 'dim' : ''}`}
+                    transform={`translate(${n.x}, ${n.y})`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSelect(n.id === selectedId ? null : n.id);
+                    }}
+                  >
+                    {selected && (
+                      <rect
+                        className="select-ring"
+                        x={-5} y={-5} width={n.w + 10} height={n.h + 10} rx={10}
+                        fill="none" stroke={meta.color} strokeWidth="1.5"
+                      />
+                    )}
+                    <rect
+                      width={n.w} height={n.h} rx={8}
+                      fill={meta.fill}
+                      stroke={selected ? meta.color : meta.color + '99'}
+                      strokeWidth={selected ? 2 : 1.25}
+                    />
+                    <rect x={0} y={0} width={4} height={n.h} rx={2} fill={meta.color} />
+                    <text
+                      x={n.w / 2}
+                      y={n.h / 2 + 1}
+                      textAnchor="middle"
+                      dominantBaseline="middle"
+                      className="mono"
+                      fontSize={n.label.length > 22 ? 10 : 11.5}
+                      fontWeight="500"
+                      fill="#e8eef6"
+                    >
+                      {n.label}
+                    </text>
+                  </g>
+                );
+              })}
+            </g>
+          </svg>
+        </div>
+      );
+    }
+
+    function ZoomControls({ transform, setTransform, viewportRef }) {
+      const zoomCenter = (factor) => {
+        const el = viewportRef.current;
+        if (!el) {
+          setTransform((t) => ({ ...t, k: clampZoom(t.k * factor) }));
+          return;
+        }
+        const rect = el.getBoundingClientRect();
+        const mx = rect.width / 2;
+        const my = rect.height / 2;
+        setTransform((t) => {
+          const k = clampZoom(t.k * factor);
+          const worldX = (mx - t.x) / t.k;
+          const worldY = (my - t.y) / t.k;
+          return { k, x: mx - worldX * k, y: my - worldY * k };
+        });
+      };
+
+      const fit = () => {
+        const el = viewportRef.current;
+        if (!el) return;
+        const rect = el.getBoundingClientRect();
+        const pad = 48;
+        const k = Math.min((rect.width - pad * 2) / WORLD.w, (rect.height - pad * 2) / WORLD.h, 1);
+        setTransform({
+          k: clampZoom(k),
+          x: (rect.width - WORLD.w * k) / 2,
+          y: (rect.height - WORLD.h * k) / 2,
+        });
+      };
+
+      return (
+        <div className="absolute bottom-4 left-4 z-10 flex items-center gap-1 bg-[var(--panel)] border border-[var(--stroke)] rounded-lg p-1 shadow-none">
+          <button type="button" className="w-9 h-9 rounded hover:bg-[#1c2733] mono text-lg" onClick={() => zoomCenter(1 / 1.2)} title="Zoom out">−</button>
+          <span className="mono text-xs w-12 text-center text-[var(--muted)]">{Math.round(transform.k * 100)}%</span>
+          <button type="button" className="w-9 h-9 rounded hover:bg-[#1c2733] mono text-lg" onClick={() => zoomCenter(1.2)} title="Zoom in">+</button>
+          <div className="w-px h-6 bg-[var(--stroke)] mx-1" />
+          <button type="button" className="px-3 h-9 rounded hover:bg-[#1c2733] text-xs" onClick={fit}>Fit</button>
+          <button
+            type="button"
+            className="px-3 h-9 rounded hover:bg-[#1c2733] text-xs"
+            onClick={() => setTransform({ k: 1, x: 40, y: 40 })}
+          >
+            100%
+          </button>
+        </div>
+      );
+    }
+
+    function App() {
+      const [selectedId, setSelectedId] = useState(null);
+      const [transform, setTransform] = useState({ k: 0.72, x: 24, y: 24 });
+      const [panelOpen, setPanelOpen] = useState(true);
+      const viewportRef = useRef(null);
+      const selected = NODES.find((n) => n.id === selectedId) || null;
+
+      useEffect(() => {
+        const fit = () => {
+          const el = viewportRef.current;
+          if (!el) return;
+          const rect = el.getBoundingClientRect();
+          if (rect.width < 10 || rect.height < 10) return;
+          const pad = 40;
+          const k = Math.min((rect.width - pad * 2) / WORLD.w, (rect.height - pad * 2) / WORLD.h, 0.95);
+          setTransform({
+            k: clampZoom(k),
+            x: (rect.width - WORLD.w * k) / 2,
+            y: Math.max(16, (rect.height - WORLD.h * k) / 2),
+          });
+        };
+        const t = setTimeout(fit, 60);
+        window.addEventListener('resize', fit);
+        return () => {
+          clearTimeout(t);
+          window.removeEventListener('resize', fit);
+        };
+      }, []);
+
+      return (
+        <div className="h-full flex flex-col">
+          <header className="shrink-0 h-12 px-4 border-b border-[var(--stroke)] bg-[var(--panel)] flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3 min-w-0">
+              <span className="font-semibold tracking-tight">Advisor Graph Explorer</span>
+              <span className="hidden sm:inline text-xs text-[var(--muted)] mono truncate">
+                agent_server/graph.py · StateGraph(AdvisorState)
+              </span>
+            </div>
+            <button
+              type="button"
+              className="text-xs px-3 py-1.5 rounded border border-[var(--stroke)] hover:bg-[#1c2733]"
+              onClick={() => setPanelOpen((v) => !v)}
+            >
+              {panelOpen ? 'Hide panel' : 'Show panel'}
+            </button>
+          </header>
+
+          <div className="flex-1 flex min-h-0">
+            <div className="relative flex-1 min-w-0">
+              <GraphCanvas
+                selectedId={selectedId}
+                onSelect={(id) => {
+                  setSelectedId(id);
+                  if (id) setPanelOpen(true);
+                }}
+                transform={transform}
+                setTransform={setTransform}
+                viewportRef={viewportRef}
+              />
+              <ZoomControls transform={transform} setTransform={setTransform} viewportRef={viewportRef} />
+              <div className="absolute top-3 left-3 text-[10px] text-[var(--muted)] bg-[var(--panel)]/90 border border-[var(--stroke)] rounded px-2 py-1 pointer-events-none">
+                Scroll zoom · Drag pan · Pinch · Double-click empty to deselect
+              </div>
+            </div>
+
+            {panelOpen && (
+              <aside className="w-full sm:w-[400px] lg:w-[440px] shrink-0 border-l border-[var(--stroke)] bg-[var(--panel)]">
+                <DetailPanel node={selected} onClose={() => setSelectedId(null)} />
+              </aside>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
