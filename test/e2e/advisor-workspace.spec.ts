@@ -7,9 +7,11 @@ test('specialist discovery is complete, non-shortlisting, and preserves browser 
     if (/\/conversations\/.*\/(messages|turns)/.test(request.url())) transcriptRequests.push(request.url());
   });
 
-  await page.goto('/');
+  await page.goto('/workspace');
   await expect(page.getByRole('main', { name: 'Study planning workspace' })).toBeVisible();
   await expect(page.getByText('Tell me about your background and interests.')).toBeVisible();
+  await expect(page.getByText('Explore', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('Discovery', { exact: true })).toHaveCount(0);
 
   const composer = page.getByLabel('Message your advisor');
   await expect(composer).toBeEnabled({ timeout: 20_000 });
@@ -37,7 +39,7 @@ test('specialist discovery is complete, non-shortlisting, and preserves browser 
   await expect(page.locator('.breadcrumb')).toHaveText('YOUR JOURNEY / EXPLORE');
   await expect(page.getByRole('heading', { name: 'Course types in this area' })).toBeVisible();
   await page.goBack();
-  await expect(page.getByText('Your workspace is ready')).toBeVisible();
+  await expect(page.getByText('Ready to explore')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Open again' }).first()).toBeVisible();
   await expect(page.getByRole('button', { name: 'Open course type' }).first()).toBeVisible();
   expect(transcriptRequests).toEqual([]);

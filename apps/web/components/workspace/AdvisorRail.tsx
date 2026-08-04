@@ -104,7 +104,7 @@ export function AdvisorRail({
             )}
           </section>
         ) : null}
-        {directive ? <section className="active-context"><span className="eyebrow">ACTIVE CONTEXT</span><div><i aria-hidden="true">✦</i><p><strong>{directive.viewType === 'catalog' ? 'Course matches' : 'Discovery stage'}</strong>{directive.awareness}</p></div></section> : null}
+        {directive ? <section className="active-context"><span className="eyebrow">ACTIVE CONTEXT</span><div><i aria-hidden="true">✦</i><p><strong>{directive.viewType === 'catalog' ? 'Course matches' : 'Explore stage'}</strong>{directive.awareness}</p></div></section> : null}
       </div>
       <div className="composer-wrap">
         {error ? <p className="inline-error" role="alert">{error}</p> : null}

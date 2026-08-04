@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { HOME_UI_TARGET, type UiTargetRef } from '@study-abroad/contracts';
 import type { AdvisorCatalogCourse, AdvisorCatalogFamily, AdvisorDirective, AdvisorDocumentRequirement, AdvisorDocumentSubmission, AdvisorProfile, AdvisorSelection, AdvisorWorkItem, AdvisorWorkResult, AdvisorWorkSet } from '../../hooks/useAdvisorWorkspace';
 import { targetBreadcrumb } from '../../lib/ui-targets';
@@ -17,7 +18,6 @@ export function WorkspaceView({
   target = HOME_UI_TARGET,
   setScrollElement = () => undefined,
   onScroll = () => undefined,
-  onHome = () => undefined,
   onSelectOffering = () => undefined,
   onUploadDocument = async () => undefined,
 }: {
@@ -34,32 +34,32 @@ export function WorkspaceView({
   target: UiTargetRef;
   setScrollElement: (element: HTMLDivElement | null) => void;
   onScroll: () => void;
-  onHome: () => void;
   onSelectOffering?: (offeringId: string) => void;
   onUploadDocument?: (documentType: string, file: File) => Promise<void>;
 }) {
   const exploring = target.viewType !== 'home';
+  const hasShortlist = Boolean(selection?.provisionalOfferingIds.length);
+  const hasDocuments = Boolean(selection?.confirmedOfferingIds.length);
   return (
     <main className="task-pane" aria-label="Study planning workspace">
       <header className="workspace-header">
-        <button className="brand brand-button" type="button" onClick={onHome} aria-label="Study Abroad advisor home"><span>SA</span> Study Abroad</button>
+        <Link href="/" className="brand" aria-label="Study Abroad home"><span>SA</span> Study Abroad</Link>
         <div className="journey-state"><span /> Guest journey saved</div>
       </header>
       <div className="workspace-scroll" ref={setScrollElement} onScroll={onScroll}>
         <div className="breadcrumb">YOUR JOURNEY <b>/</b> {targetBreadcrumb(target)}</div>
-        <section className="discovery-hero">
-          <span className="eyebrow">A CLEARER WAY FORWARD</span>
-          <h1>Shape the study plan<br />that fits your story.</h1>
+        <section className="workspace-intro">
+          <span className="eyebrow">STUDENT WORKSPACE</span>
+          <h1>Explore courses that fit your story.</h1>
           <p>
             {profile?.studentPhrase
-              ? `We are organizing partner courses related to ${profile.studentPhrase} here, away from the conversation.`
-              : 'Explore your background, ambitions, and practical preferences with your advisor. Useful results stay organized here, away from the conversation.'}
+              ? `Partner courses related to ${profile.studentPhrase} collect here, away from the conversation.`
+              : 'Useful matches and comparisons stay organized here while you talk with your advisor.'}
           </p>
           <div className="journey-progress" aria-label="Journey progress">
-            <div className={!exploring ? 'active' : undefined}><span>01</span><b>Discovery</b><i /></div>
-            <div className={exploring ? 'active' : undefined}><span>02</span><b>Explore</b><i /></div>
-            <div className={selection?.provisionalOfferingIds.length ? 'active' : undefined}><span>03</span><b>Shortlist</b><i /></div>
-            <div className={selection?.confirmedOfferingIds.length ? 'active' : undefined}><span>04</span><b>Documents</b></div>
+            <div className={!hasShortlist && !hasDocuments ? 'active' : undefined}><span>01</span><b>Explore</b><i /></div>
+            <div className={hasShortlist && !hasDocuments ? 'active' : undefined}><span>02</span><b>Shortlist</b><i /></div>
+            <div className={hasDocuments ? 'active' : undefined}><span>03</span><b>Documents</b></div>
           </div>
         </section>
         {exploring && directive ? (
@@ -70,7 +70,7 @@ export function WorkspaceView({
         ) : !exploring ? (
           <section className="empty-workspace">
             <span aria-hidden="true">↗</span>
-            <div><h3>Your workspace is ready</h3><p>Start by telling the advisor about your background and interests. Course matches will collect here independently.</p></div>
+            <div><h3>Ready to explore</h3><p>Tell the advisor about your background and interests. Course matches will appear here.</p></div>
           </section>
         ) : null}
         {exploring ? <WorkspaceWorkProgress workSets={workSets} items={workItems} results={workResults} workSetId={target.workSetId} selectedEntityId={target.entityId} catalogCourses={catalogCourses} catalogFamilies={catalogFamilies} selection={selection} onSelectOffering={onSelectOffering} /> : null}

@@ -1,5 +1,5 @@
-import { AdvisorWorkspaceShell } from '../components/workspace/AdvisorWorkspaceShell';
+import { LandingPage } from '../components/landing/LandingPage';
 
 export default function Home() {
-  return <AdvisorWorkspaceShell />;
+  return <LandingPage />;
 }

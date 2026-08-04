@@ -5,11 +5,12 @@ import { WorkspaceWorkProgress } from "../apps/web/components/workspace/Workspac
 import { workspaceTargetIsAvailable } from "../apps/web/lib/ui-targets";
 
 describe("web shell", () => {
-  it("renders the desktop advisor workspace and separate task region", () => {
+  it("renders the Kerala agency landing page separate from the advisor workspace", () => {
     const markup = renderToStaticMarkup(<Home />);
-    expect(markup).toContain("Study planning workspace");
-    expect(markup).toContain("Study advisor");
-    expect(markup).toContain("Shape the study plan");
+    expect(markup).toContain("Kerala");
+    expect(markup).toContain("Start with your advisor");
+    expect(markup).toContain('href="/workspace"');
+    expect(markup).not.toContain("Study planning workspace");
   });
 
   it("rejects a restored workspace target after its work set has expired", () => {

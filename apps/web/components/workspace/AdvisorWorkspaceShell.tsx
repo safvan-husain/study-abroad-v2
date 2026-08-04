@@ -95,7 +95,6 @@ export function AdvisorWorkspaceShell() {
         catalogCourses={workspace.catalogCourses} catalogFamilies={workspace.catalogFamilies} selection={workspace.selection}
         documentRequirements={workspace.documentRequirements} documentSubmissions={workspace.documentSubmissions}
         setScrollElement={navigation.setScrollElement} onScroll={navigation.rememberScroll}
-        onHome={() => navigation.openTarget(HOME_UI_TARGET)}
         onSelectOffering={(offeringId) => void workspace.selectOffering(offeringId)}
         onUploadDocument={workspace.uploadDocument}
       />
