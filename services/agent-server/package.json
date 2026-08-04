@@ -6,7 +6,8 @@
   "scripts": {
     "agent:dev": "uv run langgraph dev --config langgraph.json --host 127.0.0.1 --port 2025 --no-browser",
     "agent:dev:tunnel": "uv run langgraph dev --config langgraph.json --host 127.0.0.1 --port 2025 --no-browser --tunnel",
-    "test": "vitest run --root ../.. test/agent-observability.test.ts test/agent-chat.test.ts test/clone-langsmith-thread.test.ts",
+    "test": "cd ../.. && bash scripts/test-python-agent-server.sh",
+    "test:client": "vitest run --root ../.. test/agent-observability.test.ts test/agent-chat.test.ts test/clone-langsmith-thread.test.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {

@@ -11,14 +11,29 @@ const TOKEN_KEY = 'study-abroad-spacetimedb-token';
 export type AdvisorMessage = { messageId: string; turnId: string; role: string; content: string; sequence: bigint; createdAtMicros: bigint };
 export type AdvisorTurn = { turnId: string; status: string; errorCode: string | null; attempt: number };
 export type AdvisorDirective = { viewType: string; awareness: string; uiRevision: bigint; workSetId: string | null };
-export type AdvisorWorkSet = { workSetId: string; status: string };
+export type AdvisorWorkSet = { workSetId: string; status: string; kind?: string };
 export type AdvisorWorkItem = { workItemId: string; workSetId: string; entityId: string; kind: string; displayTitle: string; orderIndex: number; target: UiTargetRef; status: string; errorCode: string | null };
 export type AdvisorWorkResult = { workItemId: string; resultJson: string; target: UiTargetRef };
 export type AdvisorUiAction = { actionId: string; clientInstanceId: string; sourceKind: string; sourceId: string; kind: string; label: string; buttonLabel: string; target: UiTargetRef; baseTarget: UiTargetRef; baseNavigationRevision: bigint; activation: UiActionActivation; status: UiActionStatus; createdAtMicros: bigint; updatedAtMicros: bigint };
 export type AdvisorUserUiState = { clientInstanceId: string; target: UiTargetRef; navigationRevision: bigint; visible: boolean; lastSeenAtMicros: bigint };
 export type AdvisorTurnUpdate = { updateId: bigint; turnId: string; attempt: number; sequence: number; kind: string; payload: TurnUpdatePayload };
 export type AdvisorProfile = DiscoveryProfilePatch;
-export type AdvisorCatalogCourse = { courseId: string; institutionName: string; country: string; city: string; name: string; area: string };
+export type AdvisorCatalogCourse = {
+  courseId: string; institutionId: string; institutionName: string; country: string; city: string;
+  name: string; area: string; level: string; familyId: string; qualification: string; officialUrl: string;
+  ownership: string; englishBar: string; requirementsJson: string; rankingsJson: string; sourcesJson: string;
+};
+export type AdvisorCatalogFamily = {
+  familyId: string; areaId: string; name: string; aliasesJson: string; description: string;
+  typicalSubjectsJson: string; careerDirectionsJson: string; relatedFamilyIdsJson: string;
+};
+export type AdvisorSelection = {
+  revision: bigint; presentedFamilyIds: string[]; presentedOfferingIds: string[]; provisionalOfferingIds: string[];
+  suppressedOfferingIds: string[]; confirmedOfferingIds: string[]; confirmedSnapshotId: string | null; comparisonCriterion: string;
+};
+export type AdvisorSelectionRevision = { revision: bigint; source: string; rationale: string; provisionalOfferingIds: string[]; createdAtMicros: bigint };
+export type AdvisorDocumentRequirement = { requirementKey: string; snapshotId: string; documentType: string; label: string; reason: string; status: string };
+export type AdvisorDocumentSubmission = { submissionId: string; snapshotId: string; documentType: string; originalName: string; mimeType: string; byteSize: bigint; uploadedAtMicros: bigint; expiresAtMicros: bigint };
 
 function spacetimeUri() {
   if (process.env.NEXT_PUBLIC_SPACETIME_URL) return process.env.NEXT_PUBLIC_SPACETIME_URL.replace(/^http/, 'ws');
@@ -50,6 +65,7 @@ function parseTarget(value: unknown): UiTargetRef | undefined {
 
 export function useAdvisorWorkspace() {
   const connectionRef = useRef<DbConnection | null>(null);
+  const catalogConnectionRef = useRef<DbConnection | null>(null);
   const [reconnect, setReconnect] = useState(0);
   const [connectionState, setConnectionState] = useState<'connecting' | 'hydrating' | 'ready' | 'disconnected' | 'error'>('connecting');
   const [error, setError] = useState<string>();
@@ -64,6 +80,11 @@ export function useAdvisorWorkspace() {
   const [turnUpdates, setTurnUpdates] = useState<AdvisorTurnUpdate[]>([]);
   const [profile, setProfile] = useState<AdvisorProfile>();
   const [catalogCourses, setCatalogCourses] = useState<AdvisorCatalogCourse[]>([]);
+  const [catalogFamilies, setCatalogFamilies] = useState<AdvisorCatalogFamily[]>([]);
+  const [selection, setSelection] = useState<AdvisorSelection>();
+  const [selectionRevisions, setSelectionRevisions] = useState<AdvisorSelectionRevision[]>([]);
+  const [documentRequirements, setDocumentRequirements] = useState<AdvisorDocumentRequirement[]>([]);
+  const [documentSubmissions, setDocumentSubmissions] = useState<AdvisorDocumentSubmission[]>([]);
   const [conversationId, setConversationId] = useState<string>();
 
   useEffect(() => {
@@ -112,7 +133,30 @@ export function useAdvisorWorkspace() {
         return { updateId: row.updateId, turnId: row.turnId, attempt: row.attempt, sequence: row.sequence, kind: row.kind, payload };
       }));
       setProfile(parseProfile([...db.my_conversation_profiles.iter()][0]));
-      setCatalogCourses([...db.catalog_course.iter()].filter((row: any) => row.active !== false).map((row: any) => ({ courseId: row.courseId, institutionName: row.institutionName, country: row.country, city: row.city, name: row.name, area: row.area })));
+      const catalogDb = catalogConnectionRef.current?.db as any;
+      if (catalogDb) {
+        setCatalogCourses([...catalogDb.catalog_course.iter()].filter((row: any) => row.active !== false).map((row: any) => ({
+          courseId: row.courseId, institutionId: row.institutionId, institutionName: row.institutionName, country: row.country,
+          city: row.city, name: row.name, area: row.area, level: row.level, familyId: row.familyId,
+          qualification: row.qualification, officialUrl: row.officialUrl, ownership: row.ownership, englishBar: row.englishBar,
+          requirementsJson: row.requirementsJson, rankingsJson: row.rankingsJson, sourcesJson: row.sourcesJson,
+        })));
+        setCatalogFamilies([...catalogDb.catalog_family.iter()].filter((row: any) => row.active !== false));
+      }
+      const selectionRow = [...db.my_conversation_selections.iter()][0];
+      const parseIds = (value: unknown) => { try { return JSON.parse(String(value ?? '[]')) as string[]; } catch { return []; } };
+      setSelection(selectionRow ? {
+        revision: selectionRow.revision, presentedFamilyIds: parseIds(selectionRow.presentedFamilyIdsJson),
+        presentedOfferingIds: parseIds(selectionRow.presentedOfferingIdsJson), provisionalOfferingIds: parseIds(selectionRow.provisionalOfferingIdsJson),
+        suppressedOfferingIds: parseIds(selectionRow.suppressedOfferingIdsJson), confirmedOfferingIds: parseIds(selectionRow.confirmedOfferingIdsJson),
+        confirmedSnapshotId: selectionRow.confirmedSnapshotId ?? null, comparisonCriterion: selectionRow.comparisonCriterion ?? '',
+      } : undefined);
+      setSelectionRevisions([...db.my_selection_revisions.iter()].map((row: any) => ({
+        revision: row.revision, source: row.source, rationale: row.rationale,
+        provisionalOfferingIds: parseIds(row.provisionalOfferingIdsJson), createdAtMicros: row.createdAtMicros,
+      })).sort((a: AdvisorSelectionRevision, b: AdvisorSelectionRevision) => Number(b.revision - a.revision)));
+      setDocumentRequirements([...db.my_document_requirements.iter()]);
+      setDocumentSubmissions([...db.my_document_submissions.iter()]);
     };
 
     const builder = DbConnection.builder()
@@ -128,7 +172,9 @@ export function useAdvisorWorkspace() {
           const tables = [
             'my_messages', 'my_turns', 'my_active_directives', 'my_workspace_work_sets', 'my_workspace_work_items',
             'my_workspace_work_controls', 'my_workspace_results', 'my_user_actions', 'my_conversations', 'my_turn_updates',
-            'my_conversation_profiles', 'my_ui_actions', 'my_user_ui_states', 'catalog_course',
+            'my_conversation_profiles', 'my_conversation_selections', 'my_selection_revisions',
+            'my_confirmed_selection_snapshots', 'my_document_requirements', 'my_document_submissions', 'my_upload_tickets',
+            'my_ui_actions', 'my_user_ui_states',
           ];
           const db = connection.db as any;
           for (const tableName of tables) {
@@ -138,12 +184,34 @@ export function useAdvisorWorkspace() {
           }
           connection.subscriptionBuilder()
             .onApplied(() => {
-              refresh(connection);
-              // SpacetimeDB 2.0.3 can apply remote view rows to its cache without
-              // consistently firing the generated table callback. Reconcile the
-              // already-local cache as a fallback; no HTTP polling is involved.
-              cacheRefreshTimer ??= setInterval(() => refresh(connection), 500);
-              setConnectionState('ready');
+              const catalogTables = ['catalog_course', 'catalog_family', 'catalog_institution', 'catalog_policy'];
+              DbConnection.builder()
+                .withUri(spacetimeUri())
+                .withDatabaseName(process.env.NEXT_PUBLIC_SPACETIME_DATABASE ?? 'study-abroad-coordinator')
+                .withToken(token ?? undefined)
+                .onConnect((catalogConnection) => {
+                  if (disposed) return catalogConnection.disconnect();
+                  catalogConnectionRef.current = catalogConnection;
+                  const catalogDb = catalogConnection.db as any;
+                  for (const tableName of catalogTables) {
+                    const table = catalogDb[tableName];
+                    const onChange = () => refresh(connection);
+                    table.onInsert(onChange); table.onUpdate?.(onChange); table.onDelete(onChange);
+                  }
+                  catalogConnection.subscriptionBuilder()
+                    .onApplied(() => {
+                      refresh(connection);
+                      // SpacetimeDB 2.0.3 can apply remote view rows to its cache without
+                      // consistently firing the generated table callback. Reconcile the
+                      // already-local cache as a fallback; no HTTP polling is involved.
+                      cacheRefreshTimer ??= setInterval(() => refresh(connection), 500);
+                      setConnectionState('ready');
+                    })
+                    .onError((context) => { setError(`Catalog subscription failed: ${String(context.event)}`); setConnectionState('error'); })
+                    .subscribe(catalogTables.map((table) => `SELECT * FROM ${table}`));
+                })
+                .onConnectError((_context, catalogError) => { setError(String(catalogError)); setConnectionState('error'); })
+                .build();
             })
             .onError((context) => { setError(`Subscription failed: ${String(context.event)}`); setConnectionState('error'); })
             .subscribe(tables.map((table) => `SELECT * FROM ${table}`));
@@ -164,6 +232,8 @@ export function useAdvisorWorkspace() {
       disposed = true;
       if (reconnectTimer) clearTimeout(reconnectTimer);
       if (cacheRefreshTimer) clearInterval(cacheRefreshTimer);
+      catalogConnectionRef.current?.disconnect();
+      catalogConnectionRef.current = null;
       connectionRef.current?.disconnect();
       connectionRef.current = null;
     };
@@ -209,9 +279,55 @@ export function useAdvisorWorkspace() {
     await connection.reducers.openUiAction({ conversationId, actionId, clientInstanceId });
   }, [connectionState, conversationId]);
 
+  const removeProvisionalOffering = useCallback(async (offeringId: string) => {
+    const connection = connectionRef.current;
+    if (!connection || connectionState !== 'ready' || !conversationId) throw new Error('Advisor is not connected');
+    await connection.reducers.removeProvisionalOffering({ conversationId, clientCommandId: commandId(), offeringId });
+  }, [connectionState, conversationId]);
+
+  const selectOffering = useCallback(async (offeringId: string) => {
+    const connection = connectionRef.current;
+    if (!connection || connectionState !== 'ready' || !conversationId) throw new Error('Advisor is not connected');
+    await connection.reducers.selectOffering({ conversationId, clientCommandId: commandId(), offeringId });
+  }, [connectionState, conversationId]);
+
+  const restoreSelectionRevision = useCallback(async (revision: bigint) => {
+    const connection = connectionRef.current;
+    if (!connection || connectionState !== 'ready' || !conversationId) throw new Error('Advisor is not connected');
+    await connection.reducers.restoreSelectionRevision({ conversationId, clientCommandId: commandId(), revision });
+  }, [connectionState, conversationId]);
+
+  const confirmSelection = useCallback(async () => {
+    const connection = connectionRef.current;
+    if (!connection || connectionState !== 'ready' || !conversationId) throw new Error('Advisor is not connected');
+    await connection.reducers.confirmSelection({ conversationId, clientCommandId: commandId() });
+  }, [connectionState, conversationId]);
+
+  const editConfirmedSelection = useCallback(async () => {
+    const connection = connectionRef.current;
+    if (!connection || connectionState !== 'ready' || !conversationId) throw new Error('Advisor is not connected');
+    await connection.reducers.editConfirmedSelection({ conversationId, clientCommandId: commandId() });
+  }, [connectionState, conversationId]);
+
+  const uploadDocument = useCallback(async (documentType: string, file: File) => {
+    const connection = connectionRef.current;
+    if (!connection || connectionState !== 'ready' || !conversationId) throw new Error('Advisor is not connected');
+    const ticketId = commandId();
+    await connection.reducers.createUploadTicket({ conversationId, ticketId, documentType });
+    const body = new FormData();
+    body.set('ticketId', ticketId);
+    body.set('file', file);
+    const api = process.env.NEXT_PUBLIC_API_URL
+      ?? `${window.location.protocol}//${window.location.hostname}:3001`;
+    const response = await fetch(`${api}/documents/upload`, { method: 'POST', body });
+    if (!response.ok) throw new Error((await response.text()) || 'Document upload failed');
+  }, [connectionState, conversationId]);
+
   return {
     connectionState, error, conversationId, messages, turns, directive, workSets, workItems, workResults,
-    uiActions, userUiStates, turnUpdates, profile, catalogCourses, send, updateProfile, publishUiState,
-    publishUiPresence, resolveAutoUiAction, openUiAction,
+    uiActions, userUiStates, turnUpdates, profile, catalogCourses, catalogFamilies, selection, selectionRevisions,
+    documentRequirements, documentSubmissions, send, updateProfile, publishUiState,
+    publishUiPresence, resolveAutoUiAction, openUiAction, removeProvisionalOffering, selectOffering,
+    restoreSelectionRevision, confirmSelection, editConfirmedSelection, uploadDocument,
   };
 }

@@ -15,5 +15,9 @@ export default __t.row({
   name: __t.string(),
   country: __t.string(),
   city: __t.string(),
+  ownership: __t.string(),
+  aliasesJson: __t.string().name("aliases_json"),
+  rankingsJson: __t.string().name("rankings_json"),
+  sourcesJson: __t.string().name("sources_json"),
   active: __t.bool(),
 });

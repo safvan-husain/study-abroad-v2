@@ -8,8 +8,8 @@ pub const MAX_AWARENESS_LENGTH: usize = 512;
 pub const MAX_ERROR_LENGTH: usize = 512;
 pub const MAX_WORKER_LABEL_LENGTH: usize = 128;
 pub const MAX_WORK_KIND_LENGTH: usize = 64;
-pub const MAX_WORK_PAYLOAD_LENGTH: usize = 4_096;
-pub const MAX_WORK_ITEMS: usize = 8;
+pub const MAX_WORK_PAYLOAD_LENGTH: usize = 128_000;
+pub const MAX_WORK_ITEMS: usize = 100;
 pub const MAX_LEASE_SECONDS: u64 = 3_600;
 pub const DIRECTIVE_SCHEMA_VERSION: u32 = 1;
 pub const DISCOVERY_VIEW: &str = "discovery";
@@ -135,6 +135,7 @@ pub struct TurnJob {
     pub lease_until_micros: Option<i64>,
     pub attempt: u32,
     pub base_ui_revision: u64,
+    pub base_context_revision: u64,
     pub run_id: Option<String>,
     pub error_code: Option<String>,
 }
@@ -296,6 +297,25 @@ pub struct CatalogInstitution {
     pub name: String,
     pub country: String,
     pub city: String,
+    pub ownership: String,
+    pub aliases_json: String,
+    pub rankings_json: String,
+    pub sources_json: String,
+    pub active: bool,
+}
+
+#[spacetimedb::table(accessor = catalog_family, public)]
+pub struct CatalogFamily {
+    #[primary_key]
+    pub family_id: String,
+    #[index(btree)]
+    pub area_id: String,
+    pub name: String,
+    pub aliases_json: String,
+    pub description: String,
+    pub typical_subjects_json: String,
+    pub career_directions_json: String,
+    pub related_family_ids_json: String,
     pub active: bool,
 }
 
@@ -314,7 +334,110 @@ pub struct CatalogCourse {
     pub level: String,
     pub tuition_band: String,
     pub english_bar: String,
+    #[index(btree)]
+    pub family_id: String,
+    pub qualification: String,
+    pub official_url: String,
+    pub ownership: String,
+    pub requirements_json: String,
+    pub rankings_json: String,
+    pub sources_json: String,
     pub active: bool,
+}
+
+#[spacetimedb::table(accessor = catalog_policy, public)]
+pub struct CatalogPolicy {
+    #[primary_key]
+    pub policy_id: String,
+    pub seed_version: String,
+    pub version: u32,
+    pub baseline_document_types_json: String,
+    pub active: bool,
+}
+
+#[spacetimedb::table(accessor = conversation_selection)]
+pub struct ConversationSelection {
+    #[primary_key]
+    pub conversation_id: String,
+    pub revision: u64,
+    pub presented_family_ids_json: String,
+    pub presented_offering_ids_json: String,
+    pub provisional_offering_ids_json: String,
+    pub suppressed_offering_ids_json: String,
+    pub confirmed_offering_ids_json: String,
+    pub comparison_criterion: String,
+    pub confirmed_snapshot_id: Option<String>,
+    pub updated_at_micros: i64,
+}
+
+#[spacetimedb::table(accessor = selection_revision)]
+pub struct SelectionRevision {
+    #[primary_key]
+    pub revision_id: String,
+    #[index(btree)]
+    pub conversation_id: String,
+    pub revision: u64,
+    pub provisional_offering_ids_json: String,
+    pub suppressed_offering_ids_json: String,
+    pub source: String,
+    pub rationale: String,
+    pub created_at_micros: i64,
+}
+
+#[spacetimedb::table(accessor = confirmed_selection_snapshot)]
+pub struct ConfirmedSelectionSnapshot {
+    #[primary_key]
+    pub snapshot_id: String,
+    #[index(btree)]
+    pub conversation_id: String,
+    pub selection_revision: u64,
+    pub offering_ids_json: String,
+    pub offering_facts_json: String,
+    pub document_contract_json: String,
+    pub created_at_micros: i64,
+}
+
+#[spacetimedb::table(accessor = document_requirement)]
+pub struct DocumentRequirement {
+    #[primary_key]
+    pub requirement_key: String,
+    #[index(btree)]
+    pub conversation_id: String,
+    pub snapshot_id: String,
+    pub document_type: String,
+    pub label: String,
+    pub reason: String,
+    pub status: String,
+}
+
+#[spacetimedb::table(accessor = upload_ticket)]
+pub struct UploadTicket {
+    #[primary_key]
+    pub ticket_id: String,
+    #[index(btree)]
+    pub conversation_id: String,
+    #[index(btree)]
+    pub principal_id: String,
+    pub document_type: String,
+    pub expires_at_micros: i64,
+    pub consumed_at_micros: Option<i64>,
+    pub created_at_micros: i64,
+}
+
+#[spacetimedb::table(accessor = document_submission)]
+pub struct DocumentSubmission {
+    #[primary_key]
+    pub submission_id: String,
+    #[index(btree)]
+    pub conversation_id: String,
+    pub snapshot_id: String,
+    pub document_type: String,
+    pub original_name: String,
+    pub mime_type: String,
+    pub byte_size: u64,
+    pub storage_key: String,
+    pub uploaded_at_micros: i64,
+    pub expires_at_micros: i64,
 }
 
 #[spacetimedb::table(accessor = conversation_profile)]
@@ -361,6 +484,47 @@ pub struct CatalogCourseSeed {
     pub level: String,
     pub tuition_band: String,
     pub english_bar: String,
+    pub family_id: String,
+    pub qualification: String,
+    pub official_url: String,
+    pub ownership: String,
+    pub requirements_json: String,
+    pub rankings_json: String,
+    pub sources_json: String,
+}
+
+#[derive(SpacetimeType, Clone)]
+pub struct CatalogInstitutionSeed {
+    pub institution_id: String,
+    pub name: String,
+    pub country: String,
+    pub city: String,
+    pub ownership: String,
+    pub aliases_json: String,
+    pub rankings_json: String,
+    pub sources_json: String,
+    pub active: bool,
+}
+
+#[derive(SpacetimeType, Clone)]
+pub struct CatalogFamilySeed {
+    pub family_id: String,
+    pub area_id: String,
+    pub name: String,
+    pub aliases_json: String,
+    pub description: String,
+    pub typical_subjects_json: String,
+    pub career_directions_json: String,
+    pub related_family_ids_json: String,
+    pub active: bool,
+}
+
+#[derive(SpacetimeType, Clone)]
+pub struct CatalogPolicySeed {
+    pub seed_version: String,
+    pub policy_id: String,
+    pub version: u32,
+    pub baseline_document_types_json: String,
 }
 
 #[derive(SpacetimeType)]
@@ -375,6 +539,7 @@ pub struct WorkerPendingTurn {
     pub lease_until_micros: Option<i64>,
     pub attempt: u32,
     pub base_ui_revision: u64,
+    pub base_context_revision: u64,
     pub ui_client_instance_id: String,
     pub ui_target_json: String,
     pub ui_navigation_revision: u64,
@@ -639,6 +804,11 @@ pub fn validate_ui_target_json(target_json: &str) -> Result<UiTargetRef, &'stati
             Ok(target)
         }
         "catalog" => Ok(target),
+        "area" | "family" | "comparison" | "shortlist" | "documents"
+            if target.work_set_id.is_some() || target.entity_id.is_some() =>
+        {
+            Ok(target)
+        }
         "course_summary"
             if target.work_set_id.is_some()
                 && target.entity_type.as_deref() == Some("course")
@@ -646,7 +816,8 @@ pub fn validate_ui_target_json(target_json: &str) -> Result<UiTargetRef, &'stati
         {
             Ok(target)
         }
-        "home" | "course_summary" => Err("incomplete UI target"),
+        "home" | "course_summary" | "area" | "family" | "comparison" | "shortlist"
+        | "documents" => Err("incomplete UI target"),
         _ => Err("unsupported UI target view type"),
     }
 }
@@ -759,7 +930,44 @@ pub fn validate_catalog_course_seed(course: &CatalogCourseSeed) -> Result<(), &'
     {
         return Err("catalog course field is outside the payload bound");
     }
+    validate_identifier(&course.family_id, "invalid catalog family")?;
+    if course.qualification.len() > MAX_CATALOG_NAME_LENGTH
+        || course.official_url.len() > 2_048
+        || course.ownership.len() > MAX_CATALOG_AREA_LENGTH
+        || course.requirements_json.len() > MAX_WORK_PAYLOAD_LENGTH
+        || course.rankings_json.len() > MAX_WORK_PAYLOAD_LENGTH
+        || course.sources_json.len() > MAX_WORK_PAYLOAD_LENGTH
+    {
+        return Err("rich catalog course field is outside the payload bound");
+    }
+    for value in [
+        &course.requirements_json,
+        &course.rankings_json,
+        &course.sources_json,
+    ] {
+        if serde_json::from_str::<serde_json::Value>(value).is_err() {
+            return Err("invalid rich catalog JSON");
+        }
+    }
     Ok(())
+}
+
+fn parse_id_list(value: &str, max: usize) -> Result<Vec<String>, &'static str> {
+    if value.len() > MAX_WORK_PAYLOAD_LENGTH {
+        return Err("identifier list is outside the payload bound");
+    }
+    let rows: Vec<String> = serde_json::from_str(value).map_err(|_| "invalid identifier list")?;
+    if rows.len() > max {
+        return Err("too many identifiers");
+    }
+    let mut seen = std::collections::HashSet::new();
+    for row in &rows {
+        validate_identifier(row, "invalid identifier in list")?;
+        if !seen.insert(row.clone()) {
+            return Err("duplicate identifier in list");
+        }
+    }
+    Ok(rows)
 }
 
 pub fn validate_directive_revision(
@@ -827,6 +1035,38 @@ fn work_set_id(turn_id: &str) -> String {
 
 fn work_item_id(work_set_id: &str, index: usize) -> String {
     format!("{work_set_id}-{index}")
+}
+
+fn validate_active_offerings(ctx: &ReducerContext, offering_ids: &[String]) {
+    for offering_id in offering_ids {
+        let course = ctx
+            .db
+            .catalog_course()
+            .course_id()
+            .find(offering_id)
+            .unwrap_or_else(|| panic!("catalog offering not found: {offering_id}"));
+        if !course.active {
+            panic!("catalog offering is inactive: {offering_id}");
+        }
+    }
+}
+
+fn record_selection_revision(
+    ctx: &ReducerContext,
+    selection: &ConversationSelection,
+    source: &str,
+    rationale: &str,
+) {
+    ctx.db.selection_revision().insert(SelectionRevision {
+        revision_id: format!("{}:{}", selection.conversation_id, selection.revision),
+        conversation_id: selection.conversation_id.clone(),
+        revision: selection.revision,
+        provisional_offering_ids_json: selection.provisional_offering_ids_json.clone(),
+        suppressed_offering_ids_json: selection.suppressed_offering_ids_json.clone(),
+        source: source.into(),
+        rationale: rationale.chars().take(4_000).collect(),
+        created_at_micros: now_micros(ctx),
+    });
 }
 
 fn stable_internal_id(parts: &[&str]) -> String {
@@ -1166,7 +1406,7 @@ pub fn ensure_guest_journey(ctx: &ReducerContext, conversation_id: String) {
             principal_id,
         });
     ctx.db.conversation_profile().insert(ConversationProfile {
-        conversation_id,
+        conversation_id: conversation_id.clone(),
         profile_queue_key: 1,
         background: String::new(),
         course_interests: String::new(),
@@ -1177,6 +1417,20 @@ pub fn ensure_guest_journey(ctx: &ReducerContext, conversation_id: String) {
         constraints_text: String::new(),
         updated_at_micros: now,
     });
+    ctx.db
+        .conversation_selection()
+        .insert(ConversationSelection {
+            conversation_id,
+            revision: 0,
+            presented_family_ids_json: "[]".into(),
+            presented_offering_ids_json: "[]".into(),
+            provisional_offering_ids_json: "[]".into(),
+            suppressed_offering_ids_json: "[]".into(),
+            confirmed_offering_ids_json: "[]".into(),
+            comparison_criterion: String::new(),
+            confirmed_snapshot_id: None,
+            updated_at_micros: now,
+        });
 }
 
 #[spacetimedb::reducer(init)]
@@ -1299,6 +1553,7 @@ pub fn send_message(
         lease_until_micros: None,
         attempt: 0,
         base_ui_revision: conversation.ui_revision,
+        base_context_revision: conversation.context_revision,
         run_id: None,
         error_code: None,
     });
@@ -1399,6 +1654,13 @@ pub fn complete_turn(
     directive_awareness: String,
     work_kind: String,
     work_items: Vec<WorkItemSpec>,
+    expected_context_revision: u64,
+    selection_mode: String,
+    presented_family_ids_json: String,
+    presented_offering_ids_json: String,
+    provisional_offering_ids_json: String,
+    proposal_rationale: String,
+    comparison_criterion: String,
 ) {
     ensure_registered_worker(ctx);
     validate_message_content(&assistant_content).unwrap_or_else(|error| panic!("{error}"));
@@ -1415,6 +1677,21 @@ pub fn complete_turn(
     if work_items.len() > MAX_WORK_ITEMS {
         panic!("too many work items");
     }
+    if selection_mode != "none" && selection_mode != "replace_provisional" {
+        panic!("invalid selection mode");
+    }
+    if proposal_rationale.len() > 4_000 {
+        panic!("proposal rationale is outside the payload bound");
+    }
+    if comparison_criterion.len() > MAX_IDENTIFIER_LENGTH {
+        panic!("comparison criterion is outside the payload bound");
+    }
+    let presented_family_ids =
+        parse_id_list(&presented_family_ids_json, 100).unwrap_or_else(|error| panic!("{error}"));
+    let presented_offering_ids =
+        parse_id_list(&presented_offering_ids_json, 100).unwrap_or_else(|error| panic!("{error}"));
+    let provisional_offering_ids =
+        parse_id_list(&provisional_offering_ids_json, 5).unwrap_or_else(|error| panic!("{error}"));
     if !work_items.is_empty() && (work_kind.is_empty() || work_kind.len() > MAX_WORK_KIND_LENGTH) {
         panic!("invalid work set kind");
     }
@@ -1442,6 +1719,11 @@ pub fn complete_turn(
         .conversation_id()
         .find(&job.conversation_id)
         .expect("conversation not found");
+    if job.base_context_revision != expected_context_revision
+        || conversation.context_revision != expected_context_revision
+    {
+        panic!("stale graph context revision");
+    }
     if conversation.agent_thread_id != agent_thread_id {
         panic!("agent thread does not match the conversation");
     }
@@ -1460,6 +1742,60 @@ pub fn complete_turn(
         if existing.ui_revision != job.base_ui_revision {
             panic!("stale directive revision");
         }
+    }
+
+    validate_active_offerings(ctx, &presented_offering_ids);
+    validate_active_offerings(ctx, &provisional_offering_ids);
+    let mut selection = ctx
+        .db
+        .conversation_selection()
+        .conversation_id()
+        .find(&conversation.conversation_id)
+        .expect("conversation selection not found");
+    let mut selection_changed = false;
+    if !presented_family_ids.is_empty() {
+        selection.presented_family_ids_json = presented_family_ids_json;
+        selection.presented_offering_ids_json = presented_offering_ids_json;
+        selection_changed = true;
+    } else if !presented_offering_ids.is_empty() {
+        selection.presented_offering_ids_json = presented_offering_ids_json;
+        selection_changed = true;
+    }
+    if selection_changed {
+        selection.comparison_criterion = comparison_criterion;
+    }
+    if selection_mode == "replace_provisional" {
+        let confirmed = parse_id_list(&selection.confirmed_offering_ids_json, 5)
+            .unwrap_or_else(|error| panic!("{error}"));
+        if !confirmed.is_empty() {
+            panic!("confirmed selections must be edited before an agent replacement");
+        }
+        let suppressed = parse_id_list(&selection.suppressed_offering_ids_json, 100)
+            .unwrap_or_else(|error| panic!("{error}"));
+        if provisional_offering_ids
+            .iter()
+            .any(|id| suppressed.contains(id))
+        {
+            panic!("agent proposal includes a suppressed offering");
+        }
+        record_selection_revision(ctx, &selection, "agent_replacement", &proposal_rationale);
+        selection.provisional_offering_ids_json = provisional_offering_ids_json;
+        selection_changed = true;
+    }
+    if selection_changed {
+        selection.revision = selection
+            .revision
+            .checked_add(1)
+            .expect("selection revision exhausted");
+        selection.updated_at_micros = now;
+        conversation.context_revision = conversation
+            .context_revision
+            .checked_add(1)
+            .expect("context revision exhausted");
+        ctx.db
+            .conversation_selection()
+            .conversation_id()
+            .update(selection);
     }
 
     let assistant_message_id = assistant_message_id(&turn_id);
@@ -1829,87 +2165,731 @@ pub fn update_discovery_profile(
 }
 
 #[spacetimedb::reducer]
-pub fn replace_catalog(ctx: &ReducerContext, courses: Vec<CatalogCourseSeed>) {
+pub fn replace_catalog(
+    ctx: &ReducerContext,
+    institutions: Vec<CatalogInstitutionSeed>,
+    families: Vec<CatalogFamilySeed>,
+    courses: Vec<CatalogCourseSeed>,
+    policy: CatalogPolicySeed,
+) {
     ensure_worker_auth(ctx);
-    if courses.len() > 500 {
+    if institutions.len() > 100 || families.len() > 200 || courses.len() > 500 {
         panic!("catalog seed exceeds bound");
     }
+    let mut institution_ids = std::collections::HashSet::new();
+    for institution in &institutions {
+        validate_identifier(
+            &institution.institution_id,
+            "invalid institution identifier",
+        )
+        .unwrap_or_else(|error| panic!("{error}"));
+        if !institution_ids.insert(institution.institution_id.clone()) {
+            panic!("duplicate institution identifier");
+        }
+        if institution.name.is_empty() || institution.name.len() > MAX_CATALOG_NAME_LENGTH {
+            panic!("invalid institution name");
+        }
+        for value in [
+            &institution.aliases_json,
+            &institution.rankings_json,
+            &institution.sources_json,
+        ] {
+            if value.len() > MAX_WORK_PAYLOAD_LENGTH
+                || serde_json::from_str::<serde_json::Value>(value).is_err()
+            {
+                panic!("invalid institution catalog JSON");
+            }
+        }
+    }
+    let mut family_ids = std::collections::HashSet::new();
+    for family in &families {
+        validate_identifier(&family.family_id, "invalid family identifier")
+            .unwrap_or_else(|error| panic!("{error}"));
+        validate_identifier(&family.area_id, "invalid area identifier")
+            .unwrap_or_else(|error| panic!("{error}"));
+        if !family_ids.insert(family.family_id.clone()) {
+            panic!("duplicate family identifier");
+        }
+        if family.name.is_empty()
+            || family.name.len() > MAX_CATALOG_NAME_LENGTH
+            || family.description.len() > 4_000
+        {
+            panic!("invalid family content");
+        }
+        for value in [
+            &family.aliases_json,
+            &family.typical_subjects_json,
+            &family.career_directions_json,
+            &family.related_family_ids_json,
+        ] {
+            if value.len() > MAX_WORK_PAYLOAD_LENGTH
+                || serde_json::from_str::<serde_json::Value>(value).is_err()
+            {
+                panic!("invalid family catalog JSON");
+            }
+        }
+    }
+    let mut course_ids = std::collections::HashSet::new();
     for course in &courses {
         validate_catalog_course_seed(course).unwrap_or_else(|error| panic!("{error}"));
-    }
-    let mut seen_course_ids = std::collections::HashSet::new();
-    let mut institutions = std::collections::HashMap::<String, (String, String, String)>::new();
-    for course in &courses {
-        if !seen_course_ids.insert(course.course_id.clone()) {
+        if !course_ids.insert(course.course_id.clone()) {
             panic!("duplicate catalog course_id: {}", course.course_id);
         }
-        match institutions.get(&course.institution_id) {
-            Some((name, country, city))
-                if name != &course.institution_name
-                    || country != &course.country
-                    || city != &course.city =>
-            {
-                panic!(
-                    "conflicting institution metadata for {}: {}",
-                    course.institution_id, course.course_id
-                );
-            }
-            Some(_) => {}
-            None => {
-                institutions.insert(
-                    course.institution_id.clone(),
-                    (
-                        course.institution_name.clone(),
-                        course.country.clone(),
-                        course.city.clone(),
-                    ),
-                );
-            }
+        if !institution_ids.contains(&course.institution_id)
+            || !family_ids.contains(&course.family_id)
+        {
+            panic!("catalog course references an unknown institution or family");
         }
     }
+    parse_id_list(&policy.baseline_document_types_json, 20)
+        .unwrap_or_else(|_| panic!("invalid baseline document policy"));
+
     let existing_courses: Vec<_> = ctx.db.catalog_course().iter().collect();
-    for course in existing_courses {
-        ctx.db
-            .catalog_course()
-            .course_id()
-            .delete(&course.course_id);
+    for row in existing_courses {
+        ctx.db.catalog_course().course_id().delete(&row.course_id);
+    }
+    let existing_families: Vec<_> = ctx.db.catalog_family().iter().collect();
+    for row in existing_families {
+        ctx.db.catalog_family().family_id().delete(&row.family_id);
     }
     let existing_institutions: Vec<_> = ctx.db.catalog_institution().iter().collect();
-    for institution in existing_institutions {
+    for row in existing_institutions {
         ctx.db
             .catalog_institution()
             .institution_id()
-            .delete(&institution.institution_id);
+            .delete(&row.institution_id);
     }
-    for course in courses {
-        if ctx
-            .db
-            .catalog_institution()
-            .institution_id()
-            .find(&course.institution_id)
-            .is_none()
-        {
-            ctx.db.catalog_institution().insert(CatalogInstitution {
-                institution_id: course.institution_id.clone(),
-                name: course.institution_name.clone(),
-                country: course.country.clone(),
-                city: course.city.clone(),
-                active: true,
-            });
-        }
+    let existing_policies: Vec<_> = ctx.db.catalog_policy().iter().collect();
+    for row in existing_policies {
+        ctx.db.catalog_policy().policy_id().delete(&row.policy_id);
+    }
+
+    for row in institutions {
+        ctx.db.catalog_institution().insert(CatalogInstitution {
+            institution_id: row.institution_id,
+            name: row.name,
+            country: row.country,
+            city: row.city,
+            ownership: row.ownership,
+            aliases_json: row.aliases_json,
+            rankings_json: row.rankings_json,
+            sources_json: row.sources_json,
+            active: row.active,
+        });
+    }
+    for row in families {
+        ctx.db.catalog_family().insert(CatalogFamily {
+            family_id: row.family_id,
+            area_id: row.area_id,
+            name: row.name,
+            aliases_json: row.aliases_json,
+            description: row.description,
+            typical_subjects_json: row.typical_subjects_json,
+            career_directions_json: row.career_directions_json,
+            related_family_ids_json: row.related_family_ids_json,
+            active: row.active,
+        });
+    }
+    for row in courses {
         ctx.db.catalog_course().insert(CatalogCourse {
-            course_id: course.course_id,
-            institution_id: course.institution_id,
-            institution_name: course.institution_name,
-            country: course.country,
-            city: course.city,
-            name: course.name,
-            area: course.area,
-            level: course.level,
-            tuition_band: course.tuition_band,
-            english_bar: course.english_bar,
+            course_id: row.course_id,
+            institution_id: row.institution_id,
+            institution_name: row.institution_name,
+            country: row.country,
+            city: row.city,
+            name: row.name,
+            area: row.area,
+            level: row.level,
+            tuition_band: row.tuition_band,
+            english_bar: row.english_bar,
+            family_id: row.family_id,
+            qualification: row.qualification,
+            official_url: row.official_url,
+            ownership: row.ownership,
+            requirements_json: row.requirements_json,
+            rankings_json: row.rankings_json,
+            sources_json: row.sources_json,
             active: true,
         });
+    }
+    ctx.db.catalog_policy().insert(CatalogPolicy {
+        policy_id: policy.policy_id,
+        seed_version: policy.seed_version,
+        version: policy.version,
+        baseline_document_types_json: policy.baseline_document_types_json,
+        active: true,
+    });
+}
+
+fn commit_user_context_action(
+    ctx: &ReducerContext,
+    conversation_id: &str,
+    client_command_id: &str,
+    kind: &str,
+    entity_ref: Option<String>,
+) -> u64 {
+    let mut conversation = ctx
+        .db
+        .conversation()
+        .conversation_id()
+        .find(conversation_id.to_owned())
+        .expect("conversation not found");
+    conversation.context_revision = conversation
+        .context_revision
+        .checked_add(1)
+        .expect("context revision exhausted");
+    let revision = conversation.context_revision;
+    ctx.db.conversation().conversation_id().update(conversation);
+    ctx.db.command().insert(Command {
+        command_id: client_command_id.into(),
+        principal_id: caller(ctx),
+        conversation_id: conversation_id.into(),
+        turn_id: client_command_id.into(),
+        kind: kind.into(),
+        created_at_micros: now_micros(ctx),
+    });
+    ctx.db.user_action().insert(UserAction {
+        action_id: client_command_id.into(),
+        principal_id: caller(ctx),
+        conversation_id: conversation_id.into(),
+        kind: kind.into(),
+        entity_ref,
+        resulting_context_revision: revision,
+        created_at_micros: now_micros(ctx),
+    });
+    revision
+}
+
+#[spacetimedb::reducer]
+pub fn remove_provisional_offering(
+    ctx: &ReducerContext,
+    conversation_id: String,
+    client_command_id: String,
+    offering_id: String,
+) {
+    validate_command_id(&client_command_id).unwrap_or_else(|error| panic!("{error}"));
+    validate_identifier(&offering_id, "invalid offering identifier")
+        .unwrap_or_else(|error| panic!("{error}"));
+    ensure_member(ctx, &conversation_id);
+    if ctx
+        .db
+        .command()
+        .command_id()
+        .find(&client_command_id)
+        .is_some()
+    {
+        return;
+    }
+    let mut selection = ctx
+        .db
+        .conversation_selection()
+        .conversation_id()
+        .find(&conversation_id)
+        .expect("conversation selection not found");
+    if !parse_id_list(&selection.confirmed_offering_ids_json, 5)
+        .expect("invalid confirmed selection")
+        .is_empty()
+    {
+        panic!("edit the confirmed selection before removing an offering");
+    }
+    let mut provisional = parse_id_list(&selection.provisional_offering_ids_json, 5)
+        .expect("invalid provisional selection");
+    if !provisional.contains(&offering_id) {
+        return;
+    }
+    record_selection_revision(ctx, &selection, "user_removal", &offering_id);
+    provisional.retain(|row| row != &offering_id);
+    let mut suppressed = parse_id_list(&selection.suppressed_offering_ids_json, 100)
+        .expect("invalid suppressed selection");
+    if !suppressed.contains(&offering_id) {
+        suppressed.push(offering_id.clone());
+    }
+    selection.revision = selection
+        .revision
+        .checked_add(1)
+        .expect("selection revision exhausted");
+    selection.provisional_offering_ids_json =
+        serde_json::to_string(&provisional).expect("selection must serialize");
+    selection.suppressed_offering_ids_json =
+        serde_json::to_string(&suppressed).expect("selection must serialize");
+    selection.updated_at_micros = now_micros(ctx);
+    ctx.db
+        .conversation_selection()
+        .conversation_id()
+        .update(selection);
+    commit_user_context_action(
+        ctx,
+        &conversation_id,
+        &client_command_id,
+        "remove_provisional_offering",
+        Some(offering_id),
+    );
+}
+
+#[spacetimedb::reducer]
+pub fn select_offering(
+    ctx: &ReducerContext,
+    conversation_id: String,
+    client_command_id: String,
+    offering_id: String,
+) {
+    validate_command_id(&client_command_id).unwrap_or_else(|error| panic!("{error}"));
+    ensure_member(ctx, &conversation_id);
+    if ctx
+        .db
+        .command()
+        .command_id()
+        .find(&client_command_id)
+        .is_some()
+    {
+        return;
+    }
+    validate_active_offerings(ctx, std::slice::from_ref(&offering_id));
+    let mut selection = ctx
+        .db
+        .conversation_selection()
+        .conversation_id()
+        .find(&conversation_id)
+        .expect("conversation selection not found");
+    if !parse_id_list(&selection.confirmed_offering_ids_json, 5)
+        .expect("invalid confirmed selection")
+        .is_empty()
+    {
+        panic!("edit the confirmed selection before choosing another offering");
+    }
+    let mut provisional = parse_id_list(&selection.provisional_offering_ids_json, 5)
+        .expect("invalid provisional selection");
+    if provisional.contains(&offering_id) {
+        return;
+    }
+    if provisional.len() >= 5 {
+        panic!("provisional selection is limited to five offerings");
+    }
+    record_selection_revision(ctx, &selection, "user_selection", &offering_id);
+    provisional.push(offering_id.clone());
+    let mut suppressed = parse_id_list(&selection.suppressed_offering_ids_json, 100)
+        .expect("invalid suppressed selection");
+    suppressed.retain(|row| row != &offering_id);
+    selection.revision = selection
+        .revision
+        .checked_add(1)
+        .expect("selection revision exhausted");
+    selection.provisional_offering_ids_json =
+        serde_json::to_string(&provisional).expect("selection must serialize");
+    selection.suppressed_offering_ids_json =
+        serde_json::to_string(&suppressed).expect("selection must serialize");
+    selection.updated_at_micros = now_micros(ctx);
+    ctx.db
+        .conversation_selection()
+        .conversation_id()
+        .update(selection);
+    commit_user_context_action(
+        ctx,
+        &conversation_id,
+        &client_command_id,
+        "select_offering",
+        Some(offering_id),
+    );
+}
+
+#[spacetimedb::reducer]
+pub fn restore_selection_revision(
+    ctx: &ReducerContext,
+    conversation_id: String,
+    client_command_id: String,
+    revision: u64,
+) {
+    validate_command_id(&client_command_id).unwrap_or_else(|error| panic!("{error}"));
+    ensure_member(ctx, &conversation_id);
+    if ctx
+        .db
+        .command()
+        .command_id()
+        .find(&client_command_id)
+        .is_some()
+    {
+        return;
+    }
+    let history = ctx
+        .db
+        .selection_revision()
+        .revision_id()
+        .find(format!("{conversation_id}:{revision}"))
+        .expect("selection revision not found");
+    let mut selection = ctx
+        .db
+        .conversation_selection()
+        .conversation_id()
+        .find(&conversation_id)
+        .expect("conversation selection not found");
+    if !parse_id_list(&selection.confirmed_offering_ids_json, 5)
+        .expect("invalid confirmed selection")
+        .is_empty()
+    {
+        panic!("edit the confirmed selection before restoring a revision");
+    }
+    record_selection_revision(ctx, &selection, "restore_revision", &revision.to_string());
+    selection.revision = selection
+        .revision
+        .checked_add(1)
+        .expect("selection revision exhausted");
+    selection.provisional_offering_ids_json = history.provisional_offering_ids_json;
+    selection.suppressed_offering_ids_json = history.suppressed_offering_ids_json;
+    selection.updated_at_micros = now_micros(ctx);
+    ctx.db
+        .conversation_selection()
+        .conversation_id()
+        .update(selection);
+    commit_user_context_action(
+        ctx,
+        &conversation_id,
+        &client_command_id,
+        "restore_selection_revision",
+        Some(revision.to_string()),
+    );
+}
+
+#[spacetimedb::reducer]
+pub fn confirm_selection(ctx: &ReducerContext, conversation_id: String, client_command_id: String) {
+    validate_command_id(&client_command_id).unwrap_or_else(|error| panic!("{error}"));
+    ensure_member(ctx, &conversation_id);
+    if ctx
+        .db
+        .command()
+        .command_id()
+        .find(&client_command_id)
+        .is_some()
+    {
+        return;
+    }
+    let mut selection = ctx
+        .db
+        .conversation_selection()
+        .conversation_id()
+        .find(&conversation_id)
+        .expect("conversation selection not found");
+    let offering_ids = parse_id_list(&selection.provisional_offering_ids_json, 5)
+        .expect("invalid provisional selection");
+    if offering_ids.is_empty() {
+        panic!("a provisional selection is required before confirmation");
+    }
+    if !parse_id_list(&selection.confirmed_offering_ids_json, 5)
+        .expect("invalid confirmed selection")
+        .is_empty()
+    {
+        panic!("selection is already confirmed");
+    }
+    validate_active_offerings(ctx, &offering_ids);
+    let mut offering_facts = Vec::new();
+    let mut requires_ielts = false;
+    for offering_id in &offering_ids {
+        let course = ctx
+            .db
+            .catalog_course()
+            .course_id()
+            .find(offering_id)
+            .expect("catalog offering not found");
+        requires_ielts |= course.english_bar.starts_with("IELTS ");
+        offering_facts.push(serde_json::json!({
+            "courseId": course.course_id, "familyId": course.family_id, "name": course.name,
+            "institutionId": course.institution_id, "institutionName": course.institution_name,
+            "country": course.country, "city": course.city, "qualification": course.qualification,
+            "officialUrl": course.official_url, "requirements": serde_json::from_str::<serde_json::Value>(&course.requirements_json).unwrap_or(serde_json::Value::Array(vec![])),
+            "rankings": serde_json::from_str::<serde_json::Value>(&course.rankings_json).unwrap_or(serde_json::Value::Array(vec![])),
+            "sources": serde_json::from_str::<serde_json::Value>(&course.sources_json).unwrap_or(serde_json::Value::Array(vec![])),
+        }));
+    }
+    let policy = ctx
+        .db
+        .catalog_policy()
+        .iter()
+        .find(|row| row.active)
+        .expect("active catalog policy not found");
+    let mut document_types =
+        parse_id_list(&policy.baseline_document_types_json, 20).expect("invalid document policy");
+    if requires_ielts && !document_types.contains(&"english_test".to_owned()) {
+        document_types.push("english_test".into());
+    }
+    let snapshot_id =
+        stable_internal_id(&["confirmed_selection", &conversation_id, &client_command_id]);
+    let contract = serde_json::json!({
+        "policyId": policy.policy_id, "policyVersion": policy.version,
+        "documentTypes": document_types, "eligibilityReviewed": false,
+    });
+    ctx.db
+        .confirmed_selection_snapshot()
+        .insert(ConfirmedSelectionSnapshot {
+            snapshot_id: snapshot_id.clone(),
+            conversation_id: conversation_id.clone(),
+            selection_revision: selection.revision,
+            offering_ids_json: serde_json::to_string(&offering_ids)
+                .expect("selection must serialize"),
+            offering_facts_json: serde_json::to_string(&offering_facts)
+                .expect("facts must serialize"),
+            document_contract_json: serde_json::to_string(&contract)
+                .expect("contract must serialize"),
+            created_at_micros: now_micros(ctx),
+        });
+    for document_type in document_types {
+        let (label, reason): (String, String) = match document_type.as_str() {
+            "passport" => ("Passport".into(), "Baseline identity document".into()),
+            "academic" => (
+                "Academic evidence".into(),
+                "Baseline academic document".into(),
+            ),
+            "english_test" => (
+                "IELTS result".into(),
+                "At least one confirmed offering has an actual IELTS threshold".into(),
+            ),
+            _ => (
+                document_type.clone(),
+                "Required by the confirmed document policy".into(),
+            ),
+        };
+        ctx.db.document_requirement().insert(DocumentRequirement {
+            requirement_key: stable_internal_id(&[
+                "document_requirement",
+                &snapshot_id,
+                &document_type,
+            ]),
+            conversation_id: conversation_id.clone(),
+            snapshot_id: snapshot_id.clone(),
+            document_type,
+            label,
+            reason,
+            status: "required".into(),
+        });
+    }
+    selection.confirmed_offering_ids_json =
+        serde_json::to_string(&offering_ids).expect("selection must serialize");
+    selection.confirmed_snapshot_id = Some(snapshot_id.clone());
+    selection.revision = selection
+        .revision
+        .checked_add(1)
+        .expect("selection revision exhausted");
+    selection.updated_at_micros = now_micros(ctx);
+    ctx.db
+        .conversation_selection()
+        .conversation_id()
+        .update(selection);
+    commit_user_context_action(
+        ctx,
+        &conversation_id,
+        &client_command_id,
+        "confirm_selection",
+        Some(snapshot_id),
+    );
+}
+
+#[spacetimedb::reducer]
+pub fn edit_confirmed_selection(
+    ctx: &ReducerContext,
+    conversation_id: String,
+    client_command_id: String,
+) {
+    validate_command_id(&client_command_id).unwrap_or_else(|error| panic!("{error}"));
+    ensure_member(ctx, &conversation_id);
+    if ctx
+        .db
+        .command()
+        .command_id()
+        .find(&client_command_id)
+        .is_some()
+    {
+        return;
+    }
+    let mut selection = ctx
+        .db
+        .conversation_selection()
+        .conversation_id()
+        .find(&conversation_id)
+        .expect("conversation selection not found");
+    let snapshot_id = selection
+        .confirmed_snapshot_id
+        .clone()
+        .expect("selection is not confirmed");
+    let requirements: Vec<_> = ctx
+        .db
+        .document_requirement()
+        .conversation_id()
+        .filter(&conversation_id)
+        .filter(|row| row.snapshot_id == snapshot_id)
+        .collect();
+    for row in requirements {
+        ctx.db
+            .document_requirement()
+            .requirement_key()
+            .delete(&row.requirement_key);
+    }
+    selection.confirmed_offering_ids_json = "[]".into();
+    selection.confirmed_snapshot_id = None;
+    selection.revision = selection
+        .revision
+        .checked_add(1)
+        .expect("selection revision exhausted");
+    selection.updated_at_micros = now_micros(ctx);
+    ctx.db
+        .conversation_selection()
+        .conversation_id()
+        .update(selection);
+    commit_user_context_action(
+        ctx,
+        &conversation_id,
+        &client_command_id,
+        "edit_confirmed_selection",
+        Some(snapshot_id),
+    );
+}
+
+#[spacetimedb::reducer]
+pub fn create_upload_ticket(
+    ctx: &ReducerContext,
+    conversation_id: String,
+    ticket_id: String,
+    document_type: String,
+) {
+    validate_identifier(&ticket_id, "invalid upload ticket")
+        .unwrap_or_else(|error| panic!("{error}"));
+    validate_identifier(&document_type, "invalid document type")
+        .unwrap_or_else(|error| panic!("{error}"));
+    ensure_member(ctx, &conversation_id);
+    if let Some(existing) = ctx.db.upload_ticket().ticket_id().find(&ticket_id) {
+        if existing.principal_id != caller(ctx) || existing.conversation_id != conversation_id {
+            panic!("upload ticket collision");
+        }
+        return;
+    }
+    let selection = ctx
+        .db
+        .conversation_selection()
+        .conversation_id()
+        .find(&conversation_id)
+        .expect("conversation selection not found");
+    let snapshot_id = selection
+        .confirmed_snapshot_id
+        .expect("confirm the course selection before uploading documents");
+    let permitted = ctx
+        .db
+        .document_requirement()
+        .conversation_id()
+        .filter(&conversation_id)
+        .any(|row| row.snapshot_id == snapshot_id && row.document_type == document_type);
+    if !permitted {
+        panic!("document type is not in the confirmed checklist");
+    }
+    let now = now_micros(ctx);
+    ctx.db.upload_ticket().insert(UploadTicket {
+        ticket_id,
+        conversation_id,
+        principal_id: caller(ctx),
+        document_type,
+        expires_at_micros: now + 7 * 24 * 60 * 60 * 1_000_000,
+        consumed_at_micros: None,
+        created_at_micros: now,
+    });
+}
+
+#[spacetimedb::reducer]
+pub fn consume_upload_ticket(
+    ctx: &ReducerContext,
+    ticket_id: String,
+    original_name: String,
+    mime_type: String,
+    byte_size: u64,
+    storage_key: String,
+) {
+    ensure_registered_worker(ctx);
+    if !matches!(
+        mime_type.as_str(),
+        "image/jpeg" | "image/png" | "image/webp" | "application/pdf"
+    ) {
+        panic!("unsupported document MIME type");
+    }
+    if byte_size == 0 || byte_size > 20 * 1024 * 1024 {
+        panic!("document is outside the 20 MB limit");
+    }
+    if original_name.is_empty()
+        || original_name.len() > 256
+        || storage_key.is_empty()
+        || storage_key.len() > 512
+    {
+        panic!("invalid document metadata");
+    }
+    let now = now_micros(ctx);
+    let mut ticket = ctx
+        .db
+        .upload_ticket()
+        .ticket_id()
+        .find(&ticket_id)
+        .expect("upload ticket not found");
+    if ticket.consumed_at_micros.is_some() {
+        panic!("upload ticket was already consumed");
+    }
+    if ticket.expires_at_micros <= now {
+        panic!("upload ticket expired");
+    }
+    let selection = ctx
+        .db
+        .conversation_selection()
+        .conversation_id()
+        .find(&ticket.conversation_id)
+        .expect("conversation selection not found");
+    let snapshot_id = selection
+        .confirmed_snapshot_id
+        .expect("confirmed selection no longer exists");
+    let mut requirement = ctx
+        .db
+        .document_requirement()
+        .conversation_id()
+        .filter(&ticket.conversation_id)
+        .find(|row| row.snapshot_id == snapshot_id && row.document_type == ticket.document_type)
+        .expect("document requirement no longer exists");
+    ticket.consumed_at_micros = Some(now);
+    ctx.db.upload_ticket().ticket_id().update(ticket);
+    ctx.db.document_submission().insert(DocumentSubmission {
+        submission_id: stable_internal_id(&["document_submission", &ticket_id]),
+        conversation_id: selection.conversation_id,
+        snapshot_id,
+        document_type: requirement.document_type.clone(),
+        original_name,
+        mime_type,
+        byte_size,
+        storage_key,
+        uploaded_at_micros: now,
+        expires_at_micros: now + 7 * 24 * 60 * 60 * 1_000_000,
+    });
+    requirement.status = "submitted".into();
+    ctx.db
+        .document_requirement()
+        .requirement_key()
+        .update(requirement);
+}
+
+#[spacetimedb::reducer]
+pub fn cleanup_expired_documents(ctx: &ReducerContext, before_micros: i64) {
+    ensure_registered_worker(ctx);
+    let now = now_micros(ctx);
+    let cutoff = before_micros.min(now);
+    let submissions: Vec<_> = ctx
+        .db
+        .document_submission()
+        .iter()
+        .filter(|row| row.expires_at_micros <= cutoff)
+        .collect();
+    for row in submissions {
+        ctx.db
+            .document_submission()
+            .submission_id()
+            .delete(&row.submission_id);
+    }
+    let tickets: Vec<_> = ctx
+        .db
+        .upload_ticket()
+        .iter()
+        .filter(|row| row.expires_at_micros <= cutoff)
+        .collect();
+    for row in tickets {
+        ctx.db.upload_ticket().ticket_id().delete(&row.ticket_id);
     }
 }
 
@@ -2043,6 +3023,23 @@ pub fn complete_work_item(
     if !work_item_lease_owner_matches(&item, &caller(ctx), attempt, now) {
         panic!("stale or unauthorized work item attempt");
     }
+    let current_context_revision = ctx
+        .db
+        .conversation()
+        .conversation_id()
+        .find(&item.conversation_id)
+        .expect("conversation not found")
+        .context_revision;
+    if current_context_revision != item.expected_context_revision {
+        let set_id = item.work_set_id.clone();
+        item.status = "obsolete".into();
+        item.worker_id = None;
+        item.lease_until_micros = None;
+        item.error_code = Some("stale_context_revision".into());
+        ctx.db.workspace_work_item().work_item_id().update(item);
+        refresh_work_set_status(ctx, &set_id);
+        return;
+    }
     let mut control = ctx
         .db
         .workspace_work_control()
@@ -2108,14 +3105,19 @@ pub fn complete_work_item(
         .turn_id()
         .find(&work_set.source_turn_id)
         .expect("turn UI origin not found");
+    let (action_kind, button_label) = if item.entity_type == "family" {
+        ("open_family", "Open course type")
+    } else {
+        ("open_course_summary", "Open course")
+    };
     create_ui_action(
         ctx,
         &origin,
         "work_item",
         &item.work_item_id,
-        "open_course_summary",
+        action_kind,
         label,
-        "Open summary",
+        button_label,
         control.target_json,
     );
     item.status = "completed".into();
@@ -2462,6 +3464,85 @@ fn my_conversation_profiles(ctx: &ViewContext) -> Vec<ConversationProfile> {
         .collect()
 }
 
+#[spacetimedb::view(accessor = my_conversation_selections, public)]
+fn my_conversation_selections(ctx: &ViewContext) -> Vec<ConversationSelection> {
+    caller_conversation_ids(ctx)
+        .into_iter()
+        .filter_map(|conversation_id| {
+            ctx.db
+                .conversation_selection()
+                .conversation_id()
+                .find(&conversation_id)
+        })
+        .collect()
+}
+
+#[spacetimedb::view(accessor = my_selection_revisions, public)]
+fn my_selection_revisions(ctx: &ViewContext) -> Vec<SelectionRevision> {
+    caller_conversation_ids(ctx)
+        .into_iter()
+        .flat_map(|conversation_id| {
+            ctx.db
+                .selection_revision()
+                .conversation_id()
+                .filter(&conversation_id)
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
+#[spacetimedb::view(accessor = my_confirmed_selection_snapshots, public)]
+fn my_confirmed_selection_snapshots(ctx: &ViewContext) -> Vec<ConfirmedSelectionSnapshot> {
+    caller_conversation_ids(ctx)
+        .into_iter()
+        .flat_map(|conversation_id| {
+            ctx.db
+                .confirmed_selection_snapshot()
+                .conversation_id()
+                .filter(&conversation_id)
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
+#[spacetimedb::view(accessor = my_document_requirements, public)]
+fn my_document_requirements(ctx: &ViewContext) -> Vec<DocumentRequirement> {
+    caller_conversation_ids(ctx)
+        .into_iter()
+        .flat_map(|conversation_id| {
+            ctx.db
+                .document_requirement()
+                .conversation_id()
+                .filter(&conversation_id)
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
+#[spacetimedb::view(accessor = my_upload_tickets, public)]
+fn my_upload_tickets(ctx: &ViewContext) -> Vec<UploadTicket> {
+    let principal_id = ctx.sender().to_string();
+    ctx.db
+        .upload_ticket()
+        .principal_id()
+        .filter(&principal_id)
+        .collect()
+}
+
+#[spacetimedb::view(accessor = my_document_submissions, public)]
+fn my_document_submissions(ctx: &ViewContext) -> Vec<DocumentSubmission> {
+    caller_conversation_ids(ctx)
+        .into_iter()
+        .flat_map(|conversation_id| {
+            ctx.db
+                .document_submission()
+                .conversation_id()
+                .filter(&conversation_id)
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
 #[spacetimedb::view(accessor = my_turn_updates, public)]
 fn my_turn_updates(ctx: &ViewContext) -> Vec<TurnUpdate> {
     caller_conversation_ids(ctx)
@@ -2519,6 +3600,7 @@ fn worker_pending_turns(ctx: &ViewContext) -> Vec<WorkerPendingTurn> {
                 lease_until_micros: job.lease_until_micros,
                 attempt: job.attempt,
                 base_ui_revision: job.base_ui_revision,
+                base_context_revision: job.base_context_revision,
                 ui_client_instance_id: origin.client_instance_id,
                 ui_target_json: origin.target_json,
                 ui_navigation_revision: origin.navigation_revision,
@@ -2627,6 +3709,28 @@ fn worker_conversation_profiles(ctx: &ViewContext) -> Vec<ConversationProfile> {
         .collect()
 }
 
+#[spacetimedb::view(accessor = worker_conversation_selections, public)]
+fn worker_conversation_selections(ctx: &ViewContext) -> Vec<ConversationSelection> {
+    if !is_registered_worker_view(ctx) {
+        return vec![];
+    }
+    let mut conversation_ids = std::collections::HashSet::new();
+    for status in ["pending", "retrying", "claimed"] {
+        for job in ctx.db.turn_job().status().filter(status) {
+            conversation_ids.insert(job.conversation_id);
+        }
+    }
+    conversation_ids
+        .into_iter()
+        .filter_map(|conversation_id| {
+            ctx.db
+                .conversation_selection()
+                .conversation_id()
+                .find(&conversation_id)
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
@@ -2655,6 +3759,7 @@ mod tests {
             lease_until_micros,
             attempt,
             base_ui_revision: 0,
+            base_context_revision: 0,
             run_id: None,
             error_code: None,
         }

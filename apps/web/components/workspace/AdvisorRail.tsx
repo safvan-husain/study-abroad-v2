@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import type { AdvisorDirective, AdvisorMessage, AdvisorProfile, AdvisorTurn, AdvisorTurnUpdate, AdvisorUiAction } from '../../hooks/useAdvisorWorkspace';
+import type { AdvisorCatalogCourse, AdvisorCatalogFamily, AdvisorDirective, AdvisorMessage, AdvisorProfile, AdvisorSelection, AdvisorSelectionRevision, AdvisorTurn, AdvisorTurnUpdate, AdvisorUiAction } from '../../hooks/useAdvisorWorkspace';
 import { AdvisorConversation } from './AdvisorConversation';
 
 export function AdvisorRail({
@@ -13,9 +13,17 @@ export function AdvisorRail({
   uiActions = [],
   directive,
   profile,
+  selection,
+  selectionRevisions = [],
+  catalogCourses = [],
+  catalogFamilies = [],
   onSend,
   onUpdateProfile,
   onOpenAction = () => undefined,
+  onRemoveOffering = async () => undefined,
+  onRestoreRevision = async () => undefined,
+  onConfirmSelection = async () => undefined,
+  onEditConfirmedSelection = async () => undefined,
 }: {
   connectionState: string;
   error?: string;
@@ -25,9 +33,17 @@ export function AdvisorRail({
   uiActions: AdvisorUiAction[];
   directive?: AdvisorDirective;
   profile?: AdvisorProfile;
+  selection?: AdvisorSelection;
+  selectionRevisions?: AdvisorSelectionRevision[];
+  catalogCourses?: AdvisorCatalogCourse[];
+  catalogFamilies?: AdvisorCatalogFamily[];
   onSend: (content: string) => Promise<void>;
   onUpdateProfile: (profile: AdvisorProfile) => Promise<void>;
   onOpenAction: (action: AdvisorUiAction) => void;
+  onRemoveOffering?: (offeringId: string) => Promise<void>;
+  onRestoreRevision?: (revision: bigint) => Promise<void>;
+  onConfirmSelection?: () => Promise<void>;
+  onEditConfirmedSelection?: () => Promise<void>;
 }) {
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
@@ -44,6 +60,20 @@ export function AdvisorRail({
     await onUpdateProfile({ ...profile, studentPhrase: interestDraft.trim() });
     setEditingInterests(false);
   };
+  const provisional = (selection?.provisionalOfferingIds ?? []).flatMap((id) => {
+    const course = catalogCourses.find((row) => row.courseId === id);
+    return course ? [course] : [];
+  });
+  const confirmed = Boolean(selection?.confirmedOfferingIds.length);
+  const latestRestorable = selectionRevisions.find((row) => ['user_removal', 'agent_replacement', 'restore_revision'].includes(row.source));
+  const contextFamilies = (selection?.presentedFamilyIds ?? []).flatMap((id) => {
+    const family = catalogFamilies.find((row) => row.familyId === id);
+    return family ? [family.name] : [];
+  });
+  const contextUniversities = [...new Set((selection?.presentedOfferingIds ?? []).flatMap((id) => {
+    const course = catalogCourses.find((row) => row.courseId === id);
+    return course ? [course.institutionName] : [];
+  }))];
   return (
     <aside className="advisor-rail" aria-label="Study advisor">
       <header className="advisor-header">
@@ -78,11 +108,30 @@ export function AdvisorRail({
       </div>
       <div className="composer-wrap">
         {error ? <p className="inline-error" role="alert">{error}</p> : null}
+        {contextFamilies.length || contextUniversities.length || selection?.comparisonCriterion ? (
+          <div className="context-chips" aria-label="Conversation context">
+            {contextFamilies.slice(0, 3).map((name) => <span key={`family-${name}`}>{name}</span>)}
+            {contextUniversities.slice(0, 3).map((name) => <span key={`university-${name}`}>{name}</span>)}
+            {selection?.comparisonCriterion ? <span>Compare: {selection.comparisonCriterion}</span> : null}
+          </div>
+        ) : null}
         <label htmlFor="advisor-message">Message your advisor</label>
         <div className="composer">
           <textarea id="advisor-message" value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void submit(); } }} placeholder="Describe your background and interests..." rows={2} disabled={connectionState !== 'ready'} />
           <button type="button" aria-label="Send message" onClick={() => void submit()} disabled={!draft.trim() || connectionState !== 'ready' || sending}>↑</button>
         </div>
+        {provisional.length ? (
+          <section className="provisional-selection" aria-label="Provisional course selection">
+            <div><strong>{confirmed ? 'Confirmed courses' : 'Provisional courses'}</strong><span>{provisional.length}/5</span></div>
+            {provisional.map((course) => (
+              <p key={course.courseId}><span>{course.name}<small>{course.institutionName}</small></span>{!confirmed ? <button type="button" aria-label={`Remove ${course.name}`} onClick={() => void onRemoveOffering(course.courseId)}>×</button> : <i aria-label="Confirmed">✓</i>}</p>
+            ))}
+            <div className="selection-actions">
+              {!confirmed ? <button type="button" onClick={() => void onConfirmSelection()}>Confirm selection</button> : <button type="button" onClick={() => void onEditConfirmedSelection()}>Edit and reconfirm</button>}
+              {!confirmed && latestRestorable ? <button type="button" onClick={() => void onRestoreRevision(latestRestorable.revision)}>Restore previous</button> : null}
+            </div>
+          </section>
+        ) : null}
         <p className="privacy-note">Your conversation is private and saved to this guest journey.</p>
       </div>
     </aside>

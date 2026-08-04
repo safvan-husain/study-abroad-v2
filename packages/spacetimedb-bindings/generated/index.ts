@@ -36,8 +36,13 @@ import {
 // Import all reducer arg schemas
 import ClaimReducer from "./claim_reducer";
 import ClaimWorkItemReducer from "./claim_work_item_reducer";
+import CleanupExpiredDocumentsReducer from "./cleanup_expired_documents_reducer";
 import CompleteTurnReducer from "./complete_turn_reducer";
 import CompleteWorkItemReducer from "./complete_work_item_reducer";
+import ConfirmSelectionReducer from "./confirm_selection_reducer";
+import ConsumeUploadTicketReducer from "./consume_upload_ticket_reducer";
+import CreateUploadTicketReducer from "./create_upload_ticket_reducer";
+import EditConfirmedSelectionReducer from "./edit_confirmed_selection_reducer";
 import EnsureGuestJourneyReducer from "./ensure_guest_journey_reducer";
 import FailReducer from "./fail_reducer";
 import FailWorkItemReducer from "./fail_work_item_reducer";
@@ -47,12 +52,15 @@ import PublishTurnUpdateReducer from "./publish_turn_update_reducer";
 import PublishUiPresenceReducer from "./publish_ui_presence_reducer";
 import PublishUiStateReducer from "./publish_ui_state_reducer";
 import RegisterWorkerReducer from "./register_worker_reducer";
+import RemoveProvisionalOfferingReducer from "./remove_provisional_offering_reducer";
 import RenewReducer from "./renew_reducer";
 import RenewWorkItemReducer from "./renew_work_item_reducer";
 import ReplaceCatalogReducer from "./replace_catalog_reducer";
 import ResolveAutoUiActionReducer from "./resolve_auto_ui_action_reducer";
+import RestoreSelectionRevisionReducer from "./restore_selection_revision_reducer";
 import RetryReducer from "./retry_reducer";
 import RetryWorkItemReducer from "./retry_work_item_reducer";
+import SelectOfferingReducer from "./select_offering_reducer";
 import SendMessageReducer from "./send_message_reducer";
 import UpdateDiscoveryProfileReducer from "./update_discovery_profile_reducer";
 import UpsertConversationProfileReducer from "./upsert_conversation_profile_reducer";
@@ -61,15 +69,23 @@ import UpsertConversationProfileReducer from "./upsert_conversation_profile_redu
 
 // Import all table schema definitions
 import CatalogCourseRow from "./catalog_course_table";
+import CatalogFamilyRow from "./catalog_family_table";
 import CatalogInstitutionRow from "./catalog_institution_table";
+import CatalogPolicyRow from "./catalog_policy_table";
 import MyActiveDirectivesRow from "./my_active_directives_table";
+import MyConfirmedSelectionSnapshotsRow from "./my_confirmed_selection_snapshots_table";
 import MyConversationProfilesRow from "./my_conversation_profiles_table";
+import MyConversationSelectionsRow from "./my_conversation_selections_table";
 import MyConversationsRow from "./my_conversations_table";
+import MyDocumentRequirementsRow from "./my_document_requirements_table";
+import MyDocumentSubmissionsRow from "./my_document_submissions_table";
 import MyMessagePartsRow from "./my_message_parts_table";
 import MyMessagesRow from "./my_messages_table";
+import MySelectionRevisionsRow from "./my_selection_revisions_table";
 import MyTurnUpdatesRow from "./my_turn_updates_table";
 import MyTurnsRow from "./my_turns_table";
 import MyUiActionsRow from "./my_ui_actions_table";
+import MyUploadTicketsRow from "./my_upload_tickets_table";
 import MyUserActionsRow from "./my_user_actions_table";
 import MyUserUiStatesRow from "./my_user_ui_states_table";
 import MyWorkspaceResultsRow from "./my_workspace_results_table";
@@ -77,6 +93,7 @@ import MyWorkspaceWorkControlsRow from "./my_workspace_work_controls_table";
 import MyWorkspaceWorkItemsRow from "./my_workspace_work_items_table";
 import MyWorkspaceWorkSetsRow from "./my_workspace_work_sets_table";
 import WorkerConversationProfilesRow from "./worker_conversation_profiles_table";
+import WorkerConversationSelectionsRow from "./worker_conversation_selections_table";
 import WorkerPendingTurnsRow from "./worker_pending_turns_table";
 import WorkerPendingWorkItemsRow from "./worker_pending_work_items_table";
 import WorkerUserUiStatesRow from "./worker_user_ui_states_table";
@@ -94,6 +111,9 @@ const tablesSchema = __schema({
       { name: 'course_id', algorithm: 'btree', columns: [
         'courseId',
       ] },
+      { name: 'family_id', algorithm: 'btree', columns: [
+        'familyId',
+      ] },
       { name: 'institution_id', algorithm: 'btree', columns: [
         'institutionId',
       ] },
@@ -102,6 +122,20 @@ const tablesSchema = __schema({
       { name: 'catalog_course_course_id_key', constraint: 'unique', columns: ['courseId'] },
     ],
   }, CatalogCourseRow),
+  catalog_family: __table({
+    name: 'catalog_family',
+    indexes: [
+      { name: 'area_id', algorithm: 'btree', columns: [
+        'areaId',
+      ] },
+      { name: 'family_id', algorithm: 'btree', columns: [
+        'familyId',
+      ] },
+    ],
+    constraints: [
+      { name: 'catalog_family_family_id_key', constraint: 'unique', columns: ['familyId'] },
+    ],
+  }, CatalogFamilyRow),
   catalog_institution: __table({
     name: 'catalog_institution',
     indexes: [
@@ -113,6 +147,17 @@ const tablesSchema = __schema({
       { name: 'catalog_institution_institution_id_key', constraint: 'unique', columns: ['institutionId'] },
     ],
   }, CatalogInstitutionRow),
+  catalog_policy: __table({
+    name: 'catalog_policy',
+    indexes: [
+      { name: 'policy_id', algorithm: 'btree', columns: [
+        'policyId',
+      ] },
+    ],
+    constraints: [
+      { name: 'catalog_policy_policy_id_key', constraint: 'unique', columns: ['policyId'] },
+    ],
+  }, CatalogPolicyRow),
   my_active_directives: __table({
     name: 'my_active_directives',
     indexes: [
@@ -120,6 +165,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, MyActiveDirectivesRow),
+  my_confirmed_selection_snapshots: __table({
+    name: 'my_confirmed_selection_snapshots',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyConfirmedSelectionSnapshotsRow),
   my_conversation_profiles: __table({
     name: 'my_conversation_profiles',
     indexes: [
@@ -127,6 +179,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, MyConversationProfilesRow),
+  my_conversation_selections: __table({
+    name: 'my_conversation_selections',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyConversationSelectionsRow),
   my_conversations: __table({
     name: 'my_conversations',
     indexes: [
@@ -134,6 +193,20 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, MyConversationsRow),
+  my_document_requirements: __table({
+    name: 'my_document_requirements',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyDocumentRequirementsRow),
+  my_document_submissions: __table({
+    name: 'my_document_submissions',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyDocumentSubmissionsRow),
   my_message_parts: __table({
     name: 'my_message_parts',
     indexes: [
@@ -148,6 +221,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, MyMessagesRow),
+  my_selection_revisions: __table({
+    name: 'my_selection_revisions',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MySelectionRevisionsRow),
   my_turn_updates: __table({
     name: 'my_turn_updates',
     indexes: [
@@ -169,6 +249,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, MyUiActionsRow),
+  my_upload_tickets: __table({
+    name: 'my_upload_tickets',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyUploadTicketsRow),
   my_user_actions: __table({
     name: 'my_user_actions',
     indexes: [
@@ -218,6 +305,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, WorkerConversationProfilesRow),
+  worker_conversation_selections: __table({
+    name: 'worker_conversation_selections',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, WorkerConversationSelectionsRow),
   worker_pending_turns: __table({
     name: 'worker_pending_turns',
     indexes: [
@@ -245,8 +339,13 @@ const tablesSchema = __schema({
 const reducersSchema = __reducers(
   __reducerSchema("claim", ClaimReducer),
   __reducerSchema("claim_work_item", ClaimWorkItemReducer),
+  __reducerSchema("cleanup_expired_documents", CleanupExpiredDocumentsReducer),
   __reducerSchema("complete_turn", CompleteTurnReducer),
   __reducerSchema("complete_work_item", CompleteWorkItemReducer),
+  __reducerSchema("confirm_selection", ConfirmSelectionReducer),
+  __reducerSchema("consume_upload_ticket", ConsumeUploadTicketReducer),
+  __reducerSchema("create_upload_ticket", CreateUploadTicketReducer),
+  __reducerSchema("edit_confirmed_selection", EditConfirmedSelectionReducer),
   __reducerSchema("ensure_guest_journey", EnsureGuestJourneyReducer),
   __reducerSchema("fail", FailReducer),
   __reducerSchema("fail_work_item", FailWorkItemReducer),
@@ -256,12 +355,15 @@ const reducersSchema = __reducers(
   __reducerSchema("publish_ui_presence", PublishUiPresenceReducer),
   __reducerSchema("publish_ui_state", PublishUiStateReducer),
   __reducerSchema("register_worker", RegisterWorkerReducer),
+  __reducerSchema("remove_provisional_offering", RemoveProvisionalOfferingReducer),
   __reducerSchema("renew", RenewReducer),
   __reducerSchema("renew_work_item", RenewWorkItemReducer),
   __reducerSchema("replace_catalog", ReplaceCatalogReducer),
   __reducerSchema("resolve_auto_ui_action", ResolveAutoUiActionReducer),
+  __reducerSchema("restore_selection_revision", RestoreSelectionRevisionReducer),
   __reducerSchema("retry", RetryReducer),
   __reducerSchema("retry_work_item", RetryWorkItemReducer),
+  __reducerSchema("select_offering", SelectOfferingReducer),
   __reducerSchema("send_message", SendMessageReducer),
   __reducerSchema("update_discovery_profile", UpdateDiscoveryProfileReducer),
   __reducerSchema("upsert_conversation_profile", UpsertConversationProfileReducer),

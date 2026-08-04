@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-test('agent navigation is safe, permanent, and preserves browser history', async ({ page }) => {
+test('specialist discovery is complete, non-shortlisting, and preserves browser history', async ({ page }) => {
   test.setTimeout(120_000);
   const transcriptRequests: string[] = [];
   page.on('request', (request) => {
@@ -13,32 +13,32 @@ test('agent navigation is safe, permanent, and preserves browser history', async
 
   const composer = page.getByLabel('Message your advisor');
   await expect(composer).toBeEnabled({ timeout: 20_000 });
-  await composer.fill('I am interested in programming and want help getting started.');
+  await composer.fill('I want computer science');
   await page.getByRole('button', { name: 'Send message' }).click();
 
-  await expect(page.getByText('I am interested in programming and want help getting started.')).toBeVisible();
-  // The catalogue action safely auto-applies because the originating tab is unchanged.
-  await expect(page.getByRole('heading', { name: 'Course matches for you' })).toBeVisible({ timeout: 90_000 });
+  await expect(page.getByText('I want computer science')).toBeVisible();
+  // An interest statement opens every reviewed nearby course type and does not shortlist.
+  await expect(page.getByRole('heading', { name: 'Course types in this area' })).toBeVisible({ timeout: 90_000 });
   await expect(page.getByText('5 course matches ready', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Open again' }).first()).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Provisional course selection' })).toHaveCount(0);
 
-  // Independent summaries finish after the first navigation revision and therefore
-  // remain offered instead of repeatedly stealing focus.
-  const openSummary = page.getByRole('button', { name: 'Open summary' }).first();
-  await expect(openSummary).toBeVisible({ timeout: 90_000 });
-  const summaryLabel = await openSummary.locator('xpath=..').locator('strong').textContent().catch(() => null);
-  await openSummary.click();
-  await expect(page.locator('.breadcrumb')).toHaveText('YOUR JOURNEY / EXPLORE / COURSE SUMMARY');
+  // Independent course-type cards remain permanent actions without stealing focus.
+  const openFamily = page.getByRole('button', { name: 'Open course type' }).first();
+  await expect(openFamily).toBeVisible({ timeout: 90_000 });
+  const familyLabel = await openFamily.locator('xpath=..').locator('strong').textContent().catch(() => null);
+  await openFamily.click();
+  await expect(page.locator('.breadcrumb')).toHaveText('YOUR JOURNEY / EXPLORE / COURSE TYPE');
   await expect(page.getByRole('button', { name: 'Open again' }).first()).toBeVisible();
-  if (summaryLabel) await expect(page.getByText(summaryLabel, { exact: true }).first()).toBeVisible();
+  if (familyLabel) await expect(page.getByText(familyLabel, { exact: true }).first()).toBeVisible();
 
-  // Back returns to the catalogue, then the prior home workspace, while cards remain.
+  // Back returns to the overview, then the prior home workspace, while actions remain.
   await page.goBack();
   await expect(page.locator('.breadcrumb')).toHaveText('YOUR JOURNEY / EXPLORE');
-  await expect(page.getByRole('heading', { name: 'Course matches for you' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Course types in this area' })).toBeVisible();
   await page.goBack();
   await expect(page.getByText('Your workspace is ready')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Open again' }).first()).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Open summary' }).first()).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Open course type' }).first()).toBeVisible();
   expect(transcriptRequests).toEqual([]);
 });

@@ -21,5 +21,12 @@ export default __t.row({
   level: __t.string(),
   tuitionBand: __t.string().name("tuition_band"),
   englishBar: __t.string().name("english_bar"),
+  familyId: __t.string().name("family_id"),
+  qualification: __t.string(),
+  officialUrl: __t.string().name("official_url"),
+  ownership: __t.string(),
+  requirementsJson: __t.string().name("requirements_json"),
+  rankingsJson: __t.string().name("rankings_json"),
+  sourcesJson: __t.string().name("sources_json"),
   active: __t.bool(),
 });

@@ -33,14 +33,23 @@ async function waitFor<T>(read: () => T | undefined, description: string): Promi
   throw new Error(`Timed out waiting for ${description}`);
 }
 
-async function connect(queries: string[], worker = false) {
+async function connect(queries: string[] | string[][], worker = false) {
   return new Promise<InstanceType<typeof DbConnection>>((resolveConnection, reject) => {
     let settled = false;
     DbConnection.builder().withUri(uri).withDatabaseName(database)
       .onConnect((connection) => {
-        const subscribe = () => connection.subscriptionBuilder().onApplied(() => {
-          if (!settled) { settled = true; resolveConnection(connection); }
-        }).subscribe(queries);
+        const queryGroups = Array.isArray(queries[0]) ? queries as string[][] : [queries as string[]];
+        const subscribe = () => {
+          const subscribeGroup = (groupIndex: number) => {
+            connection.subscriptionBuilder().onApplied(() => {
+              if (groupIndex + 1 < queryGroups.length) subscribeGroup(groupIndex + 1);
+              else if (!settled) { settled = true; resolveConnection(connection); }
+            }).onError((context) => {
+              if (!settled) { settled = true; reject(new Error(`Subscription failed: ${String(context.event)}`)); }
+            }).subscribe(queryGroups[groupIndex]);
+          };
+          subscribeGroup(0);
+        };
         if (!worker) return subscribe();
         void connection.reducers.login({ username: agentUsername, password: agentPassword })
           .then(() => connection.reducers.registerWorker({ workerLabel: 'spacetime-smoke' }))
@@ -56,11 +65,31 @@ const studentQueries = [
   'SELECT * FROM my_active_directives', 'SELECT * FROM my_workspace_work_sets',
   'SELECT * FROM my_workspace_work_items', 'SELECT * FROM my_workspace_work_controls',
   'SELECT * FROM my_workspace_results', 'SELECT * FROM my_ui_actions',
-  'SELECT * FROM my_user_ui_states', 'SELECT * FROM catalog_course',
+  'SELECT * FROM my_user_ui_states', 'SELECT * FROM my_user_actions',
+  'SELECT * FROM my_turn_updates', 'SELECT * FROM my_conversation_profiles',
+  'SELECT * FROM my_conversation_selections', 'SELECT * FROM my_selection_revisions',
+  'SELECT * FROM my_confirmed_selection_snapshots', 'SELECT * FROM my_document_requirements',
+  'SELECT * FROM my_document_submissions', 'SELECT * FROM my_upload_tickets',
+  'SELECT * FROM catalog_course', 'SELECT * FROM catalog_family',
+  'SELECT * FROM catalog_institution', 'SELECT * FROM catalog_policy',
 ];
 const workerQueries = ['SELECT * FROM worker_pending_turns', 'SELECT * FROM worker_pending_work_items', 'SELECT * FROM catalog_course'];
-const studentOne = await connect(studentQueries);
-const studentTwo = await connect(studentQueries);
+const probeTables = process.env.SPACETIME_SMOKE_PROBE?.split(',').map((table) => table.trim()).filter(Boolean);
+if (probeTables?.length) {
+  const probe = await connect(probeTables.map((table) => `SELECT * FROM ${table}`));
+  try {
+    const counts = probeTables.map((table) => `${table}=${[...(probe.db as any)[table].iter()].length}`).join(', ');
+    console.log(`Coordinator subscription probe passed: ${counts}`);
+  } finally {
+    probe.disconnect();
+  }
+  process.exit(0);
+}
+const catalogQueries = studentQueries.filter((query) => query.includes('FROM catalog_'));
+const conversationQueries = studentQueries.filter((query) => !query.includes('FROM catalog_'));
+const studentOne = await connect(conversationQueries);
+const studentTwo = await connect(conversationQueries);
+const catalog = await connect(catalogQueries);
 const worker = await connect(workerQueries, true);
 
 try {
@@ -106,7 +135,9 @@ try {
   await worker.reducers.completeTurn({
     turnId, attempt: 1, assistantContent: 'I found two computing courses.', runId: `run-${turnId}`, agentThreadId: conversationId,
     directiveSchemaVersion: 1, directiveUiRevision: 1n, directiveType: 'catalog', directiveAwareness: 'Showing computing courses.',
-    workKind: 'course_fit_summaries', workItems,
+    workKind: 'course_fit_summaries', workItems, expectedContextRevision: pending.baseContextRevision,
+    selectionMode: 'none', presentedFamilyIdsJson: '[]', presentedOfferingIdsJson: JSON.stringify(courses.map((course: any) => course.courseId)),
+    provisionalOfferingIdsJson: '[]', proposalRationale: '', comparisonCriterion: '',
   });
 
   const catalogAction = await waitFor(() => [...first.my_ui_actions.iter()].find((row: any) => row.sourceId === turnId), 'catalog action');
@@ -148,7 +179,74 @@ try {
   if (!duplicateRejected) throw new Error('Duplicate completion was accepted');
   if ([...second.my_ui_actions.iter()].some((row: any) => row.conversationId === conversationId)) throw new Error('Another user observed UI actions');
 
-  console.log(`Coordinator UI-state smoke passed: ${conversationId}/${turnId}`);
+  const firstCourseId = courses[0].courseId as string;
+  const secondCourseId = courses[1].courseId as string;
+  await studentOne.reducers.selectOffering({ conversationId, clientCommandId: `select-${randomUUID()}`, offeringId: firstCourseId });
+  await waitFor(() => {
+    const row = [...first.my_conversation_selections.iter()].find((entry: any) => entry.conversationId === conversationId);
+    return row && JSON.parse(row.provisionalOfferingIdsJson).includes(firstCourseId) ? row : undefined;
+  }, 'first provisional selection');
+  await studentOne.reducers.selectOffering({ conversationId, clientCommandId: `select-${randomUUID()}`, offeringId: secondCourseId });
+  const beforeRemoval = await waitFor(() => {
+    const row = [...first.my_conversation_selections.iter()].find((entry: any) => entry.conversationId === conversationId);
+    return row && JSON.parse(row.provisionalOfferingIdsJson).length === 2 ? row : undefined;
+  }, 'second provisional selection');
+  const revisionToRestore = beforeRemoval.revision;
+  await studentOne.reducers.removeProvisionalOffering({ conversationId, clientCommandId: `remove-${randomUUID()}`, offeringId: firstCourseId });
+  await waitFor(() => {
+    const row = [...first.my_conversation_selections.iter()].find((entry: any) => entry.conversationId === conversationId);
+    return row && JSON.parse(row.suppressedOfferingIdsJson).includes(firstCourseId) ? row : undefined;
+  }, 'suppressed removal');
+  await studentOne.reducers.restoreSelectionRevision({ conversationId, clientCommandId: `restore-${randomUUID()}`, revision: revisionToRestore });
+  await waitFor(() => {
+    const row = [...first.my_conversation_selections.iter()].find((entry: any) => entry.conversationId === conversationId);
+    return row && JSON.parse(row.provisionalOfferingIdsJson).length === 2 && !JSON.parse(row.suppressedOfferingIdsJson).includes(firstCourseId) ? row : undefined;
+  }, 'selection undo');
+
+  const confirmCommand = `confirm-${randomUUID()}`;
+  await studentOne.reducers.confirmSelection({ conversationId, clientCommandId: confirmCommand });
+  const confirmed = await waitFor(() => {
+    const row = [...first.my_conversation_selections.iter()].find((entry: any) => entry.conversationId === conversationId);
+    return row?.confirmedSnapshotId && JSON.parse(row.confirmedOfferingIdsJson).length === 2 ? row : undefined;
+  }, 'confirmed immutable snapshot');
+  const snapshot = await waitFor(() => [...first.my_confirmed_selection_snapshots.iter()].find((row: any) => row.snapshotId === confirmed.confirmedSnapshotId), 'confirmed facts snapshot');
+  if (!snapshot.offeringFactsJson.includes('sources') || !snapshot.documentContractJson.includes('eligibilityReviewed')) throw new Error('Confirmation did not freeze offering facts and the document contract');
+  const expectedDocuments = new Set(['passport', 'academic']);
+  if (courses.some((course: any) => String(course.englishBar).startsWith('IELTS '))) expectedDocuments.add('english_test');
+  const requirements = await waitFor(() => {
+    const rows = [...first.my_document_requirements.iter()].filter((row: any) => row.snapshotId === confirmed.confirmedSnapshotId);
+    return rows.length === expectedDocuments.size ? rows : undefined;
+  }, 'confirmed document checklist');
+  if (requirements.some((row: any) => !expectedDocuments.has(row.documentType))) throw new Error('Document checklist did not follow baseline and actual IELTS policy');
+
+  const ticketId = `ticket-${randomUUID()}`;
+  let crossGuestRejected = false;
+  try { await studentTwo.reducers.createUploadTicket({ conversationId, ticketId: `cross-${randomUUID()}`, documentType: 'passport' }); } catch { crossGuestRejected = true; }
+  if (!crossGuestRejected) throw new Error('A different guest created an upload ticket');
+  await studentOne.reducers.createUploadTicket({ conversationId, ticketId, documentType: 'passport' });
+  const ticket = await waitFor(() => [...first.my_upload_tickets.iter()].find((row: any) => row.ticketId === ticketId), 'single-use upload ticket');
+  const sevenDaysMicros = 7n * 24n * 60n * 60n * 1_000_000n;
+  if (ticket.expiresAtMicros - ticket.createdAtMicros !== sevenDaysMicros) throw new Error('Upload ticket retention is not seven days');
+  await worker.reducers.consumeUploadTicket({ ticketId, originalName: 'passport.pdf', mimeType: 'application/pdf', byteSize: 8n, storageKey: `${ticketId}.pdf` });
+  await waitFor(() => [...first.my_document_submissions.iter()].find((row: any) => row.storageKey === `${ticketId}.pdf`), 'document submission');
+  let ticketReuseRejected = false;
+  try { await worker.reducers.consumeUploadTicket({ ticketId, originalName: 'again.pdf', mimeType: 'application/pdf', byteSize: 8n, storageKey: `${ticketId}-again.pdf` }); } catch { ticketReuseRejected = true; }
+  if (!ticketReuseRejected) throw new Error('A consumed upload ticket was reused');
+
+  await studentOne.reducers.editConfirmedSelection({ conversationId, clientCommandId: `edit-${randomUUID()}` });
+  await waitFor(() => {
+    const row = [...first.my_conversation_selections.iter()].find((entry: any) => entry.conversationId === conversationId);
+    return row && JSON.parse(row.confirmedOfferingIdsJson).length === 0 ? row : undefined;
+  }, 'editable confirmation');
+  const reconfirmCommand = `reconfirm-${randomUUID()}`;
+  await studentOne.reducers.confirmSelection({ conversationId, clientCommandId: reconfirmCommand });
+  const reconfirmed = await waitFor(() => {
+    const row = [...first.my_conversation_selections.iter()].find((entry: any) => entry.conversationId === conversationId);
+    return row?.confirmedSnapshotId && row.confirmedSnapshotId !== confirmed.confirmedSnapshotId ? row : undefined;
+  }, 'reconfirmed snapshot');
+  if (reconfirmed.confirmedSnapshotId === confirmed.confirmedSnapshotId) throw new Error('Reconfirmation reused an old snapshot');
+
+  console.log(`Coordinator UI, selection, and document smoke passed: ${conversationId}/${turnId}`);
 } finally {
-  studentOne.disconnect(); studentTwo.disconnect(); worker.disconnect();
+  studentOne.disconnect(); studentTwo.disconnect(); catalog.disconnect(); worker.disconnect();
 }

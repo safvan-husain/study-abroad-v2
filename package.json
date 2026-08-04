@@ -22,7 +22,7 @@
     "agent:python:test": "uv --directory services/agent-server run --extra test pytest",
     "agent:integration:test": "bash scripts/test-python-agent-server.sh",
     "trace:clone:test": "vitest run test/clone-langsmith-thread.test.ts",
-    "agent:test": "pnpm --filter @study-abroad/agent-server test",
+    "agent:test": "pnpm --filter @study-abroad/agent-server test:client",
     "typecheck": "pnpm --filter @study-abroad/agent-server typecheck",
     "test": "pnpm agent:python:test && pnpm agent:integration:test",
     "coordinator:build": "tsx scripts/spacetime-build.ts",
@@ -30,6 +30,7 @@
     "spacetime:generate": "pnpm --filter @study-abroad/spacetimedb-bindings generate",
     "coordinator:smoke": "pnpm --filter @study-abroad/spacetimedb-bindings build && tsx scripts/spacetime-smoke.ts",
     "catalog:seed": "pnpm --filter @study-abroad/spacetimedb-bindings build && tsx scripts/catalog/seed.ts",
+    "catalog:build": "tsx scripts/catalog/build-rich.ts",
     "worker:smoke": "tsx scripts/worker-smoke.ts",
     "end-to-end:smoke": "tsx scripts/end-to-end-smoke.ts",
     "test:e2e": "playwright test test/e2e/advisor-workspace.spec.ts"

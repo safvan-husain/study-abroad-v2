@@ -23,7 +23,7 @@ export const turnUpdatePayload = z.discriminatedUnion('kind', [
     kind: z.literal('course_search_results_ready'),
     studentPhrase: z.string().max(256),
     matchCount: z.number().int().min(0).max(100),
-    courseIds: z.array(z.string().min(1).max(128)).max(20),
+    courseIds: z.array(z.string().min(1).max(128)).max(100),
   }),
 ]);
 
@@ -36,7 +36,59 @@ export const discoveryWorkItem = z.object({
   entityType: z.string().min(1).max(128),
   entityId: z.string().min(1).max(128),
   kind: z.string().min(1).max(64),
-  inputJson: z.string().max(4096),
+  inputJson: z.string().max(128_000),
+});
+
+export const routeDecision = z.object({
+  intent: z.enum(['guidance', 'discovery', 'clarify']),
+  reason: z.string().min(1).max(512),
+  clarificationQuestion: z.string().max(512).default(''),
+});
+
+export const catalogScopeDecision = z.object({
+  scope: z.enum(['area_overview', 'family_offerings', 'all_area_offerings', 'compare_offerings', 'personalize_selection', 'clarify']),
+  areaId: z.string().max(128).default(''),
+  familyIds: z.array(z.string().min(1).max(128)).max(100).default([]),
+  offeringIds: z.array(z.string().min(1).max(128)).max(100).default([]),
+  explanation: z.string().min(1).max(1024),
+  clarificationQuestion: z.string().max(512).default(''),
+  comparisonCriterion: z.string().max(128).default(''),
+});
+
+export const areaOverview = z.object({
+  areaId: z.string().min(1).max(128),
+  title: z.string().min(1).max(256),
+  familyIds: z.array(z.string().min(1).max(128)).max(100),
+});
+
+export const familyOfferings = z.object({
+  familyId: z.string().min(1).max(128),
+  offeringIds: z.array(z.string().min(1).max(128)).max(100),
+});
+
+export const discoveryProposal = z.object({
+  mode: z.enum(['none', 'replace_provisional']),
+  offeringIds: z.array(z.string().min(1).max(128)).max(5),
+  rationale: z.string().max(4000),
+});
+
+export const guidanceResult = z.object({
+  assistantContent: z.string().min(1).max(16_000),
+  topic: z.enum(['journey', 'system_help', 'general_study', 'clarification']),
+  suggestedNextStep: z.string().max(512).default(''),
+});
+
+export const advisorTurnResult = z.object({
+  assistantContent: z.string().min(1).max(16_000),
+  route: routeDecision,
+  scope: catalogScopeDecision.optional(),
+  proposal: discoveryProposal.default({ mode: 'none', offeringIds: [], rationale: '' }),
+  presentedFamilyIds: z.array(z.string().min(1).max(128)).max(100).default([]),
+  presentedOfferingIds: z.array(z.string().min(1).max(128)).max(100).default([]),
+  directive: discoveryDirective,
+  workItems: z.array(discoveryWorkItem).max(100).default([]),
+  workKind: z.string().max(64).default(''),
+  profilePatch: discoveryProfilePatch,
 });
 
 export const discoveryTurnResult = z.object({
@@ -44,7 +96,7 @@ export const discoveryTurnResult = z.object({
   profilePatch: discoveryProfilePatch,
   discoveryIntent: courseDiscoveryIntent,
   directive: discoveryDirective,
-  workItems: z.array(discoveryWorkItem).max(8).default([]),
+  workItems: z.array(discoveryWorkItem).max(100).default([]),
   workKind: z.string().max(64).default(''),
 }).superRefine((value, ctx) => {
   if (value.workItems.length > 0 && value.workKind.trim().length === 0) {
@@ -78,6 +130,25 @@ export const catalogCourseView = z.object({
   level: z.string(),
   tuitionBand: z.string(),
   englishBar: z.string(),
+  familyId: z.string().default(''),
+  qualification: z.string().default(''),
+  officialUrl: z.string().default(''),
+  ownership: z.string().default(''),
+  requirementsJson: z.string().default('[]'),
+  rankingsJson: z.string().default('[]'),
+  sourcesJson: z.string().default('[]'),
+});
+
+export const catalogFamilyView = z.object({
+  familyId: z.string(),
+  areaId: z.string(),
+  name: z.string(),
+  aliasesJson: z.string().default('[]'),
+  description: z.string(),
+  typicalSubjectsJson: z.string().default('[]'),
+  careerDirectionsJson: z.string().default('[]'),
+  relatedFamilyIdsJson: z.string().default('[]'),
+  active: z.boolean().default(true),
 });
 
 export type CourseDiscoveryIntent = z.infer<typeof courseDiscoveryIntent>;
@@ -86,6 +157,14 @@ export type TurnUpdatePayload = z.infer<typeof turnUpdatePayload>;
 export type DiscoveryTurnResult = z.infer<typeof discoveryTurnResult>;
 export type CourseFitResult = z.infer<typeof courseFitResult>;
 export type CatalogCourseView = z.infer<typeof catalogCourseView>;
+export type CatalogFamilyView = z.infer<typeof catalogFamilyView>;
+export type RouteDecision = z.infer<typeof routeDecision>;
+export type CatalogScopeDecision = z.infer<typeof catalogScopeDecision>;
+export type AreaOverview = z.infer<typeof areaOverview>;
+export type FamilyOfferings = z.infer<typeof familyOfferings>;
+export type DiscoveryProposal = z.infer<typeof discoveryProposal>;
+export type GuidanceResult = z.infer<typeof guidanceResult>;
+export type AdvisorTurnResult = z.infer<typeof advisorTurnResult>;
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -143,11 +222,11 @@ export function mapPhraseToCatalogAreas(phrase: string, catalogAreas: string[]):
   };
 }
 
-export function rankCoursesForAreas(
-  courses: CatalogCourseView[],
+export function rankCoursesForAreas<T extends Pick<CatalogCourseView, 'area' | 'name'>>(
+  courses: T[],
   areas: string[],
   limit = 5,
-): CatalogCourseView[] {
+): T[] {
   if (areas.length === 0) return [];
   const normalizedAreas = areas.map((area) => area.toLowerCase());
   const primary = normalizedAreas[0];

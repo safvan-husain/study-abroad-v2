@@ -21,6 +21,7 @@ export default __t.row({
   leaseUntilMicros: __t.option(__t.i64()).name("lease_until_micros"),
   attempt: __t.u32(),
   baseUiRevision: __t.u64().name("base_ui_revision"),
+  baseContextRevision: __t.u64().name("base_context_revision"),
   runId: __t.option(__t.string()).name("run_id"),
   errorCode: __t.option(__t.string()).name("error_code"),
 });

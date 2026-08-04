@@ -1,0 +1,9 @@
+{
+  "seedVersion": "europe-plus2-2026.2",
+  "policyId": "demo-intake-documents",
+  "version": 1,
+  "baselineDocumentTypes": [
+    "passport",
+    "academic"
+  ]
+}

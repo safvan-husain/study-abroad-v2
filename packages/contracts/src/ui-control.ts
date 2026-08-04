@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const uiViewType = z.enum(['home', 'catalog', 'course_summary']);
+export const uiViewType = z.enum(['home', 'area', 'family', 'catalog', 'comparison', 'shortlist', 'documents', 'course_summary']);
 
 export const uiTargetRef = z.object({
   schemaVersion: z.literal(1),
@@ -16,6 +16,10 @@ export const uiTargetRef = z.object({
   if (target.viewType === 'course_summary'
     && (!target.workSetId || target.entityType !== 'course' || !target.entityId)) {
     context.addIssue({ code: z.ZodIssueCode.custom, message: 'course summary targets require a work set and course entity' });
+  }
+  if (['area', 'family', 'comparison', 'shortlist', 'documents'].includes(target.viewType)
+    && !target.entityId && !target.workSetId) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: `${target.viewType} targets require an entity or work set` });
   }
 });
 
@@ -45,7 +49,7 @@ export const uiAction = z.object({
   actionId: z.string().min(1).max(128),
   sourceKind: z.enum(['turn', 'work_item']),
   sourceId: z.string().min(1).max(128),
-  kind: z.enum(['open_catalog', 'open_course_summary']),
+  kind: z.enum(['open_catalog', 'open_course_summary', 'open_area', 'open_family', 'open_comparison', 'open_shortlist', 'open_documents']),
   label: z.string().min(1).max(256),
   buttonLabel: z.string().min(1).max(64),
   target: uiTargetRef,
@@ -100,6 +104,11 @@ export function uiTargetsMatch(left: UiTargetRef, right: UiTargetRef): boolean {
       && left.entityId === right.entityId
       && left.slot === right.slot;
   }
-  if (right.viewType === 'catalog') return left.workSetId === right.workSetId;
+  if (right.viewType !== 'home') {
+    return left.workSetId === right.workSetId
+      && left.entityType === right.entityType
+      && left.entityId === right.entityId
+      && left.slot === right.slot;
+  }
   return true;
 }

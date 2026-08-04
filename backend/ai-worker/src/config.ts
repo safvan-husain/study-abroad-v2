@@ -13,6 +13,7 @@ const configSchema = z.object({
   AGENT_SERVER_URL: z.string().url().default('http://localhost:2025'),
   LANGGRAPH_API_URL: z.string().url().optional(),
   AGENT_GRAPH_ID: z.string().default('agent'),
+  ADVISOR_GRAPH_VERSION: z.enum(['legacy', 'specialist']).default('specialist'),
   WORKER_ID: z.string().min(1).default('local-worker'),
   WORKER_LEASE_SECONDS: z.coerce.number().int().positive().default(60),
   LANGSMITH_TRACING: z.string().optional(),

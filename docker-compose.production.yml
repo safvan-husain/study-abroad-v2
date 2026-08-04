@@ -22,9 +22,10 @@ services:
     entrypoint: ["/bin/sh", "/docker/coordinator-publish.sh"]
   api:
     build: { context: ., dockerfile: services/api/Dockerfile }
-    environment: { API_PORT: "3001" }
+    environment: { API_PORT: "3001", SPACETIME_URL: http://spacetimedb:3000, SPACETIME_DATABASE: study-abroad-coordinator, AGENT_USERNAME: "${AGENT_USERNAME:-study_abroad_agent}", AGENT_PASSWORD: "${AGENT_PASSWORD:-study-agent-dev}", UPLOAD_ROOT: /private-uploads }
     depends_on: { coordinator-publisher: { condition: service_completed_successfully } }
     ports: ["3001:3001"]
+    volumes: [advisor-private-uploads:/private-uploads]
     healthcheck: { test: [CMD, wget, -qO-, http://localhost:3001/health], interval: 5s, timeout: 5s, retries: 20 }
   agent-server:
     build: { context: ., dockerfile: services/agent-server/Dockerfile }
@@ -38,6 +39,10 @@ services:
       OLLAMA_HOST: "${OLLAMA_HOST:-}"
       OLLAMA_API_KEY: "${OLLAMA_API_KEY:-}"
       OLLAMA_MODEL: "${OLLAMA_MODEL:-gemma4:31b}"
+      ROUTER_MODEL: "${ROUTER_MODEL:-gpt-oss:20b}"
+      GUIDANCE_MODEL: "${GUIDANCE_MODEL:-gemma4:31b}"
+      DISCOVERY_MODEL: "${DISCOVERY_MODEL:-qwen3.5:397b}"
+      ADVISOR_GRAPH_VERSION: "${ADVISOR_GRAPH_VERSION:-specialist}"
     volumes:
       - agent-server-state:/app/.langgraph_api
     healthcheck: { test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:2024/ok')"], interval: 10s, timeout: 5s, retries: 20 }
@@ -57,7 +62,8 @@ services:
       - agent-server-caddy-config:/config
   worker:
     build: { context: ., dockerfile: backend/ai-worker/Dockerfile }
-    environment: { AGENT_SERVER_URL: http://agent-server:2024, LANGGRAPH_API_URL: "${AGENT_SERVER_PUBLIC_URL:-https://agent.200-141-7-99.sslip.io}", SPACETIME_URL: http://spacetimedb:3000, SPACETIME_DATABASE: study-abroad-coordinator, AGENT_USERNAME: "${AGENT_USERNAME:-study_abroad_agent}", AGENT_PASSWORD: "${AGENT_PASSWORD:-study-agent-dev}", AGENT_GRAPH_ID: agent }
+    restart: unless-stopped
+    environment: { AGENT_SERVER_URL: http://agent-server:2024, LANGGRAPH_API_URL: "${AGENT_SERVER_PUBLIC_URL:-https://agent.200-141-7-99.sslip.io}", SPACETIME_URL: http://spacetimedb:3000, SPACETIME_DATABASE: study-abroad-coordinator, AGENT_USERNAME: "${AGENT_USERNAME:-study_abroad_agent}", AGENT_PASSWORD: "${AGENT_PASSWORD:-study-agent-dev}", AGENT_GRAPH_ID: agent, ADVISOR_GRAPH_VERSION: "${ADVISOR_GRAPH_VERSION:-specialist}" }
     depends_on:
       spacetimedb: { condition: service_healthy, restart: true }
       agent-server: { condition: service_healthy }
@@ -72,3 +78,4 @@ volumes:
   agent-server-state:
   agent-server-caddy-data:
   agent-server-caddy-config:
+  advisor-private-uploads:

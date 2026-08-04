@@ -10,6 +10,8 @@ import type { PendingWorkItemSource } from './services/coordinator-adapter.js';
 import type { WorkspaceWorkItem } from './services/process-work-item.js';
 import { uiTargetRef, type UserUiState } from '@study-abroad/contracts';
 
+let shuttingDown = false;
+
 type CatalogSeedCourse = {
   courseId: string;
   institutionId: string;
@@ -21,21 +23,51 @@ type CatalogSeedCourse = {
   level: string;
   tuitionBand: string;
   englishBar: string;
+  familyId: string;
+  qualification: string;
+  officialUrl: string;
+  ownership: string;
+  requirements: unknown[];
+  rankings: unknown[];
+  sources: unknown[];
 };
 
-function loadCatalogSeed(): CatalogSeedCourse[] {
-  const candidates = [
-    join(dirname(fileURLToPath(import.meta.url)), '../../../scripts/catalog/courses.json'),
-    join(process.cwd(), 'scripts/catalog/courses.json'),
+type CatalogSeedSnapshot = {
+  institutions: Array<Record<string, unknown>>;
+  families: Array<Record<string, unknown>>;
+  courses: CatalogSeedCourse[];
+  policy: Record<string, unknown>;
+};
+
+function loadCatalogSeed(): CatalogSeedSnapshot | undefined {
+  const baseCandidates = [
+    join(dirname(fileURLToPath(import.meta.url)), '../../../scripts/catalog'),
+    join(process.cwd(), 'scripts/catalog'),
   ];
-  for (const path of candidates) {
+  for (const base of baseCandidates) {
     try {
-      return JSON.parse(readFileSync(path, 'utf8')) as CatalogSeedCourse[];
+      return {
+        institutions: JSON.parse(readFileSync(join(base, 'institutions.json'), 'utf8')) as Array<Record<string, unknown>>,
+        families: JSON.parse(readFileSync(join(base, 'families.json'), 'utf8')) as Array<Record<string, unknown>>,
+        courses: JSON.parse(readFileSync(join(base, 'courses.json'), 'utf8')) as CatalogSeedCourse[],
+        policy: JSON.parse(readFileSync(join(base, 'policy.json'), 'utf8')) as Record<string, unknown>,
+      };
     } catch {
-      // try next path
+      // try next base
     }
   }
-  return [];
+  return undefined;
+}
+
+/* kept separate from the startup side effect so catalog failures remain explicit */
+function richCourseSeed(course: CatalogSeedCourse) {
+  return {
+    courseId: course.courseId, institutionId: course.institutionId, institutionName: course.institutionName,
+    country: course.country, city: course.city, name: course.name, area: course.area, level: course.level,
+    tuitionBand: course.tuitionBand, englishBar: course.englishBar, familyId: course.familyId,
+    qualification: course.qualification, officialUrl: course.officialUrl, ownership: course.ownership,
+    requirementsJson: JSON.stringify(course.requirements), rankingsJson: JSON.stringify(course.rankings), sourcesJson: JSON.stringify(course.sources),
+  };
 }
 
 type WorkerPendingTurnRow = {
@@ -49,6 +81,7 @@ type WorkerPendingTurnRow = {
   leaseUntilMicros: bigint | null;
   attempt: number;
   baseUiRevision: bigint;
+  baseContextRevision: bigint;
   uiClientInstanceId: string;
   uiTargetJson: string;
   uiNavigationRevision: bigint;
@@ -106,6 +139,7 @@ function rowToTurn(row: WorkerPendingTurnRow): ChatTurn | undefined {
     userContent: row.userContent,
     attempt: row.attempt,
     baseUiRevision: row.baseUiRevision,
+    baseContextRevision: row.baseContextRevision,
     uiContext,
   };
 }
@@ -125,11 +159,17 @@ async function connect(config: ReturnType<typeof loadConfig>): Promise<DbConnect
                 settled = true;
                 resolve(connection);
               }
+            }).onError((context) => {
+              const error = new Error(`Worker subscription failed: ${String(context.event)}`);
+              if (!settled) { settled = true; reject(error); }
+              else if (!shuttingDown) { console.error(error.message); process.exit(1); }
             }).subscribe([
               'SELECT * FROM worker_pending_turns',
               'SELECT * FROM worker_pending_work_items',
               'SELECT * FROM catalog_course',
+              'SELECT * FROM catalog_family',
               'SELECT * FROM worker_conversation_profiles',
+              'SELECT * FROM worker_conversation_selections',
               'SELECT * FROM worker_user_ui_states',
             ]);
           })
@@ -144,6 +184,12 @@ async function connect(config: ReturnType<typeof loadConfig>): Promise<DbConnect
         if (!settled) {
           settled = true;
           reject(error);
+        }
+      })
+      .onDisconnect(() => {
+        if (settled && !shuttingDown) {
+          console.error('Worker lost its SpacetimeDB connection; exiting for Docker restart.');
+          process.exit(1);
         }
       });
     builder.build();
@@ -235,28 +281,32 @@ const workItems = createPendingWorkItemSource(connection);
 const coordinator = new SpacetimeCoordinatorAdapter(connection as any, jobs, workItems, config.WORKER_LEASE_SECONDS);
 
 if (coordinator.listCourses().length === 0) {
-  const catalogCourses = loadCatalogSeed();
-  if (catalogCourses.length === 0) {
+  const catalog = loadCatalogSeed();
+  if (!catalog || catalog.courses.length === 0) {
     console.error('Catalog seed file missing; worker refusing to start without a catalogue.');
     connection.disconnect();
     process.exit(1);
   }
   try {
     await (connection.reducers as any).replaceCatalog({
-      courses: catalogCourses.map((course) => ({
-        courseId: course.courseId,
-        institutionId: course.institutionId,
-        institutionName: course.institutionName,
-        country: course.country,
-        city: course.city,
-        name: course.name,
-        area: course.area,
-        level: course.level,
-        tuitionBand: course.tuitionBand,
-        englishBar: course.englishBar,
+      institutions: catalog.institutions.map((row) => ({
+        institutionId: row.institutionId, name: row.name, country: row.country, city: row.city,
+        ownership: row.ownership, aliasesJson: JSON.stringify(row.aliases ?? []), rankingsJson: JSON.stringify(row.rankings ?? []),
+        sourcesJson: JSON.stringify(row.sources ?? []), active: row.active !== false,
       })),
+      families: catalog.families.map((row) => ({
+        familyId: row.familyId, areaId: row.areaId, name: row.name, aliasesJson: JSON.stringify(row.aliases ?? []),
+        description: row.description, typicalSubjectsJson: JSON.stringify(row.typicalSubjects ?? []),
+        careerDirectionsJson: JSON.stringify(row.careerDirections ?? []), relatedFamilyIdsJson: JSON.stringify(row.relatedFamilyIds ?? []),
+        active: row.active !== false,
+      })),
+      courses: catalog.courses.map(richCourseSeed),
+      policy: {
+        seedVersion: catalog.policy.seedVersion, policyId: catalog.policy.policyId, version: catalog.policy.version,
+        baselineDocumentTypesJson: JSON.stringify(catalog.policy.baselineDocumentTypes ?? []),
+      },
     });
-    console.log(`Seeded ${catalogCourses.length} catalog courses from worker startup.`);
+    console.log(`Seeded ${catalog.institutions.length} institutions and ${catalog.courses.length} catalog offerings from worker startup.`);
   } catch (error) {
     console.error('Catalog seed failed; worker refusing to start without a catalogue:', error);
     connection.disconnect();
@@ -270,6 +320,7 @@ worker.start();
 console.log(`AI worker started: ${config.WORKER_ID}`);
 
 const shutdown = async () => {
+  shuttingDown = true;
   await worker.stop();
   connection.disconnect();
   process.exit(0);

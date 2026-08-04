@@ -51,6 +51,13 @@ export const CatalogCourse = __t.object("CatalogCourse", {
   level: __t.string(),
   tuitionBand: __t.string(),
   englishBar: __t.string(),
+  familyId: __t.string(),
+  qualification: __t.string(),
+  officialUrl: __t.string(),
+  ownership: __t.string(),
+  requirementsJson: __t.string(),
+  rankingsJson: __t.string(),
+  sourcesJson: __t.string(),
   active: __t.bool(),
 });
 export type CatalogCourse = __Infer<typeof CatalogCourse>;
@@ -66,17 +73,84 @@ export const CatalogCourseSeed = __t.object("CatalogCourseSeed", {
   level: __t.string(),
   tuitionBand: __t.string(),
   englishBar: __t.string(),
+  familyId: __t.string(),
+  qualification: __t.string(),
+  officialUrl: __t.string(),
+  ownership: __t.string(),
+  requirementsJson: __t.string(),
+  rankingsJson: __t.string(),
+  sourcesJson: __t.string(),
 });
 export type CatalogCourseSeed = __Infer<typeof CatalogCourseSeed>;
+
+export const CatalogFamily = __t.object("CatalogFamily", {
+  familyId: __t.string(),
+  areaId: __t.string(),
+  name: __t.string(),
+  aliasesJson: __t.string(),
+  description: __t.string(),
+  typicalSubjectsJson: __t.string(),
+  careerDirectionsJson: __t.string(),
+  relatedFamilyIdsJson: __t.string(),
+  active: __t.bool(),
+});
+export type CatalogFamily = __Infer<typeof CatalogFamily>;
+
+export const CatalogFamilySeed = __t.object("CatalogFamilySeed", {
+  familyId: __t.string(),
+  areaId: __t.string(),
+  name: __t.string(),
+  aliasesJson: __t.string(),
+  description: __t.string(),
+  typicalSubjectsJson: __t.string(),
+  careerDirectionsJson: __t.string(),
+  relatedFamilyIdsJson: __t.string(),
+  active: __t.bool(),
+});
+export type CatalogFamilySeed = __Infer<typeof CatalogFamilySeed>;
 
 export const CatalogInstitution = __t.object("CatalogInstitution", {
   institutionId: __t.string(),
   name: __t.string(),
   country: __t.string(),
   city: __t.string(),
+  ownership: __t.string(),
+  aliasesJson: __t.string(),
+  rankingsJson: __t.string(),
+  sourcesJson: __t.string(),
   active: __t.bool(),
 });
 export type CatalogInstitution = __Infer<typeof CatalogInstitution>;
+
+export const CatalogInstitutionSeed = __t.object("CatalogInstitutionSeed", {
+  institutionId: __t.string(),
+  name: __t.string(),
+  country: __t.string(),
+  city: __t.string(),
+  ownership: __t.string(),
+  aliasesJson: __t.string(),
+  rankingsJson: __t.string(),
+  sourcesJson: __t.string(),
+  active: __t.bool(),
+});
+export type CatalogInstitutionSeed = __Infer<typeof CatalogInstitutionSeed>;
+
+export const CatalogPolicy = __t.object("CatalogPolicy", {
+  policyId: __t.string(),
+  seedVersion: __t.string(),
+  version: __t.u32(),
+  baselineDocumentTypesJson: __t.string(),
+  active: __t.bool(),
+});
+export type CatalogPolicy = __Infer<typeof CatalogPolicy>;
+
+export const CatalogPolicySeed = __t.object("CatalogPolicySeed", {
+  seedVersion: __t.string(),
+  policyId: __t.string(),
+  version: __t.u32(),
+  baselineDocumentTypesJson: __t.string(),
+});
+export type CatalogPolicySeed = __Infer<typeof CatalogPolicySeed>;
 
 export const Command = __t.object("Command", {
   commandId: __t.string(),
@@ -87,6 +161,17 @@ export const Command = __t.object("Command", {
   createdAtMicros: __t.i64(),
 });
 export type Command = __Infer<typeof Command>;
+
+export const ConfirmedSelectionSnapshot = __t.object("ConfirmedSelectionSnapshot", {
+  snapshotId: __t.string(),
+  conversationId: __t.string(),
+  selectionRevision: __t.u64(),
+  offeringIdsJson: __t.string(),
+  offeringFactsJson: __t.string(),
+  documentContractJson: __t.string(),
+  createdAtMicros: __t.i64(),
+});
+export type ConfirmedSelectionSnapshot = __Infer<typeof ConfirmedSelectionSnapshot>;
 
 export const Conversation = __t.object("Conversation", {
   conversationId: __t.string(),
@@ -120,6 +205,45 @@ export const ConversationProfile = __t.object("ConversationProfile", {
 });
 export type ConversationProfile = __Infer<typeof ConversationProfile>;
 
+export const ConversationSelection = __t.object("ConversationSelection", {
+  conversationId: __t.string(),
+  revision: __t.u64(),
+  presentedFamilyIdsJson: __t.string(),
+  presentedOfferingIdsJson: __t.string(),
+  provisionalOfferingIdsJson: __t.string(),
+  suppressedOfferingIdsJson: __t.string(),
+  confirmedOfferingIdsJson: __t.string(),
+  comparisonCriterion: __t.string(),
+  confirmedSnapshotId: __t.option(__t.string()),
+  updatedAtMicros: __t.i64(),
+});
+export type ConversationSelection = __Infer<typeof ConversationSelection>;
+
+export const DocumentRequirement = __t.object("DocumentRequirement", {
+  requirementKey: __t.string(),
+  conversationId: __t.string(),
+  snapshotId: __t.string(),
+  documentType: __t.string(),
+  label: __t.string(),
+  reason: __t.string(),
+  status: __t.string(),
+});
+export type DocumentRequirement = __Infer<typeof DocumentRequirement>;
+
+export const DocumentSubmission = __t.object("DocumentSubmission", {
+  submissionId: __t.string(),
+  conversationId: __t.string(),
+  snapshotId: __t.string(),
+  documentType: __t.string(),
+  originalName: __t.string(),
+  mimeType: __t.string(),
+  byteSize: __t.u64(),
+  storageKey: __t.string(),
+  uploadedAtMicros: __t.i64(),
+  expiresAtMicros: __t.i64(),
+});
+export type DocumentSubmission = __Infer<typeof DocumentSubmission>;
+
 export const Message = __t.object("Message", {
   messageId: __t.string(),
   conversationId: __t.string(),
@@ -147,6 +271,18 @@ export const Principal = __t.object("Principal", {
 });
 export type Principal = __Infer<typeof Principal>;
 
+export const SelectionRevision = __t.object("SelectionRevision", {
+  revisionId: __t.string(),
+  conversationId: __t.string(),
+  revision: __t.u64(),
+  provisionalOfferingIdsJson: __t.string(),
+  suppressedOfferingIdsJson: __t.string(),
+  source: __t.string(),
+  rationale: __t.string(),
+  createdAtMicros: __t.i64(),
+});
+export type SelectionRevision = __Infer<typeof SelectionRevision>;
+
 export const TurnJob = __t.object("TurnJob", {
   turnId: __t.string(),
   conversationId: __t.string(),
@@ -158,6 +294,7 @@ export const TurnJob = __t.object("TurnJob", {
   leaseUntilMicros: __t.option(__t.i64()),
   attempt: __t.u32(),
   baseUiRevision: __t.u64(),
+  baseContextRevision: __t.u64(),
   runId: __t.option(__t.string()),
   errorCode: __t.option(__t.string()),
 });
@@ -206,6 +343,17 @@ export const UiAction = __t.object("UiAction", {
 });
 export type UiAction = __Infer<typeof UiAction>;
 
+export const UploadTicket = __t.object("UploadTicket", {
+  ticketId: __t.string(),
+  conversationId: __t.string(),
+  principalId: __t.string(),
+  documentType: __t.string(),
+  expiresAtMicros: __t.i64(),
+  consumedAtMicros: __t.option(__t.i64()),
+  createdAtMicros: __t.i64(),
+});
+export type UploadTicket = __Infer<typeof UploadTicket>;
+
 export const UserAction = __t.object("UserAction", {
   actionId: __t.string(),
   principalId: __t.string(),
@@ -252,6 +400,7 @@ export const WorkerPendingTurn = __t.object("WorkerPendingTurn", {
   leaseUntilMicros: __t.option(__t.i64()),
   attempt: __t.u32(),
   baseUiRevision: __t.u64(),
+  baseContextRevision: __t.u64(),
   uiClientInstanceId: __t.string(),
   uiTargetJson: __t.string(),
   uiNavigationRevision: __t.u64(),

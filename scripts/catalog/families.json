@@ -1,0 +1,1124 @@
+[
+  {
+    "familyId": "business-administration",
+    "areaId": "business-economics",
+    "name": "Business Administration",
+    "aliases": [
+      "business administration"
+    ],
+    "description": "Explores the core knowledge and applied practice of Business Administration.",
+    "typicalSubjects": [
+      "Management",
+      "Marketing",
+      "Operations"
+    ],
+    "careerDirections": [
+      "Management",
+      "Consulting",
+      "Entrepreneurship"
+    ],
+    "relatedFamilyIds": [],
+    "active": true
+  },
+  {
+    "familyId": "business-administration-fabiz",
+    "areaId": "business-economics",
+    "name": "Business Administration (FABIZ)",
+    "aliases": [
+      "business administration (fabiz)"
+    ],
+    "description": "Explores the core knowledge and applied practice of Business Administration (FABIZ).",
+    "typicalSubjects": [
+      "Management",
+      "Marketing",
+      "Operations"
+    ],
+    "careerDirections": [
+      "Management",
+      "Consulting",
+      "Entrepreneurship"
+    ],
+    "relatedFamilyIds": [],
+    "active": true
+  },
+  {
+    "familyId": "business-economics",
+    "areaId": "business-economics",
+    "name": "Business Economics",
+    "aliases": [
+      "business economics"
+    ],
+    "description": "Explores the core knowledge and applied practice of Business Economics.",
+    "typicalSubjects": [
+      "Economics",
+      "Finance",
+      "Quantitative methods"
+    ],
+    "careerDirections": [
+      "Economics",
+      "Policy",
+      "Finance"
+    ],
+    "relatedFamilyIds": [],
+    "active": true
+  },
+  {
+    "familyId": "business-logistics-management",
+    "areaId": "business-economics",
+    "name": "Business Logistics Management",
+    "aliases": [
+      "business logistics management"
+    ],
+    "description": "Explores the core knowledge and applied practice of Business Logistics Management.",
+    "typicalSubjects": [
+      "Business Logistics Management",
+      "Foundational studies",
+      "Applied practice"
+    ],
+    "careerDirections": [
+      "Roles related to Business Logistics Management"
+    ],
+    "relatedFamilyIds": [],
+    "active": true
+  },
+  {
+    "familyId": "business-management",
+    "areaId": "business-economics",
+    "name": "Business Management",
+    "aliases": [
+      "business management"
+    ],
+    "description": "Explores the core knowledge and applied practice of Business Management.",
+    "typicalSubjects": [
+      "Management",
+      "Marketing",
+      "Operations"
+    ],
+    "careerDirections": [
+      "Management",
+      "Consulting",
+      "Entrepreneurship"
+    ],
+    "relatedFamilyIds": [],
+    "active": true
+  },
+  {
+    "familyId": "economics-and-business",
+    "areaId": "business-economics",
+    "name": "Economics and Business",
+    "aliases": [
+      "economics and business"
+    ],
+    "description": "Explores the core knowledge and applied practice of Economics and Business.",
+    "typicalSubjects": [
+      "Economics",
+      "Finance",
+      "Quantitative methods"
+    ],
+    "careerDirections": [
+      "Economics",
+      "Policy",
+      "Finance"
+    ],
+    "relatedFamilyIds": [],
+    "active": true
+  },
+  {
+    "familyId": "economics-and-finance",
+    "areaId": "business-economics",
+    "name": "Economics and Finance",
+    "aliases": [
+      "economics and finance"
+    ],
+    "description": "Explores the core knowledge and applied practice of Economics and Finance.",
+    "typicalSubjects": [
+      "Economics",
+      "Finance",
+      "Quantitative methods"
+    ],
+    "careerDirections": [
+      "Economics",
+      "Policy",
+      "Finance"
+    ],
+    "relatedFamilyIds": [],
+    "active": true
+  },
+  {
+    "familyId": "european-business-studies",
+    "areaId": "business-economics",
+    "name": "European Business Studies",
+    "aliases": [
+      "european business studies"
+    ],
+    "description": "Explores the core knowledge and applied practice of European Business Studies.",
+    "typicalSubjects": [
+      "Management",
+      "Marketing",
+      "Operations"
+    ],
+    "careerDirections": [
+      "Management",
+      "Consulting",
+      "Entrepreneurship"
+    ],
+    "relatedFamilyIds": [],
+    "active": true
+  },
+  {
+    "familyId": "finance-and-accounting",
+    "areaId": "business-economics",
+    "name": "Finance and Accounting",
+    "aliases": [
+      "finance and accounting"
+    ],
+    "description": "Explores the core knowledge and applied practice of Finance and Accounting.",
+    "typicalSubjects": [
+      "Finance and Accounting",
+      "Foundational studies",
+      "Applied practice"
+    ],
+    "careerDirections": [
+      "Roles related to Finance and Accounting"
+    ],
+    "relatedFamilyIds": [],
+    "active": true
+  },
+  {
+    "familyId": "global-sales-and-marketing",
+    "areaId": "business-economics",
+    "name": "Global Sales and Marketing",
+    "aliases": [
+      "global sales and marketing"
+    ],
+    "description": "Explores the core knowledge and applied practice of Global Sales and Marketing.",
+    "typicalSubjects": [
+      "Management",
+      "Marketing",
+      "Operations"
+    ],
+    "careerDirections": [
+      "Management",
+      "Consulting",
+      "Entrepreneurship"
+    ],
+    "relatedFamilyIds": [],
+    "active": true
+  },
+  {
+    "familyId": "international-business-administration",
+    "areaId": "business-economics",
+    "name": "International Business Administration",
+    "aliases": [
+      "international business administration"
+    ],
+    "description": "Explores the core knowledge and applied practice of International Business Administration.",
+    "typicalSubjects": [
+      "Management",
+      "Marketing",
+      "Operations"
+    ],
+    "careerDirections": [
+      "Management",
+      "Consulting",
+      "Entrepreneurship"
+    ],
+    "relatedFamilyIds": [],
+    "active": true
+  },
+  {
+    "familyId": "international-business-and-start-up-entrepreneurship",
+    "areaId": "business-economics",
+    "name": "International Business and Start-up Entrepreneurship",
+    "aliases": [
+      "international business and start-up entrepreneurship"
+    ],
+    "description": "Explores the core knowledge and applied practice of International Business and Start-up Entrepreneurship.",
+    "typicalSubjects": [
+      "Management",
+      "Marketing",
+      "Operations"
+    ],
+    "careerDirections": [
+      "Management",
+      "Consulting",
+      "Entrepreneurship"
+    ],
+    "relatedFamilyIds": [],
+    "active": true
+  },
+  {
+    "familyId": "international-communication-management",
+    "areaId": "business-economics",
+    "name": "International Communication Management",
+    "aliases": [
+      "international communication management"
+    ],
+    "description": "Explores the core knowledge and applied practice of International Communication Management.",
+    "typicalSubjects": [
+      "International Communication Management",
+      "Foundational studies",
+      "Applied practice"
+    ],
+    "careerDirections": [
+      "Roles related to International Communication Management"
+    ],
+    "relatedFamilyIds": [],
+    "active": true
+  },
+  {
+    "familyId": "international-economics-and-commercial-diplomacy",
+    "areaId": "business-economics",
+    "name": "International Economics and Commercial Diplomacy",
+    "aliases": [
+      "international economics and commercial diplomacy"
+    ],
+    "description": "Explores the core knowledge and applied practice of International Economics and Commercial Diplomacy.",
+    "typicalSubjects": [
+      "Economics",
+      "Finance",
+      "Quantitative methods"
+    ],
+    "careerDirections": [
+      "Economics",
+      "Policy",
+      "Finance"
+    ],
+    "relatedFamilyIds": [],
+    "active": true
+  },
+  {
+    "familyId": "international-economics-and-management",
+    "areaId": "business-economics",
+    "name": "International Economics and Management",
+    "aliases": [
+      "international economics and management"
+    ],
+    "description": "Explores the core knowledge and applied practice of International Economics and Management.",
+    "typicalSubjects": [
+      "Economics",
+      "Finance",
+      "Quantitative methods"
+    ],
+    "careerDirections": [
+      "Economics",
+      "Policy",
+      "Finance"
+    ],
+    "relatedFamilyIds": [],
+    "active": true
+  },
+  {
+    "familyId": "management",
+    "areaId": "business-economics",
+    "name": "Management",
+    "aliases": [
+      "management"
+    ],
+    "description": "Explores the core knowledge and applied practice of Management.",
+    "typicalSubjects": [
+      "Management",
+      "Marketing",
+      "Operations"
+    ],
+    "careerDirections": [
+      "Management",
+      "Consulting",
+      "Entrepreneurship"
+    ],
+    "relatedFamilyIds": [],
+    "active": true
+  },
+  {
+    "familyId": "public-relations-and-advertising-management",
+    "areaId": "business-economics",
+    "name": "Public Relations and Advertising Management",
+    "aliases": [
+      "public relations and advertising management"
+    ],
+    "description": "Explores the core knowledge and applied practice of Public Relations and Advertising Management.",
+    "typicalSubjects": [
+      "Public Relations and Advertising Management",
+      "Foundational studies",
+      "Applied practice"
+    ],
+    "careerDirections": [
+      "Roles related to Public Relations and Advertising Management"
+    ],
+    "relatedFamilyIds": [],
+    "active": true
+  },
+  {
+    "familyId": "tourism-and-hospitality-management",
+    "areaId": "business-economics",
+    "name": "Tourism and Hospitality Management",
+    "aliases": [
+      "tourism and hospitality management"
+    ],
+    "description": "Explores the core knowledge and applied practice of Tourism and Hospitality Management.",
+    "typicalSubjects": [
+      "Tourism and Hospitality Management",
+      "Foundational studies",
+      "Applied practice"
+    ],
+    "careerDirections": [
+      "Roles related to Tourism and Hospitality Management"
+    ],
+    "relatedFamilyIds": [],
+    "active": true
+  },
+  {
+    "familyId": "computer-science",
+    "areaId": "computing-technology",
+    "name": "Computer Science",
+    "aliases": [
+      "computer science",
+      "computing",
+      "cs"
+    ],
+    "description": "Builds the theory and practice of software, algorithms, data structures, and computation.",
+    "typicalSubjects": [
+      "Programming",
+      "Algorithms",
+      "Data structures",
+      "Databases",
+      "Computer theory"
+    ],
+    "careerDirections": [
+      "Software engineering",
+      "Systems development",
+      "Research",
+      "Data and platform roles"
+    ],
+    "relatedFamilyIds": [
+      "computer-systems",
+      "cyber-security-engineering",
+      "mathematical-foundations-of-data-science",
+      "mathematical-and-computing-sciences-for-artificial-intelligence"
+    ],
+    "active": true
+  },
+  {
+    "familyId": "computer-systems",
+    "areaId": "computing-technology",
+    "name": "Computer Systems",
+    "aliases": [
+      "computer systems",
+      "systems architecture",
+      "computer system"
+    ],
+    "description": "Connects software with operating systems, networks, hardware, and dependable system design.",
+    "typicalSubjects": [
+      "Computer architecture",
+      "Operating systems",
+      "Networks",
+      "Programming",
+      "Embedded systems"
+    ],
+    "careerDirections": [
+      "Systems engineering",
+      "Infrastructure",
+      "Network engineering",
+      "Embedded development"
+    ],
+    "relatedFamilyIds": [
+      "computer-science",
+      "cyber-security-engineering"
+    ],
+    "active": true
+  },
+  {
+    "familyId": "cyber-security-engineering",
+    "areaId": "computing-technology",
+    "name": "Cyber Security Engineering",
+    "aliases": [
+      "cybersecurity",
+      "cyber security",
+      "information security"
+    ],
+    "description": "Focuses on designing, testing, and operating secure software, networks, and digital infrastructure.",
+    "typicalSubjects": [
+      "Network security",
+      "Cryptography",
+      "Secure programming",
+      "Risk",
+      "Digital forensics"
+    ],
+    "careerDirections": [
+      "Security engineering",
+      "Security operations",
+      "Penetration testing",
+      "Risk and assurance"
+    ],
+    "relatedFamilyIds": [
+      "computer-science",
+      "computer-systems"
+    ],
+    "active": true
+  },
+  {
+    "familyId": "mathematical-and-computing-sciences-for-artificial-intelligence",
+    "areaId": "computing-technology",
+    "name": "Mathematical and Computing Sciences for Artificial Intelligence",
+    "aliases": [
+      "artificial intelligence",
+      "ai",
+      "machine learning"
+    ],
+    "description": "Combines rigorous mathematics and computer science for artificial-intelligence systems.",
+    "typicalSubjects": [
+      "Machine learning",
+      "Algorithms",
+      "Probability",
+      "Optimisation",
+      "AI systems"
+    ],
+    "careerDirections": [
+      "AI engineering",
+      "Machine-learning engineering",
+      "Research",
+      "Intelligent products"
+    ],
+    "relatedFamilyIds": [
+      "computer-science",
+      "mathematical-foundations-of-data-science"
+    ],
+    "active": true
+  },
+  {
+    "familyId": "mathematical-foundations-of-data-science",
+    "areaId": "computing-technology",
+    "name": "Mathematical Foundations of Data Science",
+    "aliases": [
+      "data science",
+      "data analytics"
+    ],
+    "description": "Uses mathematics, statistics, and computing to model data and draw defensible conclusions.",
+    "typicalSubjects": [
+      "Statistics",
+      "Linear algebra",
+      "Programming",
+      "Machine learning",
+      "Data modelling"
+    ],
+    "careerDirections": [
+      "Data science",
+      "Analytics",
+      "Quantitative research",
+      "Machine-learning roles"
+    ],
+    "relatedFamilyIds": [
+      "computer-science",
+      "mathematical-and-computing-sciences-for-artificial-intelligence"
+    ],
+    "active": true
+  },
+  {
+    "familyId": "architecture",
+    "areaId": "engineering-science",
+    "name": "Architecture",
+    "aliases": [
+      "architecture"
+    ],
+    "description": "Explores the core knowledge and applied practice of Architecture.",
+    "typicalSubjects": [
+      "Architecture",
+      "Foundational studies",
+      "Applied practice"
+    ],
+    "careerDirections": [
+      "Roles related to Architecture"
+    ],
+    "relatedFamilyIds": [],
+    "active": true
+  },
+  {
+    "familyId": "biotechnology-and-bioengineering",
+    "areaId": "engineering-science",
+    "name": "Biotechnology and Bioengineering",
+    "aliases": [
+      "biotechnology and bioengineering"
+    ],
+    "description": "Explores the core knowledge and applied practice of Biotechnology and Bioengineering.",
+    "typicalSubjects": [
+      "Biotechnology and Bioengineering",
+      "Foundational studies",
+      "Applied practice"
+    ],
+    "careerDirections": [
+      "Roles related to Biotechnology and Bioengineering"
+    ],
+    "relatedFamilyIds": [],
+    "active": true
+  },
+  {
+    "familyId": "civil-engineering",
+    "areaId": "engineering-science",
+    "name": "Civil Engineering",
+    "aliases": [
+      "civil engineering"
+    ],
+    "description": "Explores the core knowledge and applied practice of Civil Engineering.",
+    "typicalSubjects": [
+      "Mathematics",
+      "Design",
+      "Applied science"
+    ],
+    "careerDirections": [
+      "Engineering and technical roles"
+    ],
+    "relatedFamilyIds": [],
+    "active": true
+  },
+  {
+    "familyId": "electrical-engineering",
+    "areaId": "engineering-science",
+    "name": "Electrical Engineering",
+    "aliases": [
+      "electrical engineering"
+    ],
+    "description": "Explores the core knowledge and applied practice of Electrical Engineering.",
+    "typicalSubjects": [
+      "Mathematics",
+      "Design",
+      "Applied science"
+    ],
+    "careerDirections": [
+      "Engineering and technical roles"
+    ],
+    "relatedFamilyIds": [],
+    "active": true
+  },
+  {
+    "familyId": "engineering-technology-mechanics-and-mechanical-engineering",
+    "areaId": "engineering-science",
+    "name": "Engineering Technology, Mechanics and Mechanical Engineering",
+    "aliases": [
+      "engineering technology, mechanics and mechanical engineering"
+    ],
+    "description": "Explores the core knowledge and applied practice of Engineering Technology, Mechanics and Mechanical Engineering.",
+    "typicalSubjects": [
+      "Mathematics",
+      "Design",
+      "Applied science"
+    ],
+    "careerDirections": [
+      "Engineering and technical roles"
+    ],
+    "relatedFamilyIds": [],
+    "active": true
+  },
+  {
+    "familyId": "industrial-engineering-and-management",
+    "areaId": "engineering-science",
+    "name": "Industrial Engineering and Management",
+    "aliases": [
+      "industrial engineering and management"
+    ],
+    "description": "Explores the core knowledge and applied practice of Industrial Engineering and Management.",
+    "typicalSubjects": [
+      "Mathematics",
+      "Design",
+      "Applied science"
+    ],
+    "careerDirections": [
+      "Engineering and technical roles"
+    ],
+    "relatedFamilyIds": [],
+    "active": true
+  },
+  {
+    "familyId": "integrated-engineering",
+    "areaId": "engineering-science",
+    "name": "Integrated Engineering",
+    "aliases": [
+      "integrated engineering"
+    ],
+    "description": "Explores the core knowledge and applied practice of Integrated Engineering.",
+    "typicalSubjects": [
+      "Mathematics",
+      "Design",
+      "Applied science"
+    ],
+    "careerDirections": [
+      "Engineering and technical roles"
+    ],
+    "relatedFamilyIds": [],
+    "active": true
+  },
+  {
+    "familyId": "medical-engineering-and-medical-physics",
+    "areaId": "engineering-science",
+    "name": "Medical Engineering and Medical Physics",
+    "aliases": [
+      "medical engineering and medical physics"
+    ],
+    "description": "Explores the core knowledge and applied practice of Medical Engineering and Medical Physics.",
+    "typicalSubjects": [
+      "Mathematics",
+      "Design",
+      "Applied science"
+    ],
+    "careerDirections": [
+      "Engineering and technical roles"
+    ],
+    "relatedFamilyIds": [],
+    "active": true
+  },
+  {
+    "familyId": "science-and-technology",
+    "areaId": "engineering-science",
+    "name": "Science and Technology",
+    "aliases": [
+      "science and technology"
+    ],
+    "description": "Explores the core knowledge and applied practice of Science and Technology.",
+    "typicalSubjects": [
+      "Science and Technology",
+      "Foundational studies",
+      "Applied practice"
+    ],
+    "careerDirections": [
+      "Roles related to Science and Technology"
+    ],
+    "relatedFamilyIds": [],
+    "active": true
+  },
+  {
+    "familyId": "business-psychology",
+    "areaId": "health-medicine",
+    "name": "Business Psychology",
+    "aliases": [
+      "business psychology"
+    ],
+    "description": "Explores the core knowledge and applied practice of Business Psychology.",
+    "typicalSubjects": [
+      "Business Psychology",
+      "Foundational studies",
+      "Applied practice"
+    ],
+    "careerDirections": [
+      "Roles related to Business Psychology"
+    ],
+    "relatedFamilyIds": [],
+    "active": true
+  },
+  {
+    "familyId": "dentistry",
+    "areaId": "health-medicine",
+    "name": "Dentistry",
+    "aliases": [
+      "dentistry"
+    ],
+    "description": "Explores the core knowledge and applied practice of Dentistry.",
+    "typicalSubjects": [
+      "Dentistry",
+      "Foundational studies",
+      "Applied practice"
+    ],
+    "careerDirections": [
+      "Roles related to Dentistry"
+    ],
+    "relatedFamilyIds": [],
+    "active": true
+  },
+  {
+    "familyId": "medicine",
+    "areaId": "health-medicine",
+    "name": "Medicine",
+    "aliases": [
+      "medicine"
+    ],
+    "description": "Explores the core knowledge and applied practice of Medicine.",
+    "typicalSubjects": [
+      "Clinical science",
+      "Biology",
+      "Patient care"
+    ],
+    "careerDirections": [
+      "Medical practice and health services"
+    ],
+    "relatedFamilyIds": [],
+    "active": true
+  },
+  {
+    "familyId": "nursing",
+    "areaId": "health-medicine",
+    "name": "Nursing",
+    "aliases": [
+      "nursing"
+    ],
+    "description": "Explores the core knowledge and applied practice of Nursing.",
+    "typicalSubjects": [
+      "Nursing",
+      "Foundational studies",
+      "Applied practice"
+    ],
+    "careerDirections": [
+      "Roles related to Nursing"
+    ],
+    "relatedFamilyIds": [],
+    "active": true
+  },
+  {
+    "familyId": "optometry",
+    "areaId": "health-medicine",
+    "name": "Optometry",
+    "aliases": [
+      "optometry"
+    ],
+    "description": "Explores the core knowledge and applied practice of Optometry.",
+    "typicalSubjects": [
+      "Optometry",
+      "Foundational studies",
+      "Applied practice"
+    ],
+    "careerDirections": [
+      "Roles related to Optometry"
+    ],
+    "relatedFamilyIds": [],
+    "active": true
+  },
+  {
+    "familyId": "psychology",
+    "areaId": "health-medicine",
+    "name": "Psychology",
+    "aliases": [
+      "psychology"
+    ],
+    "description": "Explores the core knowledge and applied practice of Psychology.",
+    "typicalSubjects": [
+      "Psychology",
+      "Foundational studies",
+      "Applied practice"
+    ],
+    "careerDirections": [
+      "Roles related to Psychology"
+    ],
+    "relatedFamilyIds": [],
+    "active": true
+  },
+  {
+    "familyId": "applied-modern-languages",
+    "areaId": "society-humanities",
+    "name": "Applied Modern Languages",
+    "aliases": [
+      "applied modern languages"
+    ],
+    "description": "Explores the core knowledge and applied practice of Applied Modern Languages.",
+    "typicalSubjects": [
+      "Applied Modern Languages",
+      "Foundational studies",
+      "Applied practice"
+    ],
+    "careerDirections": [
+      "Roles related to Applied Modern Languages"
+    ],
+    "relatedFamilyIds": [],
+    "active": true
+  },
+  {
+    "familyId": "audiovisual-arts-and-media-arts",
+    "areaId": "society-humanities",
+    "name": "Audiovisual Arts and Media Arts",
+    "aliases": [
+      "audiovisual arts and media arts"
+    ],
+    "description": "Explores the core knowledge and applied practice of Audiovisual Arts and Media Arts.",
+    "typicalSubjects": [
+      "Audiovisual Arts and Media Arts",
+      "Foundational studies",
+      "Applied practice"
+    ],
+    "careerDirections": [
+      "Roles related to Audiovisual Arts and Media Arts"
+    ],
+    "relatedFamilyIds": [],
+    "active": true
+  },
+  {
+    "familyId": "audiovisual-media",
+    "areaId": "society-humanities",
+    "name": "Audiovisual Media",
+    "aliases": [
+      "audiovisual media"
+    ],
+    "description": "Explores the core knowledge and applied practice of Audiovisual Media.",
+    "typicalSubjects": [
+      "Audiovisual Media",
+      "Foundational studies",
+      "Applied practice"
+    ],
+    "careerDirections": [
+      "Roles related to Audiovisual Media"
+    ],
+    "relatedFamilyIds": [],
+    "active": true
+  },
+  {
+    "familyId": "cultural-and-social-anthropology",
+    "areaId": "society-humanities",
+    "name": "Cultural and Social Anthropology",
+    "aliases": [
+      "cultural and social anthropology"
+    ],
+    "description": "Explores the core knowledge and applied practice of Cultural and Social Anthropology.",
+    "typicalSubjects": [
+      "Cultural and Social Anthropology",
+      "Foundational studies",
+      "Applied practice"
+    ],
+    "careerDirections": [
+      "Roles related to Cultural and Social Anthropology"
+    ],
+    "relatedFamilyIds": [],
+    "active": true
+  },
+  {
+    "familyId": "east-west-intercultural-studies",
+    "areaId": "society-humanities",
+    "name": "East-West Intercultural Studies",
+    "aliases": [
+      "east-west intercultural studies"
+    ],
+    "description": "Explores the core knowledge and applied practice of East-West Intercultural Studies.",
+    "typicalSubjects": [
+      "East-West Intercultural Studies",
+      "Foundational studies",
+      "Applied practice"
+    ],
+    "careerDirections": [
+      "Roles related to East-West Intercultural Studies"
+    ],
+    "relatedFamilyIds": [],
+    "active": true
+  },
+  {
+    "familyId": "economic-and-social-sciences",
+    "areaId": "society-humanities",
+    "name": "Economic and Social Sciences",
+    "aliases": [
+      "economic and social sciences"
+    ],
+    "description": "Explores the core knowledge and applied practice of Economic and Social Sciences.",
+    "typicalSubjects": [
+      "Economic and Social Sciences",
+      "Foundational studies",
+      "Applied practice"
+    ],
+    "careerDirections": [
+      "Roles related to Economic and Social Sciences"
+    ],
+    "relatedFamilyIds": [],
+    "active": true
+  },
+  {
+    "familyId": "english-european-languages-and-business-studies",
+    "areaId": "society-humanities",
+    "name": "English, European Languages and Business Studies",
+    "aliases": [
+      "english, european languages and business studies"
+    ],
+    "description": "Explores the core knowledge and applied practice of English, European Languages and Business Studies.",
+    "typicalSubjects": [
+      "English, European Languages and Business Studies",
+      "Foundational studies",
+      "Applied practice"
+    ],
+    "careerDirections": [
+      "Roles related to English, European Languages and Business Studies"
+    ],
+    "relatedFamilyIds": [],
+    "active": true
+  },
+  {
+    "familyId": "european-studies",
+    "areaId": "society-humanities",
+    "name": "European Studies",
+    "aliases": [
+      "european studies"
+    ],
+    "description": "Explores the core knowledge and applied practice of European Studies.",
+    "typicalSubjects": [
+      "European Studies",
+      "Foundational studies",
+      "Applied practice"
+    ],
+    "careerDirections": [
+      "Roles related to European Studies"
+    ],
+    "relatedFamilyIds": [],
+    "active": true
+  },
+  {
+    "familyId": "international-legal-studies",
+    "areaId": "society-humanities",
+    "name": "International Legal Studies",
+    "aliases": [
+      "international legal studies"
+    ],
+    "description": "Explores the core knowledge and applied practice of International Legal Studies.",
+    "typicalSubjects": [
+      "International Legal Studies",
+      "Foundational studies",
+      "Applied practice"
+    ],
+    "careerDirections": [
+      "Roles related to International Legal Studies"
+    ],
+    "relatedFamilyIds": [],
+    "active": true
+  },
+  {
+    "familyId": "international-relations",
+    "areaId": "society-humanities",
+    "name": "International Relations",
+    "aliases": [
+      "international relations"
+    ],
+    "description": "Explores the core knowledge and applied practice of International Relations.",
+    "typicalSubjects": [
+      "International Relations",
+      "Foundational studies",
+      "Applied practice"
+    ],
+    "careerDirections": [
+      "Roles related to International Relations"
+    ],
+    "relatedFamilyIds": [],
+    "active": true
+  },
+  {
+    "familyId": "international-relations-and-european-studies",
+    "areaId": "society-humanities",
+    "name": "International Relations and European Studies",
+    "aliases": [
+      "international relations and european studies"
+    ],
+    "description": "Explores the core knowledge and applied practice of International Relations and European Studies.",
+    "typicalSubjects": [
+      "International Relations and European Studies",
+      "Foundational studies",
+      "Applied practice"
+    ],
+    "careerDirections": [
+      "Roles related to International Relations and European Studies"
+    ],
+    "relatedFamilyIds": [],
+    "active": true
+  },
+  {
+    "familyId": "law",
+    "areaId": "society-humanities",
+    "name": "Law",
+    "aliases": [
+      "law"
+    ],
+    "description": "Explores the core knowledge and applied practice of Law.",
+    "typicalSubjects": [
+      "Law",
+      "Foundational studies",
+      "Applied practice"
+    ],
+    "careerDirections": [
+      "Roles related to Law"
+    ],
+    "relatedFamilyIds": [],
+    "active": true
+  },
+  {
+    "familyId": "liberal-arts-and-humanities",
+    "areaId": "society-humanities",
+    "name": "Liberal Arts and Humanities",
+    "aliases": [
+      "liberal arts and humanities"
+    ],
+    "description": "Explores the core knowledge and applied practice of Liberal Arts and Humanities.",
+    "typicalSubjects": [
+      "Liberal Arts and Humanities",
+      "Foundational studies",
+      "Applied practice"
+    ],
+    "careerDirections": [
+      "Roles related to Liberal Arts and Humanities"
+    ],
+    "relatedFamilyIds": [],
+    "active": true
+  },
+  {
+    "familyId": "philology-french-russian-or-german",
+    "areaId": "society-humanities",
+    "name": "Philology (French, Russian or German)",
+    "aliases": [
+      "philology (french, russian or german)"
+    ],
+    "description": "Explores the core knowledge and applied practice of Philology (French, Russian or German).",
+    "typicalSubjects": [
+      "Philology (French, Russian or German)",
+      "Foundational studies",
+      "Applied practice"
+    ],
+    "careerDirections": [
+      "Roles related to Philology (French, Russian or German)"
+    ],
+    "relatedFamilyIds": [],
+    "active": true
+  },
+  {
+    "familyId": "political-science",
+    "areaId": "society-humanities",
+    "name": "Political Science",
+    "aliases": [
+      "political science"
+    ],
+    "description": "Explores the core knowledge and applied practice of Political Science.",
+    "typicalSubjects": [
+      "Political Science",
+      "Foundational studies",
+      "Applied practice"
+    ],
+    "careerDirections": [
+      "Roles related to Political Science"
+    ],
+    "relatedFamilyIds": [],
+    "active": true
+  },
+  {
+    "familyId": "politics-philosophy-and-economics",
+    "areaId": "society-humanities",
+    "name": "Politics, Philosophy and Economics",
+    "aliases": [
+      "politics, philosophy and economics"
+    ],
+    "description": "Explores the core knowledge and applied practice of Politics, Philosophy and Economics.",
+    "typicalSubjects": [
+      "Politics, Philosophy and Economics",
+      "Foundational studies",
+      "Applied practice"
+    ],
+    "careerDirections": [
+      "Roles related to Politics, Philosophy and Economics"
+    ],
+    "relatedFamilyIds": [],
+    "active": true
+  },
+  {
+    "familyId": "research-and-protection-of-cultural-and-environmental-heritage",
+    "areaId": "society-humanities",
+    "name": "Research and Protection of Cultural and Environmental Heritage",
+    "aliases": [
+      "research and protection of cultural and environmental heritage"
+    ],
+    "description": "Explores the core knowledge and applied practice of Research and Protection of Cultural and Environmental Heritage.",
+    "typicalSubjects": [
+      "Research and Protection of Cultural and Environmental Heritage",
+      "Foundational studies",
+      "Applied practice"
+    ],
+    "careerDirections": [
+      "Roles related to Research and Protection of Cultural and Environmental Heritage"
+    ],
+    "relatedFamilyIds": [],
+    "active": true
+  }
+]

@@ -65,9 +65,17 @@ export function useWorkspaceNavigation() {
     restoreScroll(0);
   }, [rememberScroll, restoreScroll]);
 
+  const replaceTarget = useCallback((next: UiTargetRef) => {
+    const parsed = uiTargetRef.parse(next);
+    window.history.replaceState({ workspaceTarget: parsed, workspaceScrollTop: 0 }, '');
+    setTarget(parsed);
+    setNavigationRevision((revision) => revision + 1);
+    restoreScroll(0);
+  }, [restoreScroll]);
+
   const setScrollElement = useCallback((element: HTMLDivElement | null) => {
     scrollElementRef.current = element;
   }, []);
 
-  return { target, navigationRevision, openTarget, rememberScroll, setScrollElement };
+  return { target, navigationRevision, openTarget, replaceTarget, rememberScroll, setScrollElement };
 }

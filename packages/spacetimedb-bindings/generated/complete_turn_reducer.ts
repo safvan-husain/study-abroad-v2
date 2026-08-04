@@ -28,4 +28,11 @@ export default {
   get workItems() {
     return __t.array(WorkItemSpec);
   },
+  expectedContextRevision: __t.u64(),
+  selectionMode: __t.string(),
+  presentedFamilyIdsJson: __t.string(),
+  presentedOfferingIdsJson: __t.string(),
+  provisionalOfferingIdsJson: __t.string(),
+  proposalRationale: __t.string(),
+  comparisonCriterion: __t.string(),
 };

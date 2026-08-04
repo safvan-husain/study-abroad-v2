@@ -9,7 +9,7 @@
     "generate:check": "tsx scripts/generate.ts --check",
     "build": "esbuild src/index.ts --bundle --format=esm --platform=node --outfile=dist/index.js",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
     "spacetimedb": "2.0.3"

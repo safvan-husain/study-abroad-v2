@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { Client } from '@langchain/langgraph-sdk';
-import type { ChatMessage, DiscoveryTurnResult, CourseFitResult, CatalogCourseView, DiscoveryProfilePatch, UserUiState } from '@study-abroad/contracts';
-import { discoveryTurnResult, courseFitResult } from '@study-abroad/contracts';
+import type { AdvisorTurnResult, CatalogFamilyView, ChatMessage, DiscoveryTurnResult, CourseFitResult, CatalogCourseView, DiscoveryProfilePatch, UserUiState } from '@study-abroad/contracts';
+import { advisorTurnResult, discoveryTurnResult, courseFitResult } from '@study-abroad/contracts';
 import type { WorkerConfig } from '../config.js';
 
 export interface AgentTurnResult {
@@ -10,6 +10,17 @@ export interface AgentTurnResult {
   content: string;
   metadata: Record<string, string>;
   discovery?: DiscoveryTurnResult;
+  advisor?: AdvisorTurnResult;
+}
+
+export interface AgentSelectionContext {
+  presentedFamilyIds: string[];
+  presentedOfferingIds: string[];
+  provisionalOfferingIds: string[];
+  suppressedOfferingIds: string[];
+  confirmedOfferingIds: string[];
+  comparisonCriterion: string;
+  revision: bigint;
 }
 
 export interface AgentCourseFitInput {
@@ -24,7 +35,14 @@ export interface AgentClient {
   run(
     input: ChatMessage[],
     ids: { conversationId: string; turnId: string; correlationId: string },
-    context?: { catalogAreas: string[]; profile: DiscoveryProfilePatch; uiContext: UserUiState },
+    context?: {
+      catalogAreas: string[];
+      catalogFamilies: CatalogFamilyView[];
+      catalogCourses: CatalogCourseView[];
+      profile: DiscoveryProfilePatch;
+      uiContext: UserUiState;
+      selectionContext: AgentSelectionContext;
+    },
   ): Promise<AgentTurnResult>;
   runCourseFit?(input: AgentCourseFitInput): Promise<{ runId: string; result: CourseFitResult }>;
 }
@@ -67,7 +85,14 @@ export class AgentServerClient implements AgentClient {
   async run(
     messages: ChatMessage[],
     ids: { conversationId: string; turnId: string; correlationId: string },
-    context?: { catalogAreas: string[]; profile: DiscoveryProfilePatch; uiContext: UserUiState },
+    context?: {
+      catalogAreas: string[];
+      catalogFamilies: CatalogFamilyView[];
+      catalogCourses: CatalogCourseView[];
+      profile: DiscoveryProfilePatch;
+      uiContext: UserUiState;
+      selectionContext: AgentSelectionContext;
+    },
   ): Promise<AgentTurnResult> {
     const assistantId = await this.assistantId();
     await this.client.threads.create({
@@ -85,8 +110,21 @@ export class AgentServerClient implements AgentClient {
     const input = {
       messages: messages.slice(-1).map(({ content }) => ({ role: 'human', content })),
       catalog_areas: context?.catalogAreas ?? [],
+      catalog_families: (context?.catalogFamilies ?? []).map((family) => ({
+        ...family,
+        aliases: JSON.parse(family.aliasesJson || '[]'),
+        typicalSubjects: JSON.parse(family.typicalSubjectsJson || '[]'),
+        careerDirections: JSON.parse(family.careerDirectionsJson || '[]'),
+        relatedFamilyIds: JSON.parse(family.relatedFamilyIdsJson || '[]'),
+      })),
+      catalog_courses: context?.catalogCourses ?? [],
       profile: context?.profile ?? {},
       ui_context: context?.uiContext ? uiContextForGraph(context.uiContext) : {},
+      selection_context: context?.selectionContext ? {
+        ...context.selectionContext,
+        revision: context.selectionContext.revision.toString(),
+      } : {},
+      graph_version: this.config.ADVISOR_GRAPH_VERSION,
       task: 'discover',
       course: {},
     };
@@ -100,11 +138,15 @@ export class AgentServerClient implements AgentClient {
     }) as {
       messages?: Array<{ role?: string; type?: string; content?: string }>;
       discovery_result?: unknown;
+      advisor_result?: unknown;
     };
     const last = [...(output.messages ?? [])].reverse().find((message) => message.role === 'ai' || message.type === 'ai');
     if (!runId || !last?.content) throw new Error('Agent Server returned no run or assistant message');
     const parsed = output.discovery_result
       ? discoveryTurnResult.safeParse(output.discovery_result)
+      : null;
+    const parsedAdvisor = output.advisor_result
+      ? advisorTurnResult.safeParse(output.advisor_result)
       : null;
     return {
       threadId: ids.conversationId,
@@ -112,6 +154,7 @@ export class AgentServerClient implements AgentClient {
       content: last.content,
       metadata,
       discovery: parsed?.success ? parsed.data : undefined,
+      advisor: parsedAdvisor?.success ? parsedAdvisor.data : undefined,
     };
   }
 

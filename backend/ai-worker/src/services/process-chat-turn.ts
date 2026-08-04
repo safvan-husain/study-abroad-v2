@@ -1,15 +1,15 @@
 import {
+  type AdvisorTurnResult,
   type CatalogCourseView,
+  type CatalogFamilyView,
   type ChatMessage,
   type DiscoveryProfilePatch,
-  type DiscoveryTurnResult,
   type TurnUpdatePayload,
   type UserUiState,
-  mapPhraseToCatalogAreas,
+  advisorTurnResult,
   rankCoursesForAreas,
-  discoveryTurnResult,
 } from '@study-abroad/contracts';
-import type { AgentClient } from './agent-server-client.js';
+import type { AgentClient, AgentSelectionContext } from './agent-server-client.js';
 
 export interface Coordinator {
   claim(turn: ChatTurn): Promise<number | undefined>;
@@ -23,7 +23,9 @@ export interface Coordinator {
 
 export interface CatalogStore {
   listCourses(): CatalogCourseView[];
+  listFamilies?(): CatalogFamilyView[];
   getProfile(conversationId: string): DiscoveryProfilePatch | undefined;
+  getSelection?(conversationId: string): AgentSelectionContext | undefined;
   getUiState?(conversationId: string, clientInstanceId: string): UserUiState | undefined;
 }
 
@@ -36,6 +38,7 @@ export interface ChatTurn {
   userContent: string;
   attempt: number;
   baseUiRevision: bigint;
+  baseContextRevision?: bigint;
   uiContext: UserUiState;
 }
 
@@ -49,6 +52,13 @@ export interface TurnCompletion {
   directiveAwareness: string;
   workKind: string;
   workItems: WorkItemSpec[];
+  expectedContextRevision: bigint;
+  selectionMode: 'none' | 'replace_provisional';
+  presentedFamilyIds: string[];
+  presentedOfferingIds: string[];
+  provisionalOfferingIds: string[];
+  proposalRationale: string;
+  comparisonCriterion: string;
 }
 
 export interface WorkItemSpec {
@@ -64,43 +74,99 @@ export interface WorkItemSpec {
 
 function emptyProfile(): DiscoveryProfilePatch {
   return {
-    background: '',
-    courseInterests: '',
-    ambitions: '',
-    primaryArea: '',
-    candidateAreas: [],
-    studentPhrase: '',
-    constraintsText: '',
+    background: '', courseInterests: '', ambitions: '', primaryArea: '',
+    candidateAreas: [], studentPhrase: '', constraintsText: '',
   };
 }
 
-function buildFallbackDiscovery(userContent: string, catalogAreas: string[], profile: DiscoveryProfilePatch): DiscoveryTurnResult {
-  const intent = mapPhraseToCatalogAreas(userContent, catalogAreas);
-  const patch = {
-    ...profile,
-    courseInterests: intent.studentPhrase || profile.courseInterests,
-    studentPhrase: intent.studentPhrase || profile.studentPhrase,
-    primaryArea: intent.catalogAreas[0] ?? profile.primaryArea,
-    candidateAreas: intent.catalogAreas.length ? intent.catalogAreas : profile.candidateAreas,
-  };
-  if (intent.status === 'mapped') {
-    return {
-      assistantContent: `Thanks — I am looking through partner courses related to ${intent.studentPhrase} and will organize matches in your workspace.`,
-      profilePatch: patch,
-      discoveryIntent: intent,
-      directive: { type: 'catalog', awareness: `Showing courses related to ${intent.studentPhrase}.` },
-      workItems: [],
-      workKind: '',
-    };
-  }
+function emptySelection(): AgentSelectionContext {
   return {
-    assistantContent: `Thanks for sharing. I could not map ${intent.studentPhrase || 'that interest'} to an exact partner-catalogue area yet — tell me more about the subjects or careers you have in mind.`,
-    profilePatch: patch,
-    discoveryIntent: intent,
-    directive: { type: 'discovery', awareness: 'Learning about your background and study interests.' },
-    workItems: [],
-    workKind: '',
+    presentedFamilyIds: [], presentedOfferingIds: [], provisionalOfferingIds: [],
+    suppressedOfferingIds: [], confirmedOfferingIds: [], revision: 0n,
+    comparisonCriterion: '',
   };
+}
+
+function safeAdvisorFallback(profile: DiscoveryProfilePatch): AdvisorTurnResult {
+  return advisorTurnResult.parse({
+    assistantContent: 'I could not make a safe advisor decision. Would you like guidance about the process, or course discovery?',
+    route: {
+      intent: 'clarify', reason: 'The specialist graph returned no valid typed result.',
+      clarificationQuestion: 'Would you like guidance about the process, or course discovery?',
+    },
+    proposal: { mode: 'none', offeringIds: [], rationale: '' },
+    presentedFamilyIds: [], presentedOfferingIds: [],
+    directive: { type: 'discovery', awareness: 'Waiting for your choice.' },
+    workItems: [], workKind: '', profilePatch: profile,
+  });
+}
+
+function legacyAdvisor(
+  content: string,
+  discovery: NonNullable<Awaited<ReturnType<AgentClient['run']>>['discovery']>,
+  courses: CatalogCourseView[],
+): AdvisorTurnResult {
+  const ranked = rankCoursesForAreas(courses, discovery.discoveryIntent.catalogAreas, 5);
+  return advisorTurnResult.parse({
+    assistantContent: discovery.assistantContent || content,
+    route: { intent: 'discovery', reason: 'Legacy graph selected.', clarificationQuestion: '' },
+    scope: ranked.length ? {
+      scope: 'family_offerings', areaId: '', familyIds: [], offeringIds: ranked.map((row) => row.courseId),
+      explanation: 'Legacy ranked catalogue results.', clarificationQuestion: '',
+    } : undefined,
+    proposal: { mode: 'none', offeringIds: [], rationale: '' },
+    presentedFamilyIds: [], presentedOfferingIds: ranked.map((row) => row.courseId),
+    directive: discovery.directive, workItems: [], workKind: ranked.length ? 'course_fit_summaries' : '',
+    profilePatch: discovery.profilePatch,
+  });
+}
+
+function buildWorkItems(
+  turn: ChatTurn,
+  advisor: AdvisorTurnResult,
+  courses: CatalogCourseView[],
+  families: CatalogFamilyView[],
+): WorkItemSpec[] {
+  const workSetId = `${turn.turnId}-work`;
+  if (advisor.workKind === 'area_overview') {
+    return advisor.presentedFamilyIds
+      .map((familyId) => families.find((row) => row.familyId === familyId))
+      .filter((row): row is CatalogFamilyView => Boolean(row))
+      .map((family, orderIndex) => {
+        const input = { ...family, offeringCount: courses.filter((row) => row.familyId === family.familyId).length };
+        return {
+          entityType: 'family', entityId: family.familyId, kind: 'program_family_overview',
+          displayTitle: family.name, orderIndex,
+          targetJson: JSON.stringify({ schemaVersion: 1, viewType: 'family', workSetId, entityType: 'family', entityId: family.familyId }),
+          dependencyJson: JSON.stringify(input), inputJson: JSON.stringify(input),
+        };
+      });
+  }
+
+  const offeringIds = advisor.presentedOfferingIds.length
+    ? advisor.presentedOfferingIds
+    : advisor.proposal.offeringIds;
+  return offeringIds
+    .map((courseId) => courses.find((row) => row.courseId === courseId))
+    .filter((row): row is CatalogCourseView => Boolean(row))
+    .map((course, orderIndex) => ({
+      entityType: 'course', entityId: course.courseId,
+      kind: advisor.workKind === 'course_fit_summaries' ? 'course_fit_summary' : 'program_offering',
+      displayTitle: course.name, orderIndex,
+      targetJson: JSON.stringify({
+        schemaVersion: 1, viewType: 'course_summary', workSetId,
+        entityType: 'course', entityId: course.courseId, slot: 'summary',
+      }),
+      dependencyJson: JSON.stringify(advisor.workKind === 'course_fit_summaries' ? {
+        profile: advisor.profilePatch,
+        course: {
+          courseId: course.courseId, institutionId: course.institutionId, institutionName: course.institutionName,
+          country: course.country, city: course.city, name: course.name, area: course.area, level: course.level,
+          tuitionBand: course.tuitionBand, englishBar: course.englishBar,
+        },
+      } : { profile: advisor.profilePatch, course }),
+      inputJson: JSON.stringify({ ...course, studentPhrase: advisor.profilePatch.studentPhrase, profile: advisor.profilePatch }),
+    }));
 }
 
 export async function processChatTurn(
@@ -129,90 +195,49 @@ export async function processChatTurn(
   try {
     await publish({ kind: 'turn_started' });
     const courses = catalog?.listCourses() ?? [];
-    const catalogAreas = [...new Set(courses.map((course) => course.area))];
+    const families = catalog?.listFamilies?.() ?? [];
+    const catalogAreas = [...new Set(families.map((row) => row.areaId))];
     const profile = catalog?.getProfile(turn.conversationId) ?? emptyProfile();
+    const selectionContext = catalog?.getSelection?.(turn.conversationId) ?? emptySelection();
     const userMessage: ChatMessage = {
-      messageId: turn.userMessageId,
-      conversationId: turn.conversationId,
-      turnId: turn.turnId,
-      role: 'user',
-      content: turn.userContent,
-      createdAt: new Date().toISOString(),
+      messageId: turn.userMessageId, conversationId: turn.conversationId, turnId: turn.turnId,
+      role: 'user', content: turn.userContent, createdAt: new Date().toISOString(),
     };
-    const result = await agent.run([userMessage], turn, { catalogAreas, profile, uiContext: turn.uiContext });
-    // The graph receives the origin snapshot, while this reread exposes the live tab
-    // state to deterministic orchestration. SpacetimeDB still authoritatively fences navigation.
+    const result = await agent.run([userMessage], turn, {
+      catalogAreas, catalogFamilies: families, catalogCourses: courses,
+      profile, uiContext: turn.uiContext, selectionContext,
+    });
     catalog?.getUiState?.(turn.conversationId, turn.uiContext.clientInstanceId);
-    const discovery = result.discovery
-      ?? discoveryTurnResult.parse(buildFallbackDiscovery(turn.userContent, catalogAreas, profile));
+    const advisor = result.advisor
+      ?? (result.discovery ? legacyAdvisor(result.content, result.discovery, courses) : safeAdvisorFallback(profile));
 
-    const intent = discovery.discoveryIntent;
-    let ranked: CatalogCourseView[] = [];
-    if (intent.status === 'mapped' && intent.catalogAreas.length > 0) {
-      await publish({ kind: 'course_search_started', studentPhrase: intent.studentPhrase });
-      ranked = rankCoursesForAreas(courses, intent.catalogAreas, 5);
+    const workItems = buildWorkItems(turn, advisor, courses, families);
+    if (workItems.length > 0) {
+      await publish({ kind: 'course_search_started', studentPhrase: advisor.profilePatch.studentPhrase || 'your request' });
+      const courseIds = workItems.filter((row) => row.entityType === 'course').map((row) => row.entityId);
       await publish({
-        kind: 'course_search_results_ready',
-        studentPhrase: intent.studentPhrase,
-        matchCount: ranked.length,
-        courseIds: ranked.map((course) => course.courseId),
+        kind: 'course_search_results_ready', studentPhrase: advisor.profilePatch.studentPhrase || 'your request',
+        matchCount: courseIds.length, courseIds,
       });
     }
-
-    const workSetId = `${turn.turnId}-work`;
-    const workItems: WorkItemSpec[] = ranked.map((course, orderIndex) => ({
-      entityType: 'course',
-      entityId: course.courseId,
-      kind: 'course_fit_summary',
-      displayTitle: `Comparing ${course.name}`,
-      orderIndex,
-      targetJson: JSON.stringify({
-        schemaVersion: 1,
-        viewType: 'course_summary',
-        workSetId,
-        entityType: 'course',
-        entityId: course.courseId,
-        slot: 'summary',
-      }),
-      dependencyJson: JSON.stringify({
-        profile: discovery.profilePatch,
-        course,
-      }),
-      inputJson: JSON.stringify({
-        courseId: course.courseId,
-        institutionId: course.institutionId,
-        name: course.name,
-        institutionName: course.institutionName,
-        country: course.country,
-        city: course.city,
-        area: course.area,
-        level: course.level,
-        tuitionBand: course.tuitionBand,
-        englishBar: course.englishBar,
-        studentPhrase: intent.studentPhrase,
-        profile: discovery.profilePatch,
-      }),
-    }));
-
     if (coordinator.upsertConversationProfile) {
-      await coordinator.upsertConversationProfile(turn.conversationId, discovery.profilePatch);
+      await coordinator.upsertConversationProfile(turn.conversationId, advisor.profilePatch);
     }
 
-    const directiveType = ranked.length > 0 ? 'catalog' : discovery.directive.type;
-    const awareness = ranked.length > 0
-      ? `Showing courses related to ${intent.studentPhrase}.`
-      : discovery.directive.awareness;
-
     await coordinator.complete(turn.turnId, attempt, {
-      assistantContent: discovery.assistantContent || result.content,
-      runId: result.runId,
-      agentThreadId: result.threadId,
-      directiveSchemaVersion: 1,
-      directiveUiRevision: turn.baseUiRevision + 1n,
-      directiveType,
-      directiveAwareness: awareness,
-      workKind: workItems.length ? 'course_fit_summaries' : '',
-      workItems,
+      assistantContent: advisor.assistantContent || result.content,
+      runId: result.runId, agentThreadId: result.threadId,
+      directiveSchemaVersion: 1, directiveUiRevision: turn.baseUiRevision + 1n,
+      directiveType: workItems.length ? 'catalog' : advisor.directive.type,
+      directiveAwareness: advisor.directive.awareness,
+      workKind: workItems.length ? advisor.workKind : '', workItems,
+      expectedContextRevision: turn.baseContextRevision ?? 0n,
+      selectionMode: advisor.proposal.mode,
+      presentedFamilyIds: advisor.presentedFamilyIds,
+      presentedOfferingIds: advisor.presentedOfferingIds,
+      provisionalOfferingIds: advisor.proposal.offeringIds,
+      proposalRationale: advisor.proposal.rationale,
+      comparisonCriterion: advisor.scope?.comparisonCriterion ?? '',
     });
   } catch (error) {
     const errorCode = error instanceof Error ? error.name : 'worker_error';

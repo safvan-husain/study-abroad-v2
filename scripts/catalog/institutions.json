@@ -1,0 +1,541 @@
+[
+  {
+    "institutionId": "university-of-latvia",
+    "name": "University of Latvia",
+    "country": "Latvia",
+    "city": "Riga",
+    "ownership": "public",
+    "aliases": [],
+    "rankings": [
+      {
+        "rankingId": "rank-lu-qs-2026",
+        "institutionId": "university-of-latvia",
+        "sourceId": "src-rank-lu-qs-2026",
+        "provider": "QS",
+        "scope": "world",
+        "editionYear": 2026,
+        "rankMin": 781,
+        "rankMax": 790,
+        "rankLabel": "781–790",
+        "active": true
+      }
+    ],
+    "sources": [
+      {
+        "sourceId": "src-rank-lu-qs-2026",
+        "officialUrl": "https://www.lu.lv/en/about-us/ul-media/news/single/t/110010/",
+        "sourceType": "ranking_provider",
+        "academicYear": "2026",
+        "verificationStatus": "verified",
+        "verificationDate": "2026-07-16",
+        "auditNote": "Official institution ranking report with provider, edition and scope."
+      }
+    ],
+    "active": true
+  },
+  {
+    "institutionId": "riga-technical-university",
+    "name": "Riga Technical University",
+    "country": "Latvia",
+    "city": "Riga",
+    "ownership": "public",
+    "aliases": [
+      "RTU"
+    ],
+    "rankings": [
+      {
+        "rankingId": "rank-rtu-qs-2026",
+        "institutionId": "riga-technical-university",
+        "sourceId": "src-rank-rtu-qs-2026",
+        "provider": "QS",
+        "scope": "world",
+        "editionYear": 2026,
+        "rankMin": 751,
+        "rankMax": 760,
+        "rankLabel": "751–760",
+        "active": true
+      },
+      {
+        "rankingId": "rank-rtu-qs-engineering-2026",
+        "institutionId": "riga-technical-university",
+        "sourceId": "src-rank-rtu-qs-engineering-2026",
+        "provider": "QS",
+        "scope": "Engineering & Technology",
+        "editionYear": 2026,
+        "rankMin": 451,
+        "rankMax": 500,
+        "rankLabel": "451–500",
+        "active": true
+      }
+    ],
+    "sources": [
+      {
+        "sourceId": "src-rank-rtu-qs-2026",
+        "officialUrl": "https://www.rtu.lv/en/university/rankings",
+        "sourceType": "ranking_provider",
+        "academicYear": "2026",
+        "verificationStatus": "verified",
+        "verificationDate": "2026-07-16",
+        "auditNote": "Official institution ranking report with provider, edition and scope."
+      },
+      {
+        "sourceId": "src-rank-rtu-qs-engineering-2026",
+        "officialUrl": "https://www.rtu.lv/en/university/rankings",
+        "sourceType": "ranking_provider",
+        "academicYear": "2026",
+        "verificationStatus": "verified",
+        "verificationDate": "2026-07-16",
+        "auditNote": "Official institution ranking report with provider, edition and scope."
+      }
+    ],
+    "active": true
+  },
+  {
+    "institutionId": "riga-stradins-university",
+    "name": "Rīga Stradiņš University",
+    "country": "Latvia",
+    "city": "Riga",
+    "ownership": "public",
+    "aliases": [
+      "RSU",
+      "Riga Stradins University"
+    ],
+    "rankings": [],
+    "sources": [],
+    "active": true
+  },
+  {
+    "institutionId": "turiba-university",
+    "name": "Turība University",
+    "country": "Latvia",
+    "city": "Riga",
+    "ownership": "private",
+    "aliases": [
+      "Turiba University"
+    ],
+    "rankings": [],
+    "sources": [],
+    "active": true
+  },
+  {
+    "institutionId": "riseba",
+    "name": "RISEBA University of Applied Sciences",
+    "country": "Latvia",
+    "city": "Riga",
+    "ownership": "private",
+    "aliases": [
+      "RISEBA"
+    ],
+    "rankings": [],
+    "sources": [],
+    "active": true
+  },
+  {
+    "institutionId": "university-of-tartu",
+    "name": "University of Tartu",
+    "country": "Estonia",
+    "city": "Tartu",
+    "ownership": "public",
+    "aliases": [],
+    "rankings": [
+      {
+        "rankingId": "rank-tartu-the-2026",
+        "institutionId": "university-of-tartu",
+        "sourceId": "src-rank-tartu-the-2026",
+        "provider": "Times Higher Education",
+        "scope": "world",
+        "editionYear": 2026,
+        "rankMin": 301,
+        "rankMax": 350,
+        "rankLabel": "301–350",
+        "active": true
+      }
+    ],
+    "sources": [
+      {
+        "sourceId": "src-rank-tartu-the-2026",
+        "officialUrl": "https://ut.ee/en/rankings-surveys",
+        "sourceType": "ranking_provider",
+        "academicYear": "2026",
+        "verificationStatus": "verified",
+        "verificationDate": "2026-07-16",
+        "auditNote": "Official institution ranking report with provider, edition and scope."
+      }
+    ],
+    "active": true
+  },
+  {
+    "institutionId": "taltech",
+    "name": "Tallinn University of Technology",
+    "country": "Estonia",
+    "city": "Tallinn",
+    "ownership": "public",
+    "aliases": [
+      "TalTech"
+    ],
+    "rankings": [
+      {
+        "rankingId": "rank-taltech-qs-2027",
+        "institutionId": "taltech",
+        "sourceId": "src-rank-taltech-qs-2027",
+        "provider": "QS",
+        "scope": "world",
+        "editionYear": 2027,
+        "rankMin": 600,
+        "rankMax": 600,
+        "rankLabel": "600",
+        "active": true
+      }
+    ],
+    "sources": [
+      {
+        "sourceId": "src-rank-taltech-qs-2027",
+        "officialUrl": "https://taltech.ee/en/news/taltech-rose-35-places-qs-world-university-rankings",
+        "sourceType": "ranking_provider",
+        "academicYear": "2027",
+        "verificationStatus": "verified",
+        "verificationDate": "2026-07-16",
+        "auditNote": "Official institution ranking report with provider, edition and scope."
+      }
+    ],
+    "active": true
+  },
+  {
+    "institutionId": "tallinn-university",
+    "name": "Tallinn University",
+    "country": "Estonia",
+    "city": "Tallinn",
+    "ownership": "public",
+    "aliases": [],
+    "rankings": [],
+    "sources": [],
+    "active": true
+  },
+  {
+    "institutionId": "estonian-business-school",
+    "name": "Estonian Business School",
+    "country": "Estonia",
+    "city": "Tallinn",
+    "ownership": "private",
+    "aliases": [
+      "EBS"
+    ],
+    "rankings": [],
+    "sources": [],
+    "active": true
+  },
+  {
+    "institutionId": "jagiellonian-university",
+    "name": "Jagiellonian University",
+    "country": "Poland",
+    "city": "Kraków",
+    "ownership": "public",
+    "aliases": [],
+    "rankings": [],
+    "sources": [],
+    "active": true
+  },
+  {
+    "institutionId": "university-of-warsaw",
+    "name": "University of Warsaw",
+    "country": "Poland",
+    "city": "Warsaw",
+    "ownership": "public",
+    "aliases": [],
+    "rankings": [
+      {
+        "rankingId": "rank-warsaw-qs-2026",
+        "institutionId": "university-of-warsaw",
+        "sourceId": "src-rank-warsaw-qs-2026",
+        "provider": "QS",
+        "scope": "world",
+        "editionYear": 2026,
+        "rankMin": 271,
+        "rankMax": 271,
+        "rankLabel": "271",
+        "active": true
+      }
+    ],
+    "sources": [
+      {
+        "sourceId": "src-rank-warsaw-qs-2026",
+        "officialUrl": "https://en.uw.edu.pl/university-of-warsaw-in-qs-world-university-rankings/",
+        "sourceType": "ranking_provider",
+        "academicYear": "2026",
+        "verificationStatus": "verified",
+        "verificationDate": "2026-07-16",
+        "auditNote": "Official institution ranking report with provider, edition and scope."
+      }
+    ],
+    "active": true
+  },
+  {
+    "institutionId": "kozminski-university",
+    "name": "Kozminski University",
+    "country": "Poland",
+    "city": "Warsaw",
+    "ownership": "private",
+    "aliases": [],
+    "rankings": [],
+    "sources": [],
+    "active": true
+  },
+  {
+    "institutionId": "lazarski-university",
+    "name": "Łazarski University",
+    "country": "Poland",
+    "city": "Warsaw",
+    "ownership": "private",
+    "aliases": [
+      "Lazarski University"
+    ],
+    "rankings": [],
+    "sources": [],
+    "active": true
+  },
+  {
+    "institutionId": "ase-bucharest",
+    "name": "Bucharest University of Economic Studies",
+    "country": "Romania",
+    "city": "Bucharest",
+    "ownership": "public",
+    "aliases": [
+      "ASE"
+    ],
+    "rankings": [],
+    "sources": [],
+    "active": true
+  },
+  {
+    "institutionId": "university-of-bucharest",
+    "name": "University of Bucharest",
+    "country": "Romania",
+    "city": "Bucharest",
+    "ownership": "public",
+    "aliases": [],
+    "rankings": [
+      {
+        "rankingId": "rank-bucharest-qs-2026",
+        "institutionId": "university-of-bucharest",
+        "sourceId": "src-rank-bucharest-qs-2026",
+        "provider": "QS",
+        "scope": "world",
+        "editionYear": 2026,
+        "rankMin": 801,
+        "rankMax": 850,
+        "rankLabel": "801–850",
+        "active": true
+      }
+    ],
+    "sources": [
+      {
+        "sourceId": "src-rank-bucharest-qs-2026",
+        "officialUrl": "https://unibuc.ro/qs-world-university-rankings-2026-universitatea-din-bucuresti-prima-universitate-din-romania-si-in-primele-770-de-universitati-din-lume/?lang=en",
+        "sourceType": "ranking_provider",
+        "academicYear": "2026",
+        "verificationStatus": "verified",
+        "verificationDate": "2026-07-16",
+        "auditNote": "Official institution ranking report with provider, edition and scope."
+      }
+    ],
+    "active": true
+  },
+  {
+    "institutionId": "romanian-american-university",
+    "name": "Romanian-American University",
+    "country": "Romania",
+    "city": "Bucharest",
+    "ownership": "private",
+    "aliases": [
+      "RAU"
+    ],
+    "rankings": [],
+    "sources": [],
+    "active": true
+  },
+  {
+    "institutionId": "titu-maiorescu-university",
+    "name": "Titu Maiorescu University",
+    "country": "Romania",
+    "city": "Bucharest",
+    "ownership": "private",
+    "aliases": [],
+    "rankings": [],
+    "sources": [],
+    "active": true
+  },
+  {
+    "institutionId": "university-of-vienna",
+    "name": "University of Vienna",
+    "country": "Austria",
+    "city": "Vienna",
+    "ownership": "public",
+    "aliases": [],
+    "rankings": [
+      {
+        "rankingId": "rank-vienna-qs-2027",
+        "institutionId": "university-of-vienna",
+        "sourceId": "src-rank-vienna-qs-2027",
+        "provider": "QS",
+        "scope": "world",
+        "editionYear": 2027,
+        "rankMin": 140,
+        "rankMax": 140,
+        "rankLabel": "140",
+        "active": true
+      }
+    ],
+    "sources": [
+      {
+        "sourceId": "src-rank-vienna-qs-2027",
+        "officialUrl": "https://www.univie.ac.at/en/news/press-room/press-releases/detail/university-of-vienna-ranks-in-140th-position-in-the-qs-rankings",
+        "sourceType": "ranking_provider",
+        "academicYear": "2027",
+        "verificationStatus": "verified",
+        "verificationDate": "2026-07-16",
+        "auditNote": "Official institution ranking report with provider, edition and scope."
+      }
+    ],
+    "active": true
+  },
+  {
+    "institutionId": "fh-upper-austria",
+    "name": "University of Applied Sciences Upper Austria",
+    "country": "Austria",
+    "city": "Wels / Steyr",
+    "ownership": "public",
+    "aliases": [
+      "FH Upper Austria"
+    ],
+    "rankings": [],
+    "sources": [],
+    "active": true
+  },
+  {
+    "institutionId": "modul-university-vienna",
+    "name": "Modul University Vienna",
+    "country": "Austria",
+    "city": "Vienna",
+    "ownership": "private",
+    "aliases": [],
+    "rankings": [],
+    "sources": [],
+    "active": true
+  },
+  {
+    "institutionId": "webster-vienna",
+    "name": "Webster Vienna Private University",
+    "country": "Austria",
+    "city": "Vienna",
+    "ownership": "private",
+    "aliases": [],
+    "rankings": [],
+    "sources": [],
+    "active": true
+  },
+  {
+    "institutionId": "charles-university",
+    "name": "Charles University",
+    "country": "Czechia",
+    "city": "Prague",
+    "ownership": "public",
+    "aliases": [],
+    "rankings": [
+      {
+        "rankingId": "rank-charles-qs-2027",
+        "institutionId": "charles-university",
+        "sourceId": "src-rank-charles-qs-2027",
+        "provider": "QS",
+        "scope": "world",
+        "editionYear": 2027,
+        "rankMin": 273,
+        "rankMax": 273,
+        "rankLabel": "273",
+        "active": true
+      }
+    ],
+    "sources": [
+      {
+        "sourceId": "src-rank-charles-qs-2027",
+        "officialUrl": "https://cuni.cz/UK-15879.html",
+        "sourceType": "ranking_provider",
+        "academicYear": "2027",
+        "verificationStatus": "verified",
+        "verificationDate": "2026-07-16",
+        "auditNote": "Official institution ranking report with provider, edition and scope."
+      }
+    ],
+    "active": true
+  },
+  {
+    "institutionId": "anglo-american-university",
+    "name": "Anglo-American University",
+    "country": "Czechia",
+    "city": "Prague",
+    "ownership": "private",
+    "aliases": [
+      "AAU"
+    ],
+    "rankings": [],
+    "sources": [],
+    "active": true
+  },
+  {
+    "institutionId": "university-of-bologna",
+    "name": "University of Bologna",
+    "country": "Italy",
+    "city": "Bologna",
+    "ownership": "public",
+    "aliases": [],
+    "rankings": [
+      {
+        "rankingId": "rank-bologna-qs-2027",
+        "institutionId": "university-of-bologna",
+        "sourceId": "src-rank-bologna-qs-2027",
+        "provider": "QS",
+        "scope": "world",
+        "editionYear": 2027,
+        "rankMin": 123,
+        "rankMax": 123,
+        "rankLabel": "123",
+        "active": true
+      }
+    ],
+    "sources": [
+      {
+        "sourceId": "src-rank-bologna-qs-2027",
+        "officialUrl": "https://magazine.unibo.it/en/articles/qs-rankings-the-university-of-bologna-moves-up-fifteen-places-and-is-123rd-in-the-world",
+        "sourceType": "ranking_provider",
+        "academicYear": "2027",
+        "verificationStatus": "verified",
+        "verificationDate": "2026-07-16",
+        "auditNote": "Official institution ranking report with provider, edition and scope."
+      }
+    ],
+    "active": true
+  },
+  {
+    "institutionId": "bocconi-university",
+    "name": "Bocconi University",
+    "country": "Italy",
+    "city": "Milan",
+    "ownership": "private",
+    "aliases": [],
+    "rankings": [],
+    "sources": [],
+    "active": true
+  },
+  {
+    "institutionId": "luiss-university",
+    "name": "Luiss Guido Carli",
+    "country": "Italy",
+    "city": "Rome",
+    "ownership": "private",
+    "aliases": [
+      "Luiss University"
+    ],
+    "rankings": [],
+    "sources": [],
+    "active": true
+  }
+]

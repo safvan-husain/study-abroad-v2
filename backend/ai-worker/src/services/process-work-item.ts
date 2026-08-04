@@ -63,6 +63,35 @@ export async function processWorkItem(
 
   try {
     const input = JSON.parse(item.inputJson) as Record<string, unknown>;
+    if (item.kind === 'program_family_overview') {
+      const result = {
+        entityType: 'family',
+        entityId: item.entityId,
+        title: String(input.name ?? item.displayTitle),
+        detail: String(input.description ?? ''),
+        areaId: String(input.areaId ?? ''),
+        aliases: JSON.parse(String(input.aliasesJson ?? '[]')),
+        typicalSubjects: JSON.parse(String(input.typicalSubjectsJson ?? '[]')),
+        careerDirections: JSON.parse(String(input.careerDirectionsJson ?? '[]')),
+        relatedFamilyIds: JSON.parse(String(input.relatedFamilyIdsJson ?? '[]')),
+        offeringCount: Number(input.offeringCount ?? 0),
+      };
+      await coordinator.completeWorkItem(item.workItemId, attempt, JSON.stringify(result));
+      return;
+    }
+
+    if (item.kind === 'program_offering') {
+      const result = {
+        entityType: 'course',
+        entityId: item.entityId,
+        title: String(input.name ?? item.displayTitle),
+        detail: `${String(input.qualification ?? input.level ?? 'Qualification')} at ${String(input.institutionName ?? 'institution')}`,
+        ...input,
+      };
+      await coordinator.completeWorkItem(item.workItemId, attempt, JSON.stringify(result));
+      return;
+    }
+
     if (item.kind === 'course_fit_summary') {
       const profile = (input.profile && typeof input.profile === 'object'
         ? input.profile
@@ -94,6 +123,13 @@ export async function processWorkItem(
               level: String(input.level ?? ''),
               tuitionBand: String(input.tuitionBand ?? ''),
               englishBar: String(input.englishBar ?? ''),
+              familyId: String(input.familyId ?? ''),
+              qualification: String(input.qualification ?? ''),
+              officialUrl: String(input.officialUrl ?? ''),
+              ownership: String(input.ownership ?? ''),
+              requirementsJson: String(input.requirementsJson ?? '[]'),
+              rankingsJson: String(input.rankingsJson ?? '[]'),
+              sourcesJson: String(input.sourcesJson ?? '[]'),
               studentPhrase: typeof input.studentPhrase === 'string' ? input.studentPhrase : undefined,
             },
           });

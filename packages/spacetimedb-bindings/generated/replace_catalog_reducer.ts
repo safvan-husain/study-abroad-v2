@@ -11,11 +11,23 @@ import {
 } from "spacetimedb";
 
 import {
+  CatalogInstitutionSeed,
+  CatalogFamilySeed,
   CatalogCourseSeed,
+  CatalogPolicySeed,
 } from "./types";
 
 export default {
+  get institutions() {
+    return __t.array(CatalogInstitutionSeed);
+  },
+  get families() {
+    return __t.array(CatalogFamilySeed);
+  },
   get courses() {
     return __t.array(CatalogCourseSeed);
+  },
+  get policy() {
+    return CatalogPolicySeed;
   },
 };

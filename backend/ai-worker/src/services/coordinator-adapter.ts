@@ -47,7 +47,41 @@ export class SpacetimeCoordinatorAdapter implements Coordinator, WorkItemCoordin
         level: String(row.level ?? ''),
         tuitionBand: String(row.tuitionBand ?? ''),
         englishBar: String(row.englishBar ?? ''),
+        familyId: String(row.familyId ?? ''),
+        qualification: String(row.qualification ?? ''),
+        officialUrl: String(row.officialUrl ?? ''),
+        ownership: String(row.ownership ?? ''),
+        requirementsJson: String(row.requirementsJson ?? '[]'),
+        rankingsJson: String(row.rankingsJson ?? '[]'),
+        sourcesJson: String(row.sourcesJson ?? '[]'),
       }));
+  }
+  listFamilies() {
+    const table = (this.connection.db as { catalog_family?: { iter: () => Iterable<Record<string, unknown>> } }).catalog_family;
+    if (!table) return [];
+    return [...table.iter()].filter((row) => row.active !== false).map((row) => ({
+      familyId: String(row.familyId ?? ''), areaId: String(row.areaId ?? ''), name: String(row.name ?? ''),
+      aliasesJson: String(row.aliasesJson ?? '[]'), description: String(row.description ?? ''),
+      typicalSubjectsJson: String(row.typicalSubjectsJson ?? '[]'), careerDirectionsJson: String(row.careerDirectionsJson ?? '[]'),
+      relatedFamilyIdsJson: String(row.relatedFamilyIdsJson ?? '[]'), active: row.active !== false,
+    }));
+  }
+  getSelection(conversationId: string) {
+    const table = (this.connection.db as { worker_conversation_selections?: { iter: () => Iterable<Record<string, unknown>> } }).worker_conversation_selections;
+    const row = table ? [...table.iter()].find((entry) => String(entry.conversationId) === conversationId) : undefined;
+    if (!row) return undefined;
+    const parse = (value: unknown) => {
+      try { return JSON.parse(String(value ?? '[]')) as string[]; } catch { return []; }
+    };
+    return {
+      presentedFamilyIds: parse(row.presentedFamilyIdsJson),
+      presentedOfferingIds: parse(row.presentedOfferingIdsJson),
+      provisionalOfferingIds: parse(row.provisionalOfferingIdsJson),
+      suppressedOfferingIds: parse(row.suppressedOfferingIdsJson),
+      confirmedOfferingIds: parse(row.confirmedOfferingIdsJson),
+      comparisonCriterion: String(row.comparisonCriterion ?? ''),
+      revision: BigInt(row.revision as bigint),
+    };
   }
   getProfile(conversationId: string): DiscoveryProfilePatch | undefined {
     const table = (this.connection.db as { worker_conversation_profiles?: { iter: () => Iterable<Record<string, unknown>> } }).worker_conversation_profiles;
@@ -96,7 +130,16 @@ export class SpacetimeCoordinatorAdapter implements Coordinator, WorkItemCoordin
     await this.reducer('renew')({ turnId, attempt, leaseSeconds: BigInt(leaseSeconds) });
   }
   async complete(turnId: string, attempt: number, completion: TurnCompletion) {
-    await this.reducer('completeTurn')({ turnId, attempt, ...completion });
+    const {
+      presentedFamilyIds, presentedOfferingIds, provisionalOfferingIds,
+      ...rest
+    } = completion;
+    await this.reducer('completeTurn')({
+      turnId, attempt, ...rest,
+      presentedFamilyIdsJson: JSON.stringify(presentedFamilyIds),
+      presentedOfferingIdsJson: JSON.stringify(presentedOfferingIds),
+      provisionalOfferingIdsJson: JSON.stringify(provisionalOfferingIds),
+    });
   }
   async retry(turnId: string, attempt: number, errorCode: string) {
     await this.reducer('retry')({ turnId, attempt, errorCode });
