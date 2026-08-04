@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { catalogAreaDisplayName } from '@study-abroad/contracts';
 import type { AdvisorCatalogCourse, AdvisorCatalogFamily, AdvisorDirective, AdvisorMessage, AdvisorProfile, AdvisorSelection, AdvisorSelectionRevision, AdvisorTurn, AdvisorTurnUpdate, AdvisorUiAction } from '../../hooks/useAdvisorWorkspace';
 import { AdvisorConversation } from './AdvisorConversation';
 
@@ -70,6 +71,10 @@ export function AdvisorRail({
     const family = catalogFamilies.find((row) => row.familyId === id);
     return family ? [family.name] : [];
   });
+  const contextAreas = [...new Set((selection?.presentedFamilyIds ?? []).flatMap((id) => {
+    const family = catalogFamilies.find((row) => row.familyId === id);
+    return family?.areaId ? [catalogAreaDisplayName(family.areaId)] : [];
+  }))];
   const contextUniversities = [...new Set((selection?.presentedOfferingIds ?? []).flatMap((id) => {
     const course = catalogCourses.find((row) => row.courseId === id);
     return course ? [course.institutionName] : [];
@@ -117,8 +122,15 @@ export function AdvisorRail({
         ) : null}
         <label htmlFor="advisor-message">Message your advisor</label>
         <div className="composer">
-          <textarea id="advisor-message" value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void submit(); } }} placeholder="Describe your background and interests..." rows={2} disabled={connectionState !== 'ready'} />
-          <button type="button" aria-label="Send message" onClick={() => void submit()} disabled={!draft.trim() || connectionState !== 'ready' || sending}>↑</button>
+          <div className="composer-row">
+            <textarea id="advisor-message" value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void submit(); } }} placeholder="Describe your background and interests..." rows={2} disabled={connectionState !== 'ready'} />
+            <button type="button" aria-label="Send message" onClick={() => void submit()} disabled={!draft.trim() || connectionState !== 'ready' || sending}>↑</button>
+          </div>
+          {contextAreas.length ? (
+            <div className="composer-area-badge" aria-label="Catalogue area">
+              {contextAreas.slice(0, 2).map((name) => <span key={`area-${name}`}>{name}</span>)}
+            </div>
+          ) : null}
         </div>
         {provisional.length ? (
           <section className="provisional-selection" aria-label="Provisional course selection">
