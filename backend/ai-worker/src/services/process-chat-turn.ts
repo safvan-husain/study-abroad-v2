@@ -44,6 +44,10 @@ export interface ChatTurn {
   baseUiRevision: bigint;
   baseContextRevision?: bigint;
   uiContext: UserUiState;
+  /** Enqueue-time selection snapshot from TurnJob (authoritative for this turn). */
+  selectionContext?: AgentSelectionContext;
+  /** Enqueue-time profile snapshot from TurnJob (authoritative for this turn). */
+  profile?: DiscoveryProfilePatch;
 }
 
 export interface TurnCompletion {
@@ -247,8 +251,8 @@ export async function processChatTurn(
       }
       return;
     }
-    const profile = catalog?.getProfile(turn.conversationId) ?? emptyProfile();
-    const selectionContext = catalog?.getSelection?.(turn.conversationId) ?? emptySelection();
+    const profile = turn.profile ?? catalog?.getProfile(turn.conversationId) ?? emptyProfile();
+    const selectionContext = turn.selectionContext ?? emptySelection();
     const userMessage: ChatMessage = {
       messageId: turn.userMessageId, conversationId: turn.conversationId, turnId: turn.turnId,
       role: 'user', content: turn.userContent, createdAt: new Date().toISOString(),
