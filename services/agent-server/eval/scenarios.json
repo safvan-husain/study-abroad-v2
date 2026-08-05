@@ -73,6 +73,7 @@
     "uiContext": {},
     "selectionContext": {
       "presentedFamilyIds": ["computer-science", "computer-systems"],
+      "selectedFamilyIds": [],
       "presentedOfferingIds": [
         "lu-computer-science-bsc",
         "rtu-computer-systems-bsc"
@@ -87,6 +88,23 @@
         "lu-computer-science-bsc",
         "rtu-computer-systems-bsc"
       ]
+    }
+  },
+  {
+    "id": "compare-two-course-types",
+    "message": "Compare these course types for me.",
+    "uiContext": {},
+    "selectionContext": {
+      "presentedFamilyIds": ["computer-science", "data-science", "computer-systems"],
+      "selectedFamilyIds": ["computer-science", "data-science"],
+      "presentedOfferingIds": [],
+      "provisionalOfferingIds": [],
+      "suppressedOfferingIds": []
+    },
+    "expect": {
+      "routeIntent": "discovery",
+      "scope": "compare_families",
+      "familyIds": ["computer-science", "data-science"]
     }
   },
   {

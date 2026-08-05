@@ -71,6 +71,7 @@ button:focus-visible, textarea:focus-visible, a:focus-visible { outline: 3px sol
 .work-card[aria-busy="true"] { background-image: linear-gradient(105deg, transparent 40%, rgba(219, 233, 223, .7) 50%, transparent 60%); background-size: 250% 100%; animation: sheen 1.8s infinite; }
 .family-card { display: block; }
 .family-card p + p { margin-top: 10px; font-size: 11px; }
+.family-card .offering-actions { margin-top: 12px; justify-content: flex-end; }
 .offering-grid { grid-template-columns: 1fr; }
 .offering-family-groups { display: grid; gap: 27px; }
 .offering-family-group { display: grid; gap: 11px; }

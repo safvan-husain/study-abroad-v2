@@ -182,6 +182,8 @@ function buildWorkItems(
         };
       });
   }
+  // Chat-only branches (for example compare_families) publish assistant prose without workspace cards.
+  if (!advisor.workKind) return [];
 
   const offeringIds = advisor.presentedOfferingIds.length
     ? advisor.presentedOfferingIds

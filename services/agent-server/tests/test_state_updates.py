@@ -1,6 +1,7 @@
 from agent_server.state_updates import (
     build_branch_area_overview,
     build_branch_areas_overview,
+    build_branch_family_comparison,
     complete_advisor_turn,
     set_route_decision,
     set_scope_decision,
@@ -56,3 +57,12 @@ def test_branch_builders_do_not_touch_graph_state():
     assert areas["workKind"] == "areas_overview"
     assert areas["presentedFamilyIds"] == []
     assert areas["directive"]["type"] == "catalog"
+    family_compare = build_branch_family_comparison(
+        ["computer-science", "data-science"],
+        "Computer Science focuses on algorithms; Data Science focuses on analysis.",
+    )
+    assert family_compare["workKind"] == ""
+    assert family_compare["directive"]["type"] == "discovery"
+    assert family_compare["presentedFamilyIds"] == ["computer-science", "data-science"]
+    assert family_compare["presentedOfferingIds"] == []
+    assert "algorithms" in family_compare["assistantContent"]

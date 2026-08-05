@@ -340,11 +340,12 @@ def route_after_intent(state):
         ],
         stateWrites: ['scope_decision'],
         deterministic: [
-          'Allowed scopes: areas_overview, area_overview, family_offerings, all_area_offerings, compare_offerings, personalize_selection, clarify.',
+          'Allowed scopes: areas_overview, area_overview, family_offerings, all_area_offerings, compare_offerings, compare_families, personalize_selection, clarify.',
           'areaId / familyIds / offeringIds must exist in catalog.',
           'compare_offerings: 2–4 offerings + comparisonCriterion; message must contain compare cues.',
+          'compare_families: 2–4 course types from selectedFamilyIds (preferred) or presentedFamilyIds; chat-only, no workspace comparison UI.',
           'personalize_selection requires offeringIds; family_offerings requires familyIds.',
-          '_requests_all_presented override wins over model.',
+          '_requests_all_presented and _requests_family_comparison overrides win over model.',
           'Offline fallback: mapped interest → area_overview; cold-start browse without offering context → areas_overview; else clarify.',
         ],
         pitfalls: [

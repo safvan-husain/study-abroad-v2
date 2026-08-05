@@ -209,6 +209,7 @@ export const ConversationSelection = __t.object("ConversationSelection", {
   conversationId: __t.string(),
   revision: __t.u64(),
   presentedFamilyIdsJson: __t.string(),
+  selectedFamilyIdsJson: __t.string(),
   presentedOfferingIdsJson: __t.string(),
   provisionalOfferingIdsJson: __t.string(),
   suppressedOfferingIdsJson: __t.string(),

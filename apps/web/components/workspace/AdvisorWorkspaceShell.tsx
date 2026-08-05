@@ -96,6 +96,7 @@ export function AdvisorWorkspaceShell() {
         documentRequirements={workspace.documentRequirements} documentSubmissions={workspace.documentSubmissions}
         setScrollElement={navigation.setScrollElement} onScroll={navigation.rememberScroll}
         onSelectOffering={(offeringId) => void workspace.selectOffering(offeringId)}
+        onSelectFamily={(familyId) => void workspace.selectFamily(familyId)}
         onUploadDocument={workspace.uploadDocument}
       />
       <AdvisorRail
@@ -105,7 +106,9 @@ export function AdvisorWorkspaceShell() {
         selection={workspace.selection} selectionRevisions={workspace.selectionRevisions}
         catalogCourses={workspace.catalogCourses} catalogFamilies={workspace.catalogFamilies}
         onUpdateProfile={workspace.updateProfile} onOpenAction={openAction}
-        onRemoveOffering={workspace.removeProvisionalOffering} onRestoreRevision={workspace.restoreSelectionRevision}
+        onRemoveOffering={workspace.removeProvisionalOffering}
+        onRemoveSelectedFamily={workspace.removeSelectedFamily}
+        onRestoreRevision={workspace.restoreSelectionRevision}
         onConfirmSelection={workspace.confirmSelection} onEditConfirmedSelection={workspace.editConfirmedSelection}
       />
     </div>

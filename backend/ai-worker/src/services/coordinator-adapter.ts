@@ -75,6 +75,7 @@ export class SpacetimeCoordinatorAdapter implements Coordinator, WorkItemCoordin
     };
     return {
       presentedFamilyIds: parse(row.presentedFamilyIdsJson),
+      selectedFamilyIds: parse(row.selectedFamilyIdsJson),
       presentedOfferingIds: parse(row.presentedOfferingIdsJson),
       provisionalOfferingIds: parse(row.provisionalOfferingIdsJson),
       suppressedOfferingIds: parse(row.suppressedOfferingIdsJson),

@@ -19,6 +19,7 @@ export function WorkspaceView({
   setScrollElement = () => undefined,
   onScroll = () => undefined,
   onSelectOffering = () => undefined,
+  onSelectFamily = () => undefined,
   onUploadDocument = async () => undefined,
 }: {
   directive?: AdvisorDirective;
@@ -35,6 +36,7 @@ export function WorkspaceView({
   setScrollElement: (element: HTMLDivElement | null) => void;
   onScroll: () => void;
   onSelectOffering?: (offeringId: string) => void;
+  onSelectFamily?: (familyId: string) => void;
   onUploadDocument?: (documentType: string, file: File) => Promise<void>;
 }) {
   const exploring = target.viewType !== 'home';
@@ -73,7 +75,7 @@ export function WorkspaceView({
             <div><h3>Ready to explore</h3><p>Tell the advisor about your background and interests. Course matches will appear here.</p></div>
           </section>
         ) : null}
-        {exploring ? <WorkspaceWorkProgress workSets={workSets} items={workItems} results={workResults} workSetId={target.workSetId} selectedEntityId={target.entityId} catalogCourses={catalogCourses} catalogFamilies={catalogFamilies} selection={selection} onSelectOffering={onSelectOffering} /> : null}
+        {exploring ? <WorkspaceWorkProgress workSets={workSets} items={workItems} results={workResults} workSetId={target.workSetId} selectedEntityId={target.entityId} catalogCourses={catalogCourses} catalogFamilies={catalogFamilies} selection={selection} onSelectOffering={onSelectOffering} onSelectFamily={onSelectFamily} /> : null}
         {selection?.confirmedOfferingIds.length ? (
           <section className="documents-workspace" aria-labelledby="documents-title">
             <div className="section-heading"><div><span className="eyebrow">CONFIRMED DOCUMENT CONTRACT</span><h3 id="documents-title">Collect your documents</h3></div><span>{documentRequirements.filter((row) => row.status === 'submitted').length}/{documentRequirements.length} uploaded</span></div>

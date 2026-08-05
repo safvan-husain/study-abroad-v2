@@ -67,13 +67,38 @@ function OfferingCard({ item, result, selected, onSelect }: { item: AdvisorWorkI
   );
 }
 
+function FamilyCard({
+  item, result, selected, onSelect,
+}: {
+  item: AdvisorWorkItem; result?: ResultData; selected: boolean; onSelect: (id: string) => void;
+}) {
+  const pending = ['pending', 'claimed', 'retrying'].includes(item.status);
+  if (!result) {
+    return <article className={`work-card family-card work-card-${item.status}`} aria-busy={pending}><span className="work-card-label">Course type</span><h4>{item.displayTitle}</h4><p>Loading the reviewed course-type description…</p></article>;
+  }
+  return (
+    <article id={`workspace-item-${item.workItemId}`} className={`work-card family-card work-card-${item.status}${selected ? ' work-card-selected' : ''}`}>
+      <span className="work-card-label">{Number(result.offeringCount ?? 0)} university offerings</span>
+      <h4>{String(result.title ?? item.displayTitle)}</h4>
+      <p>{String(result.detail ?? 'Loading the reviewed course-type description…')}</p>
+      {stringArray(result.typicalSubjects).length ? <p><strong>Typical subjects:</strong> {stringArray(result.typicalSubjects).join(', ')}</p> : null}
+      {stringArray(result.careerDirections).length ? <p><strong>Career directions:</strong> {stringArray(result.careerDirections).join(', ')}</p> : null}
+      <div className="offering-actions">
+        <button type="button" disabled={selected} onClick={() => onSelect(item.entityId)}>{selected ? 'Selected' : 'Choose course type'}</button>
+      </div>
+    </article>
+  );
+}
+
 export function WorkspaceWorkProgress({
   workSets, items, results, workSetId, selectedEntityId, catalogFamilies = [], selection,
   onSelectOffering = () => undefined,
+  onSelectFamily = () => undefined,
 }: {
   workSets: AdvisorWorkSet[]; items: AdvisorWorkItem[]; results: AdvisorWorkResult[]; workSetId?: string;
   selectedEntityId?: string; catalogCourses?: AdvisorCatalogCourse[]; catalogFamilies?: AdvisorCatalogFamily[];
   selection?: AdvisorSelection; onSelectOffering?: (offeringId: string) => void;
+  onSelectFamily?: (familyId: string) => void;
 }) {
   const activeSet = workSets.find((workSet) => workSet.workSetId === workSetId);
   const activeItems = activeSet ? items.filter((item) => item.workSetId === activeSet.workSetId) : [];
@@ -102,6 +127,7 @@ export function WorkspaceWorkProgress({
         ? 'Course types in this area'
         : 'University offerings';
   const selectedIds = new Set([...(selection?.provisionalOfferingIds ?? []), ...(selection?.confirmedOfferingIds ?? [])]);
+  const selectedFamilyIds = new Set(selection?.selectedFamilyIds ?? []);
   const relatedIds = [...new Set(offeringItems.flatMap((item) => {
     const data = resultData(results.find((entry) => entry.workItemId === item.workItemId));
     const family = catalogFamilies.find((row) => row.familyId === String(data?.familyId ?? ''));
@@ -116,7 +142,7 @@ export function WorkspaceWorkProgress({
       })}</div> : null}
       {familyItems.length ? <div className="work-grid family-grid">{familyItems.map((item) => {
         const result = resultData(results.find((entry) => entry.workItemId === item.workItemId));
-        return <article id={`workspace-item-${item.workItemId}`} className={`work-card family-card work-card-${item.status}`} key={item.workItemId}><span className="work-card-label">{Number(result?.offeringCount ?? 0)} university offerings</span><h4>{String(result?.title ?? item.displayTitle)}</h4><p>{String(result?.detail ?? 'Loading the reviewed course-type description…')}</p>{stringArray(result?.typicalSubjects).length ? <p><strong>Typical subjects:</strong> {stringArray(result?.typicalSubjects).join(', ')}</p> : null}{stringArray(result?.careerDirections).length ? <p><strong>Career directions:</strong> {stringArray(result?.careerDirections).join(', ')}</p> : null}</article>;
+        return <FamilyCard key={item.workItemId} item={item} result={result} selected={selectedFamilyIds.has(item.entityId)} onSelect={onSelectFamily} />;
       })}</div> : null}
       {offeringItems.length ? activeSet.kind === 'comparison' ? (
         <div className="work-grid comparison-grid">{offeringEntries.map(({ item, data }) => <OfferingCard key={item.workItemId} item={item} result={data} selected={selectedIds.has(item.entityId)} onSelect={onSelectOffering} />)}</div>

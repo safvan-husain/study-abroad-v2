@@ -14,6 +14,7 @@ export default __t.row({
   conversationId: __t.string().name("conversation_id"),
   revision: __t.u64(),
   presentedFamilyIdsJson: __t.string().name("presented_family_ids_json"),
+  selectedFamilyIdsJson: __t.string().name("selected_family_ids_json"),
   presentedOfferingIdsJson: __t.string().name("presented_offering_ids_json"),
   provisionalOfferingIdsJson: __t.string().name("provisional_offering_ids_json"),
   suppressedOfferingIdsJson: __t.string().name("suppressed_offering_ids_json"),
