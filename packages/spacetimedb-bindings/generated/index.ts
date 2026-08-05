@@ -53,6 +53,7 @@ import PublishUiPresenceReducer from "./publish_ui_presence_reducer";
 import PublishUiStateReducer from "./publish_ui_state_reducer";
 import RegisterWorkerReducer from "./register_worker_reducer";
 import RemoveProvisionalOfferingReducer from "./remove_provisional_offering_reducer";
+import RemoveSelectedFamilyReducer from "./remove_selected_family_reducer";
 import RenewReducer from "./renew_reducer";
 import RenewWorkItemReducer from "./renew_work_item_reducer";
 import ReplaceCatalogReducer from "./replace_catalog_reducer";
@@ -60,6 +61,7 @@ import ResolveAutoUiActionReducer from "./resolve_auto_ui_action_reducer";
 import RestoreSelectionRevisionReducer from "./restore_selection_revision_reducer";
 import RetryReducer from "./retry_reducer";
 import RetryWorkItemReducer from "./retry_work_item_reducer";
+import SelectFamilyReducer from "./select_family_reducer";
 import SelectOfferingReducer from "./select_offering_reducer";
 import SendMessageReducer from "./send_message_reducer";
 import UpdateDiscoveryProfileReducer from "./update_discovery_profile_reducer";
@@ -356,6 +358,7 @@ const reducersSchema = __reducers(
   __reducerSchema("publish_ui_state", PublishUiStateReducer),
   __reducerSchema("register_worker", RegisterWorkerReducer),
   __reducerSchema("remove_provisional_offering", RemoveProvisionalOfferingReducer),
+  __reducerSchema("remove_selected_family", RemoveSelectedFamilyReducer),
   __reducerSchema("renew", RenewReducer),
   __reducerSchema("renew_work_item", RenewWorkItemReducer),
   __reducerSchema("replace_catalog", ReplaceCatalogReducer),
@@ -363,6 +366,7 @@ const reducersSchema = __reducers(
   __reducerSchema("restore_selection_revision", RestoreSelectionRevisionReducer),
   __reducerSchema("retry", RetryReducer),
   __reducerSchema("retry_work_item", RetryWorkItemReducer),
+  __reducerSchema("select_family", SelectFamilyReducer),
   __reducerSchema("select_offering", SelectOfferingReducer),
   __reducerSchema("send_message", SendMessageReducer),
   __reducerSchema("update_discovery_profile", UpdateDiscoveryProfileReducer),

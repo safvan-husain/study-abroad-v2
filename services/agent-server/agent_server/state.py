@@ -19,6 +19,7 @@ class ScopeDecision(TypedDict):
         "family_offerings",
         "all_area_offerings",
         "compare_offerings",
+        "compare_families",
         "personalize_selection",
         "clarify",
     ]

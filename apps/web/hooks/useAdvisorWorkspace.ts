@@ -28,7 +28,7 @@ export type AdvisorCatalogFamily = {
   typicalSubjectsJson: string; careerDirectionsJson: string; relatedFamilyIdsJson: string;
 };
 export type AdvisorSelection = {
-  revision: bigint; presentedFamilyIds: string[]; presentedOfferingIds: string[]; provisionalOfferingIds: string[];
+  revision: bigint; presentedFamilyIds: string[]; selectedFamilyIds: string[]; presentedOfferingIds: string[]; provisionalOfferingIds: string[];
   suppressedOfferingIds: string[]; confirmedOfferingIds: string[]; confirmedSnapshotId: string | null; comparisonCriterion: string;
 };
 export type AdvisorSelectionRevision = { revision: bigint; source: string; rationale: string; provisionalOfferingIds: string[]; createdAtMicros: bigint };
@@ -147,6 +147,7 @@ export function useAdvisorWorkspace() {
       const parseIds = (value: unknown) => { try { return JSON.parse(String(value ?? '[]')) as string[]; } catch { return []; } };
       setSelection(selectionRow ? {
         revision: selectionRow.revision, presentedFamilyIds: parseIds(selectionRow.presentedFamilyIdsJson),
+        selectedFamilyIds: parseIds(selectionRow.selectedFamilyIdsJson),
         presentedOfferingIds: parseIds(selectionRow.presentedOfferingIdsJson), provisionalOfferingIds: parseIds(selectionRow.provisionalOfferingIdsJson),
         suppressedOfferingIds: parseIds(selectionRow.suppressedOfferingIdsJson), confirmedOfferingIds: parseIds(selectionRow.confirmedOfferingIdsJson),
         confirmedSnapshotId: selectionRow.confirmedSnapshotId ?? null, comparisonCriterion: selectionRow.comparisonCriterion ?? '',
@@ -291,6 +292,18 @@ export function useAdvisorWorkspace() {
     await connection.reducers.selectOffering({ conversationId, clientCommandId: commandId(), offeringId });
   }, [connectionState, conversationId]);
 
+  const selectFamily = useCallback(async (familyId: string) => {
+    const connection = connectionRef.current;
+    if (!connection || connectionState !== 'ready' || !conversationId) throw new Error('Advisor is not connected');
+    await connection.reducers.selectFamily({ conversationId, clientCommandId: commandId(), familyId });
+  }, [connectionState, conversationId]);
+
+  const removeSelectedFamily = useCallback(async (familyId: string) => {
+    const connection = connectionRef.current;
+    if (!connection || connectionState !== 'ready' || !conversationId) throw new Error('Advisor is not connected');
+    await connection.reducers.removeSelectedFamily({ conversationId, clientCommandId: commandId(), familyId });
+  }, [connectionState, conversationId]);
+
   const restoreSelectionRevision = useCallback(async (revision: bigint) => {
     const connection = connectionRef.current;
     if (!connection || connectionState !== 'ready' || !conversationId) throw new Error('Advisor is not connected');
@@ -328,6 +341,7 @@ export function useAdvisorWorkspace() {
     uiActions, userUiStates, turnUpdates, profile, catalogCourses, catalogFamilies, selection, selectionRevisions,
     documentRequirements, documentSubmissions, send, updateProfile, publishUiState,
     publishUiPresence, resolveAutoUiAction, openUiAction, removeProvisionalOffering, selectOffering,
+    selectFamily, removeSelectedFamily,
     restoreSelectionRevision, confirmSelection, editConfirmedSelection, uploadDocument,
   };
 }

@@ -46,8 +46,8 @@ ADVISOR_STATE_FIELD_NOTES: dict[str, str] = {
     "profile": "Student profile patch shape — see empty_profile(). Canonical truth from worker.",
     "ui_context": "Current UI focus (view, selected ids). Resolves pronouns like 'these'.",
     "selection_context": (
-        "presentedFamilyIds / presentedOfferingIds / provisional / suppressed. "
-        "Authoritative over checkpoint for 'show all these' overrides."
+        "presentedFamilyIds / selectedFamilyIds / presentedOfferingIds / provisional / suppressed. "
+        "Authoritative over checkpoint for 'show all these' and course-type comparison overrides."
     ),
     "course": "Single offering payload for course_fit child runs. Empty {} on discover.",
     "route_decision": "Written by route_intent. Absent at invoke.",
@@ -154,6 +154,7 @@ def empty_ui_context() -> dict[str, Any]:
 def empty_selection_context() -> dict[str, Any]:
     return {
         "presentedFamilyIds": [],
+        "selectedFamilyIds": [],
         "presentedOfferingIds": [],
         "provisionalOfferingIds": [],
         "suppressedOfferingIds": [],

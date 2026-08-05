@@ -156,6 +156,7 @@ describe('advisor workspace UI', () => {
       selection={{
         revision: 1n,
         presentedFamilyIds: ['computer-science', 'mathematical-and-computing-sciences-for-artificial-intelligence'],
+        selectedFamilyIds: [],
         presentedOfferingIds: [],
         provisionalOfferingIds: [],
         suppressedOfferingIds: [],
@@ -183,5 +184,72 @@ describe('advisor workspace UI', () => {
     expect(rail).toContain('composer-area-badge');
     expect(rail).toContain('Computing and Technology');
     expect(rail.match(/Computing and Technology/g)?.length).toBe(1);
+  });
+
+  it('shows selected course types under the composer separately from presented context chips', () => {
+    const rail = renderToStaticMarkup(<AdvisorRail
+      connectionState="ready"
+      messages={[]}
+      turns={[]}
+      turnUpdates={[]}
+      selection={{
+        revision: 2n,
+        presentedFamilyIds: ['computer-science', 'data-science'],
+        selectedFamilyIds: ['computer-science', 'data-science'],
+        presentedOfferingIds: [],
+        provisionalOfferingIds: [],
+        suppressedOfferingIds: [],
+        confirmedOfferingIds: [],
+        confirmedSnapshotId: null,
+        comparisonCriterion: '',
+      }}
+      catalogFamilies={[
+        {
+          familyId: 'computer-science', areaId: 'computing-technology', name: 'Computer Science',
+          aliasesJson: '[]', description: '', typicalSubjectsJson: '[]', careerDirectionsJson: '[]', relatedFamilyIdsJson: '[]',
+        },
+        {
+          familyId: 'data-science', areaId: 'computing-technology', name: 'Data Science',
+          aliasesJson: '[]', description: '', typicalSubjectsJson: '[]', careerDirectionsJson: '[]', relatedFamilyIdsJson: '[]',
+        },
+      ]}
+      onSend={async () => undefined}
+      onUpdateProfile={async () => undefined}
+    />);
+    expect(rail).toContain('Selected course types');
+    expect(rail).toContain('aria-label="Selected course types"');
+    expect(rail).toContain('2/4');
+    expect(rail).toContain('Remove Computer Science');
+    expect(rail).toContain('Remove Data Science');
+  });
+
+  it('lets students choose course types from family overview cards', () => {
+    const familyTarget = {
+      schemaVersion: 1 as const, viewType: 'family' as const, workSetId: 'set-family', entityType: 'family', entityId: 'computer-science',
+    };
+    const markup = renderToStaticMarkup(<WorkspaceView
+      workSets={[{ workSetId: 'set-family', status: 'completed', kind: 'area_overview' }]}
+      target={{ schemaVersion: 1, viewType: 'catalog', workSetId: 'set-family' }}
+      workItems={[{
+        workItemId: 'f1', workSetId: 'set-family', entityId: 'computer-science', kind: 'program_family_overview',
+        displayTitle: 'Computer Science', orderIndex: 0, target: familyTarget, status: 'completed', errorCode: null,
+      }]}
+      workResults={[{
+        workItemId: 'f1',
+        resultJson: JSON.stringify({
+          title: 'Computer Science', detail: 'Focuses on algorithms and software.', offeringCount: 2,
+          typicalSubjects: ['Algorithms'], careerDirections: ['Software engineering'],
+        }),
+        target: familyTarget,
+      }]}
+      selection={{
+        revision: 1n, presentedFamilyIds: ['computer-science'], selectedFamilyIds: [],
+        presentedOfferingIds: [], provisionalOfferingIds: [], suppressedOfferingIds: [],
+        confirmedOfferingIds: [], confirmedSnapshotId: null, comparisonCriterion: '',
+      }}
+    />);
+    expect(markup).toContain('Course types in this area');
+    expect(markup).toContain('Choose course type');
+    expect(markup).toContain('Focuses on algorithms and software.');
   });
 });

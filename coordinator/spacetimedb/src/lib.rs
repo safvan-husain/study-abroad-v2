@@ -361,6 +361,7 @@ pub struct ConversationSelection {
     pub conversation_id: String,
     pub revision: u64,
     pub presented_family_ids_json: String,
+    pub selected_family_ids_json: String,
     pub presented_offering_ids_json: String,
     pub provisional_offering_ids_json: String,
     pub suppressed_offering_ids_json: String,
@@ -1051,6 +1052,20 @@ fn validate_active_offerings(ctx: &ReducerContext, offering_ids: &[String]) {
     }
 }
 
+fn validate_active_families(ctx: &ReducerContext, family_ids: &[String]) {
+    for family_id in family_ids {
+        let family = ctx
+            .db
+            .catalog_family()
+            .family_id()
+            .find(family_id)
+            .unwrap_or_else(|| panic!("catalog family not found: {family_id}"));
+        if !family.active {
+            panic!("catalog family is inactive: {family_id}");
+        }
+    }
+}
+
 fn record_selection_revision(
     ctx: &ReducerContext,
     selection: &ConversationSelection,
@@ -1423,6 +1438,7 @@ pub fn ensure_guest_journey(ctx: &ReducerContext, conversation_id: String) {
             conversation_id,
             revision: 0,
             presented_family_ids_json: "[]".into(),
+            selected_family_ids_json: "[]".into(),
             presented_offering_ids_json: "[]".into(),
             provisional_offering_ids_json: "[]".into(),
             suppressed_offering_ids_json: "[]".into(),
@@ -2489,6 +2505,114 @@ pub fn select_offering(
         &client_command_id,
         "select_offering",
         Some(offering_id),
+    );
+}
+
+#[spacetimedb::reducer]
+pub fn select_family(
+    ctx: &ReducerContext,
+    conversation_id: String,
+    client_command_id: String,
+    family_id: String,
+) {
+    validate_command_id(&client_command_id).unwrap_or_else(|error| panic!("{error}"));
+    validate_identifier(&family_id, "invalid family identifier")
+        .unwrap_or_else(|error| panic!("{error}"));
+    ensure_member(ctx, &conversation_id);
+    if ctx
+        .db
+        .command()
+        .command_id()
+        .find(&client_command_id)
+        .is_some()
+    {
+        return;
+    }
+    validate_active_families(ctx, std::slice::from_ref(&family_id));
+    let mut selection = ctx
+        .db
+        .conversation_selection()
+        .conversation_id()
+        .find(&conversation_id)
+        .expect("conversation selection not found");
+    let mut selected = parse_id_list(&selection.selected_family_ids_json, 4)
+        .expect("invalid selected family selection");
+    if selected.contains(&family_id) {
+        return;
+    }
+    if selected.len() >= 4 {
+        panic!("selected course types are limited to four families");
+    }
+    selected.push(family_id.clone());
+    selection.revision = selection
+        .revision
+        .checked_add(1)
+        .expect("selection revision exhausted");
+    selection.selected_family_ids_json =
+        serde_json::to_string(&selected).expect("selection must serialize");
+    selection.updated_at_micros = now_micros(ctx);
+    ctx.db
+        .conversation_selection()
+        .conversation_id()
+        .update(selection);
+    commit_user_context_action(
+        ctx,
+        &conversation_id,
+        &client_command_id,
+        "select_family",
+        Some(family_id),
+    );
+}
+
+#[spacetimedb::reducer]
+pub fn remove_selected_family(
+    ctx: &ReducerContext,
+    conversation_id: String,
+    client_command_id: String,
+    family_id: String,
+) {
+    validate_command_id(&client_command_id).unwrap_or_else(|error| panic!("{error}"));
+    validate_identifier(&family_id, "invalid family identifier")
+        .unwrap_or_else(|error| panic!("{error}"));
+    ensure_member(ctx, &conversation_id);
+    if ctx
+        .db
+        .command()
+        .command_id()
+        .find(&client_command_id)
+        .is_some()
+    {
+        return;
+    }
+    let mut selection = ctx
+        .db
+        .conversation_selection()
+        .conversation_id()
+        .find(&conversation_id)
+        .expect("conversation selection not found");
+    let mut selected = parse_id_list(&selection.selected_family_ids_json, 4)
+        .expect("invalid selected family selection");
+    if !selected.contains(&family_id) {
+        return;
+    }
+    selected.retain(|row| row != &family_id);
+    selection.revision = selection
+        .revision
+        .checked_add(1)
+        .expect("selection revision exhausted");
+    selection.selected_family_ids_json =
+        serde_json::to_string(&selected).expect("selection must serialize");
+    selection.updated_at_micros = now_micros(ctx);
+    ctx.db
+        .conversation_selection()
+        .conversation_id()
+        .update(selection);
+    commit_user_context_action(
+        ctx,
+        &conversation_id,
+        &client_command_id,
+        "remove_selected_family",
+        Some(family_id),
     );
 }
 

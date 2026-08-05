@@ -22,6 +22,7 @@ export function AdvisorRail({
   onUpdateProfile,
   onOpenAction = () => undefined,
   onRemoveOffering = async () => undefined,
+  onRemoveSelectedFamily = async () => undefined,
   onRestoreRevision = async () => undefined,
   onConfirmSelection = async () => undefined,
   onEditConfirmedSelection = async () => undefined,
@@ -42,6 +43,7 @@ export function AdvisorRail({
   onUpdateProfile: (profile: AdvisorProfile) => Promise<void>;
   onOpenAction: (action: AdvisorUiAction) => void;
   onRemoveOffering?: (offeringId: string) => Promise<void>;
+  onRemoveSelectedFamily?: (familyId: string) => Promise<void>;
   onRestoreRevision?: (revision: bigint) => Promise<void>;
   onConfirmSelection?: () => Promise<void>;
   onEditConfirmedSelection?: () => Promise<void>;
@@ -64,6 +66,10 @@ export function AdvisorRail({
   const provisional = (selection?.provisionalOfferingIds ?? []).flatMap((id) => {
     const course = catalogCourses.find((row) => row.courseId === id);
     return course ? [course] : [];
+  });
+  const selectedFamilies = (selection?.selectedFamilyIds ?? []).flatMap((id) => {
+    const family = catalogFamilies.find((row) => row.familyId === id);
+    return family ? [family] : [];
   });
   const confirmed = Boolean(selection?.confirmedOfferingIds.length);
   const latestRestorable = selectionRevisions.find((row) => ['user_removal', 'agent_replacement', 'restore_revision'].includes(row.source));
@@ -132,6 +138,14 @@ export function AdvisorRail({
             </div>
           ) : null}
         </div>
+        {selectedFamilies.length ? (
+          <section className="provisional-selection" aria-label="Selected course types">
+            <div><strong>Selected course types</strong><span>{selectedFamilies.length}/4</span></div>
+            {selectedFamilies.map((family) => (
+              <p key={family.familyId}><span>{family.name}<small>Course type</small></span><button type="button" aria-label={`Remove ${family.name}`} onClick={() => void onRemoveSelectedFamily(family.familyId)}>×</button></p>
+            ))}
+          </section>
+        ) : null}
         {provisional.length ? (
           <section className="provisional-selection" aria-label="Provisional course selection">
             <div><strong>{confirmed ? 'Confirmed courses' : 'Provisional courses'}</strong><span>{provisional.length}/5</span></div>

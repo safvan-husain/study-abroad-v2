@@ -32,6 +32,7 @@ from agent_server.state_updates import (
     build_branch_areas_overview,
     build_branch_clarification,
     build_branch_comparison,
+    build_branch_family_comparison,
     build_branch_family_offerings,
     build_branch_guidance,
     build_branch_selection_proposal,
@@ -198,6 +199,7 @@ def _validate_scope(value: dict[str, Any], state: AdvisorState) -> ScopeDecision
         "family_offerings",
         "all_area_offerings",
         "compare_offerings",
+        "compare_families",
         "personalize_selection",
         "clarify",
     }
@@ -227,9 +229,11 @@ def _validate_scope(value: dict[str, Any], state: AdvisorState) -> ScopeDecision
         return None
     if scope == "compare_offerings" and not comparison_criterion.strip():
         return None
+    if scope == "compare_families" and not 2 <= len(family_ids) <= 4:
+        return None
     message = _latest_human_text(state.get("messages", [])).lower()
     comparison_cues = ("compare", "comparison", "difference between", "versus", " vs ", "which is better", "which university", "between")
-    if scope == "compare_offerings" and message and not any(cue in f" {message} " for cue in comparison_cues):
+    if scope in {"compare_offerings", "compare_families"} and message and not any(cue in f" {message} " for cue in comparison_cues):
         return None
     if scope == "clarify" and not question.strip():
         return None
@@ -264,6 +268,27 @@ def _requests_all_presented(message: str, selection: dict[str, Any]) -> bool:
     references_presented = bool(re.search(r"\b(these|those|them)\b", normalized))
     asks_to_show_all = bool(re.search(r"\b(show|list|display)\b", normalized) and re.search(r"\ball\b", normalized))
     return references_presented and asks_to_show_all and bool(selection.get("presentedFamilyIds"))
+
+
+def _comparison_family_ids(selection: dict[str, Any]) -> list[str]:
+    selected = [str(row) for row in selection.get("selectedFamilyIds", []) if str(row).strip()]
+    if 2 <= len(selected) <= 4:
+        return list(dict.fromkeys(selected))[:4]
+    presented = [str(row) for row in selection.get("presentedFamilyIds", []) if str(row).strip()]
+    if 2 <= len(presented) <= 4:
+        return list(dict.fromkeys(presented))[:4]
+    return []
+
+
+def _requests_family_comparison(message: str, selection: dict[str, Any]) -> bool:
+    normalized = f" {' '.join(message.lower().split())} "
+    comparison_cues = ("compare", "comparison", "difference between", "versus", " vs ", "which is better", "between")
+    if not any(cue in normalized for cue in comparison_cues):
+        return False
+    if selection.get("presentedOfferingIds") or selection.get("provisionalOfferingIds"):
+        # Prefer exact offering comparison when offerings are the active context.
+        return False
+    return bool(_comparison_family_ids(selection))
 
 
 def _has_active_offering_context(selection: dict[str, Any]) -> bool:
@@ -322,6 +347,7 @@ def route_intent(state: AdvisorState) -> dict[str, Any]:
         "or working on a provisional list (see presentedOfferingIds / provisionalOfferingIds), do NOT treat that as a fresh catalog browse — "
         "prefer clarify with one question about the current workspace context, or discovery scoped to that context. "
         "A command such as 'show all these' is discovery when presentedFamilyIds are supplied; the scope resolver will resolve what 'these' means. "
+        "Comparing selected or presented course types (selectedFamilyIds / presentedFamilyIds) is discovery. "
         "If both guidance and discovery are materially requested, or the request cannot safely be assigned even with conversationHistory, choose clarify and ask one concise question. "
         "Schema: {intent: guidance|discovery|clarify, reason: string, clarificationQuestion: string}.",
         {
@@ -329,6 +355,7 @@ def route_intent(state: AdvisorState) -> dict[str, Any]:
             "conversationHistory": _conversation_history(state.get("messages", [])),
             "uiContext": state.get("ui_context", {}),
             "profile": state.get("profile", {}),
+            "selectedFamilyIds": selection.get("selectedFamilyIds", []),
             "presentedFamilyIds": selection.get("presentedFamilyIds", []),
             "presentedOfferingIds": selection.get("presentedOfferingIds", []),
             "provisionalOfferingIds": selection.get("provisionalOfferingIds", []),
@@ -340,6 +367,18 @@ def route_intent(state: AdvisorState) -> dict[str, Any]:
         decision = {
             "intent": "discovery",
             "reason": "The display command resolves to the canonically presented course types.",
+            "clarificationQuestion": "",
+        }
+    if decision is not None and decision["intent"] == "clarify" and _requests_family_comparison(text, selection):
+        decision = {
+            "intent": "discovery",
+            "reason": "The comparison request resolves to the selected or presented course types.",
+            "clarificationQuestion": "",
+        }
+    if decision is None and _requests_family_comparison(text, selection):
+        decision = {
+            "intent": "discovery",
+            "reason": "The comparison request resolves to the selected or presented course types.",
             "clarificationQuestion": "",
         }
     if decision is None:
@@ -382,6 +421,14 @@ def resolve_catalog_scope(state: AdvisorState) -> dict[str, Any]:
             "clarificationQuestion": "", "comparisonCriterion": "",
         }
         return set_scope_decision(decision)
+    if _requests_family_comparison(message, selection):
+        decision = {
+            "scope": "compare_families", "areaId": "",
+            "familyIds": _comparison_family_ids(selection),
+            "offeringIds": [], "explanation": "Compare the selected or presented course types in chat.",
+            "clarificationQuestion": "", "comparisonCriterion": "",
+        }
+        return set_scope_decision(decision)
 
     tool_trace: list[dict[str, Any]] = []
     decision = None
@@ -397,6 +444,8 @@ def resolve_catalog_scope(state: AdvisorState) -> dict[str, Any]:
         "area_overview: broad interest or an interest statement such as 'I want computer science' mapped to one areaId; "
         "family_offerings: explicit display command for one or more exact course types. "
         "all_area_offerings: explicit request to show all offerings in an area or all previously presented types. "
+        "compare_families: compare 2-4 course types (families); prefer selectedFamilyIds, else presentedFamilyIds, "
+        "else named course types from tools. Reply is chat-only — do not open a workspace comparison. "
         "compare_offerings: compare 2-4 exact university offerings; comparisonCriterion is required "
         "(requested fact or 'overall'). personalize_selection: propose 1-5 exact offering IDs. "
         "clarify: ambiguous scope — include clarificationQuestion. Negative preferences must affect the decision. "
@@ -414,6 +463,7 @@ def resolve_catalog_scope(state: AdvisorState) -> dict[str, Any]:
                 "message": message,
                 "profile": state.get("profile", {}),
                 "uiContext": state.get("ui_context", {}),
+                "selectedFamilyIds": selection.get("selectedFamilyIds", []),
                 "presentedFamilyIds": selection.get("presentedFamilyIds", []),
                 "presentedOfferingIds": selection.get("presentedOfferingIds", []),
                 "provisionalOfferingIds": selection.get("provisionalOfferingIds", []),
@@ -560,6 +610,89 @@ def compare_offerings(state: AdvisorState) -> dict[str, Any]:
     )
 
 
+def _family_comparison_facts(family_ids: list[str], state: AdvisorState) -> list[dict[str, Any]]:
+    index = get_catalog_index()
+    facts: list[dict[str, Any]] = []
+    for family_id in family_ids:
+        row = index.get_family(family_id) or next(
+            (entry for entry in _families_from_state_or_index(state) if str(entry.get("familyId")) == family_id),
+            None,
+        )
+        if not row:
+            continue
+        typical_subjects = row.get("typicalSubjects") or []
+        career_directions = row.get("careerDirections") or []
+        if isinstance(typical_subjects, str):
+            try:
+                typical_subjects = json.loads(typical_subjects)
+            except json.JSONDecodeError:
+                typical_subjects = []
+        if isinstance(career_directions, str):
+            try:
+                career_directions = json.loads(career_directions)
+            except json.JSONDecodeError:
+                career_directions = []
+        facts.append({
+            "familyId": family_id,
+            "name": row.get("name") or family_id,
+            "description": row.get("description") or "",
+            "typicalSubjects": typical_subjects,
+            "careerDirections": career_directions,
+            "offeringCount": len(index.courses_for_family(family_id)) if index.get_family(family_id) else 0,
+            "relatedFamilyIds": row.get("relatedFamilyIds") or [],
+        })
+    return facts
+
+
+def _fallback_family_comparison(facts: list[dict[str, Any]]) -> str:
+    if len(facts) < 2:
+        return "I need at least two course types to compare. Select course types in the workspace, then ask me to compare them."
+    names = [str(row.get("name") or row.get("familyId")) for row in facts]
+    lines = [
+        f"Here is a concise comparison of {', '.join(names[:-1])} and {names[-1]} based on verified course-type facts.",
+        "",
+    ]
+    for row in facts:
+        subjects = ", ".join(str(item) for item in (row.get("typicalSubjects") or [])[:4]) or "not listed"
+        careers = ", ".join(str(item) for item in (row.get("careerDirections") or [])[:4]) or "not listed"
+        lines.append(
+            f"{row.get('name')}: {row.get('description') or 'Description unavailable.'} "
+            f"Typical subjects include {subjects}. Career directions include {careers}. "
+            f"There are {row.get('offeringCount', 0)} university offerings in this catalog."
+        )
+    lines.append("")
+    lines.append("Tell me which course type you want to open next, or ask to see university offerings for one of them.")
+    return "\n".join(lines)
+
+
+def compare_families(state: AdvisorState) -> dict[str, Any]:
+    ensure_catalog_loaded()
+    scope = state.get("scope_decision", {})
+    selection = state.get("selection_context", {})
+    family_ids = [str(row) for row in scope.get("familyIds", [])][:4]
+    if len(family_ids) < 2:
+        family_ids = _comparison_family_ids(selection)
+    facts = _family_comparison_facts(family_ids, state)
+    ordered_ids = [str(row.get("familyId")) for row in facts]
+    content = _ollama_chat(
+        "You compare course types (program families), not exact university offerings. "
+        "Use only the provided verified family facts. Explain differences in focus, typical subjects, "
+        "career directions, and relative offering breadth. Do not invent rankings, admissions outcomes, "
+        "or university-specific claims. Keep the answer concise and actionable; end with one next-step question. "
+        "This reply is shown only in chat — do not describe workspace cards or comparison grids.",
+        json.dumps({
+            "message": _latest_human_text(state.get("messages", [])),
+            "profile": state.get("profile", {}),
+            "families": facts,
+            "explanation": scope.get("explanation") or "",
+        }, separators=(",", ":")),
+        os.getenv("DISCOVERY_MODEL", "qwen3.5:397b"),
+    )
+    if not content:
+        content = _fallback_family_comparison(facts)
+    return set_branch_result(build_branch_family_comparison(ordered_ids, content))
+
+
 def clarification(state: AdvisorState) -> dict[str, Any]:
     question = str(state.get("route_decision", {}).get("clarificationQuestion") or "Would you like guidance or course discovery?")
     return set_branch_result(build_branch_clarification(question))
@@ -667,6 +800,7 @@ builder.add_node("load_all_family_offerings", load_all_family_offerings)
 builder.add_node("load_all_area_offerings", load_all_area_offerings)
 builder.add_node("personalize_selection", personalize_selection)
 builder.add_node("compare_offerings", compare_offerings)
+builder.add_node("compare_families", compare_families)
 builder.add_node("clarification", clarification)
 builder.add_node("clarify_catalog_scope", clarify_catalog_scope)
 builder.add_node("validate_discovery", validate_discovery)
@@ -687,6 +821,7 @@ builder.add_conditional_edges("resolve_catalog_scope", route_after_scope, {
     "area_overview": "explain_course_types", "family_offerings": "load_all_family_offerings",
     "all_area_offerings": "load_all_area_offerings", "personalize_selection": "personalize_selection",
     "compare_offerings": "compare_offerings",
+    "compare_families": "compare_families",
     "clarify": "clarify_catalog_scope",
 })
 for node in [
@@ -695,6 +830,7 @@ for node in [
     "load_all_family_offerings",
     "load_all_area_offerings",
     "compare_offerings",
+    "compare_families",
     "personalize_selection",
     "clarify_catalog_scope",
 ]:

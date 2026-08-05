@@ -15,6 +15,7 @@ export interface AgentTurnResult {
 
 export interface AgentSelectionContext {
   presentedFamilyIds: string[];
+  selectedFamilyIds: string[];
   presentedOfferingIds: string[];
   provisionalOfferingIds: string[];
   suppressedOfferingIds: string[];

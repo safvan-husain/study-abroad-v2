@@ -330,3 +330,63 @@ def test_areas_overview_scope_validates_without_area_id():
         "explanation": "Catalog-wide browse", "clarificationQuestion": "", "comparisonCriterion": "",
     }
     assert _validate_scope(decision, state)["scope"] == "areas_overview"
+
+
+def test_compare_families_requires_two_to_four_family_ids_and_compare_cues():
+    state = {"messages": [HumanMessage(content="Compare these course types")]}
+    decision = {
+        "scope": "compare_families", "areaId": "", "familyIds": ["computer-science"],
+        "offeringIds": [], "explanation": "Need more types", "clarificationQuestion": "", "comparisonCriterion": "",
+    }
+    assert _validate_scope(decision, state) is None
+    decision["familyIds"] = ["computer-science", "data-science"]
+    assert _validate_scope(decision, state)["scope"] == "compare_families"
+    state_without_cue = {"messages": [HumanMessage(content="I want computer science")]}
+    assert _validate_scope(decision, state_without_cue) is None
+
+
+def test_compare_families_returns_chat_only_branch(monkeypatch):
+    result = invoke_specialist(
+        monkeypatch,
+        "Compare these course types",
+        {
+            "scope": "clarify", "areaId": "", "familyIds": [], "offeringIds": [],
+            "explanation": "Should not be used", "clarificationQuestion": "Which types?", "comparisonCriterion": "",
+        },
+        selection={
+            "selectedFamilyIds": ["computer-science", "data-science"],
+            "presentedFamilyIds": ["computer-science", "data-science", "computer-systems"],
+            "presentedOfferingIds": [],
+            "provisionalOfferingIds": [],
+        },
+    )
+    assert result["route"]["intent"] == "discovery"
+    assert result["scope"]["scope"] == "compare_families"
+    assert result["scope"]["familyIds"] == ["computer-science", "data-science"]
+    assert result["workKind"] == ""
+    assert result["directive"]["type"] == "discovery"
+    assert result["presentedOfferingIds"] == []
+    assert result["presentedFamilyIds"] == ["computer-science", "data-science"]
+    assert "computer science" in result["assistantContent"].lower()
+    assert "data science" in result["assistantContent"].lower()
+
+
+def test_compare_families_prefers_selected_over_presented(monkeypatch):
+    result = invoke_specialist(
+        monkeypatch,
+        "Compare these",
+        {
+            "scope": "compare_families", "areaId": "",
+            "familyIds": ["computer-science", "artificial-intelligence"],
+            "offeringIds": [], "explanation": "Selected course types", "clarificationQuestion": "", "comparisonCriterion": "",
+        },
+        selection={
+            "selectedFamilyIds": ["computer-science", "artificial-intelligence"],
+            "presentedFamilyIds": ["computer-science", "data-science", "computer-systems", "cyber-security-engineering"],
+            "presentedOfferingIds": [],
+            "provisionalOfferingIds": [],
+        },
+    )
+    assert result["scope"]["scope"] == "compare_families"
+    assert result["scope"]["familyIds"] == ["computer-science", "artificial-intelligence"]
+    assert result["workKind"] == ""

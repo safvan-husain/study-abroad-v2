@@ -48,6 +48,7 @@ __all__ = [
     "build_branch_areas_overview",
     "build_branch_clarification",
     "build_branch_comparison",
+    "build_branch_family_comparison",
     "build_branch_family_offerings",
     "build_branch_guidance",
     "build_branch_selection_proposal",
@@ -243,6 +244,20 @@ def build_branch_comparison(
         "presentedFamilyIds": family_ids,
         "presentedOfferingIds": offering_ids,
         "workKind": "comparison",
+    }
+
+
+def build_branch_family_comparison(
+    family_ids: list[str],
+    content: str,
+) -> BranchResult:
+    return {
+        "assistantContent": content[:16000],
+        "directive": _discovery_directive("Comparing selected course types in chat."),
+        "proposal": _empty_proposal(),
+        "presentedFamilyIds": family_ids,
+        "presentedOfferingIds": [],
+        "workKind": "",
     }
 
 
