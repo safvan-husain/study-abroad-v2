@@ -3,10 +3,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { HOME_UI_TARGET, uiTargetsMatch } from '@study-abroad/contracts';
 import { useAdvisorWorkspace, type AdvisorUiAction } from '../../hooks/useAdvisorWorkspace';
+import { useCompactViewport } from '../../hooks/useCompactViewport';
 import { useWorkspaceNavigation } from '../../hooks/useWorkspaceNavigation';
 import { createGuestSessionId, UI_CLIENT_STORAGE_KEY } from '../../lib/guest-session';
+import { hasNewAssistantReply, latestAssistantMessageId } from '../../lib/live-reply';
 import { workspaceTargetIsAvailable } from '../../lib/ui-targets';
 import { AdvisorRail } from './AdvisorRail';
+import { AdvisorWorkspaceFrame } from './AdvisorWorkspaceFrame';
 import { WorkspaceView } from './WorkspaceView';
 
 const PRESENCE_INTERVAL_MS = 10_000;
@@ -21,13 +24,47 @@ function ensureClientInstanceId() {
 export function AdvisorWorkspaceShell() {
   const workspace = useAdvisorWorkspace();
   const navigation = useWorkspaceNavigation();
+  const compact = useCompactViewport();
   const [clientInstanceId, setClientInstanceId] = useState<string>();
   const [resolvingActionId, setResolvingActionId] = useState<string>();
+  const [workspaceOverlayOpen, setWorkspaceOverlayOpen] = useState(false);
+  const [showLiveReply, setShowLiveReply] = useState(false);
   const appliedActions = useRef(new Set<string>());
+  const assistantBaselineRef = useRef<string | null>(null);
+  const messagesRef = useRef(workspace.messages);
+  messagesRef.current = workspace.messages;
 
   useEffect(() => {
     setClientInstanceId(ensureClientInstanceId());
   }, []);
+
+  const closeOverlay = useCallback(() => {
+    setWorkspaceOverlayOpen(false);
+    setShowLiveReply(false);
+  }, []);
+
+  const openOverlay = useCallback(() => {
+    assistantBaselineRef.current = latestAssistantMessageId(messagesRef.current);
+    setShowLiveReply(false);
+    setWorkspaceOverlayOpen(true);
+  }, []);
+
+  useEffect(() => {
+    if (!compact) {
+      setWorkspaceOverlayOpen(false);
+      setShowLiveReply(false);
+    }
+  }, [compact]);
+
+  const requestOverlay = useCallback(() => {
+    if (compact) openOverlay();
+  }, [compact, openOverlay]);
+
+  useEffect(() => {
+    if (!compact || !workspaceOverlayOpen) return;
+    const latestId = latestAssistantMessageId(workspace.messages);
+    if (hasNewAssistantReply(latestId, assistantBaselineRef.current)) setShowLiveReply(true);
+  }, [compact, workspace.messages, workspaceOverlayOpen]);
 
   const resetGuest = useCallback(() => {
     workspace.resetGuestJourney();
@@ -35,7 +72,8 @@ export function AdvisorWorkspaceShell() {
     window.sessionStorage.setItem(UI_CLIENT_STORAGE_KEY, id);
     setClientInstanceId(id);
     navigation.replaceTarget(HOME_UI_TARGET);
-  }, [navigation.replaceTarget, workspace]);
+    closeOverlay();
+  }, [closeOverlay, navigation.replaceTarget, workspace]);
 
   useEffect(() => {
     if (!clientInstanceId || workspace.connectionState !== 'ready') return;
@@ -76,17 +114,19 @@ export function AdvisorWorkspaceShell() {
       if (action.clientInstanceId !== clientInstanceId || action.status !== 'applied' || appliedActions.current.has(action.actionId)) continue;
       appliedActions.current.add(action.actionId);
       if (!uiTargetsMatch(navigation.target, action.target)) navigation.openTarget(action.target);
+      requestOverlay();
     }
-  }, [clientInstanceId, navigation, workspace.uiActions]);
+  }, [clientInstanceId, navigation, requestOverlay, workspace.uiActions]);
 
   const openAction = useCallback(async (action: AdvisorUiAction) => {
     if (!clientInstanceId) return;
     await workspace.openUiAction(action.actionId, clientInstanceId);
     navigation.openTarget(action.target);
+    requestOverlay();
     if (action.sourceKind === 'work_item') requestAnimationFrame(() => requestAnimationFrame(() => {
       document.getElementById(`workspace-item-${action.sourceId}`)?.scrollIntoView({ block: 'center' });
     }));
-  }, [clientInstanceId, navigation.replaceTarget, navigation.target, workspace.publishUiState, workspace.send, workspace.workSets]);
+  }, [clientInstanceId, navigation, requestOverlay, workspace]);
 
   const send = useCallback(async (content: string) => {
     if (!clientInstanceId) throw new Error('Browser tab is not ready');
@@ -98,32 +138,45 @@ export function AdvisorWorkspaceShell() {
     await workspace.send(content, clientInstanceId);
   }, [clientInstanceId, navigation, workspace]);
 
+  const workspaceView = (
+    <WorkspaceView
+      directive={workspace.directive} workSets={workspace.workSets} workItems={workspace.workItems}
+      workResults={workspace.workResults} profile={workspace.profile} target={navigation.target}
+      catalogCourses={workspace.catalogCourses} catalogFamilies={workspace.catalogFamilies} selection={workspace.selection}
+      documentRequirements={workspace.documentRequirements} documentSubmissions={workspace.documentSubmissions}
+      setScrollElement={navigation.setScrollElement} onScroll={navigation.rememberScroll}
+      onSelectOffering={(offeringId) => void workspace.selectOffering(offeringId)}
+      onSelectFamily={(familyId) => void workspace.selectFamily(familyId)}
+      onUploadDocument={workspace.uploadDocument}
+      onDismiss={compact ? closeOverlay : undefined}
+    />
+  );
+
+  const advisorRail = (
+    <AdvisorRail
+      connectionState={workspace.connectionState} error={workspace.error}
+      agentThreadId={workspace.conversationId} messages={workspace.messages}
+      turns={workspace.turns} turnUpdates={workspace.turnUpdates} uiActions={workspace.uiActions}
+      directive={workspace.directive} profile={workspace.profile} onSend={send}
+      selection={workspace.selection} selectionRevisions={workspace.selectionRevisions}
+      catalogCourses={workspace.catalogCourses} catalogFamilies={workspace.catalogFamilies}
+      onUpdateProfile={workspace.updateProfile} onOpenAction={openAction}
+      onRemoveOffering={workspace.removeProvisionalOffering}
+      onRemoveSelectedFamily={workspace.removeSelectedFamily}
+      onRestoreRevision={workspace.restoreSelectionRevision}
+      onConfirmSelection={workspace.confirmSelection} onEditConfirmedSelection={workspace.editConfirmedSelection}
+      onResetGuest={resetGuest}
+    />
+  );
+
   return (
-    <div className="advisor-shell">
-      <WorkspaceView
-        directive={workspace.directive} workSets={workspace.workSets} workItems={workspace.workItems}
-        workResults={workspace.workResults} profile={workspace.profile} target={navigation.target}
-        catalogCourses={workspace.catalogCourses} catalogFamilies={workspace.catalogFamilies} selection={workspace.selection}
-        documentRequirements={workspace.documentRequirements} documentSubmissions={workspace.documentSubmissions}
-        setScrollElement={navigation.setScrollElement} onScroll={navigation.rememberScroll}
-        onSelectOffering={(offeringId) => void workspace.selectOffering(offeringId)}
-        onSelectFamily={(familyId) => void workspace.selectFamily(familyId)}
-        onUploadDocument={workspace.uploadDocument}
-      />
-      <AdvisorRail
-        connectionState={workspace.connectionState} error={workspace.error}
-        agentThreadId={workspace.conversationId} messages={workspace.messages}
-        turns={workspace.turns} turnUpdates={workspace.turnUpdates} uiActions={workspace.uiActions}
-        directive={workspace.directive} profile={workspace.profile} onSend={send}
-        selection={workspace.selection} selectionRevisions={workspace.selectionRevisions}
-        catalogCourses={workspace.catalogCourses} catalogFamilies={workspace.catalogFamilies}
-        onUpdateProfile={workspace.updateProfile} onOpenAction={openAction}
-        onRemoveOffering={workspace.removeProvisionalOffering}
-        onRemoveSelectedFamily={workspace.removeSelectedFamily}
-        onRestoreRevision={workspace.restoreSelectionRevision}
-        onConfirmSelection={workspace.confirmSelection} onEditConfirmedSelection={workspace.editConfirmedSelection}
-        onResetGuest={resetGuest}
-      />
-    </div>
+    <AdvisorWorkspaceFrame
+      compact={compact}
+      overlayOpen={workspaceOverlayOpen}
+      showLiveReply={showLiveReply}
+      onReturnToChat={closeOverlay}
+      workspace={workspaceView}
+      rail={advisorRail}
+    />
   );
 }

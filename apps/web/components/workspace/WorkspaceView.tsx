@@ -21,6 +21,7 @@ export function WorkspaceView({
   onSelectOffering = () => undefined,
   onSelectFamily = () => undefined,
   onUploadDocument = async () => undefined,
+  onDismiss,
 }: {
   directive?: AdvisorDirective;
   workSets: AdvisorWorkSet[];
@@ -38,6 +39,7 @@ export function WorkspaceView({
   onSelectOffering?: (offeringId: string) => void;
   onSelectFamily?: (familyId: string) => void;
   onUploadDocument?: (documentType: string, file: File) => Promise<void>;
+  onDismiss?: () => void;
 }) {
   const exploring = target.viewType !== 'home';
   const hasShortlist = Boolean(selection?.provisionalOfferingIds.length);
@@ -46,7 +48,14 @@ export function WorkspaceView({
     <main className="task-pane" aria-label="Study planning workspace">
       <header className="workspace-header">
         <Link href="/" className="brand" aria-label="Study Abroad home"><span>SA</span> Study Abroad</Link>
-        <div className="journey-state"><span /> Guest journey saved</div>
+        <div className="workspace-header-actions">
+          <div className="journey-state"><span /> Guest journey saved</div>
+          {onDismiss ? (
+            <button type="button" className="workspace-dismiss" onClick={onDismiss}>
+              Back to chat
+            </button>
+          ) : null}
+        </div>
       </header>
       <div className="workspace-scroll" ref={setScrollElement} onScroll={onScroll}>
         <div className="breadcrumb">YOUR JOURNEY <b>/</b> {targetBreadcrumb(target)}</div>

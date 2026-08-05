@@ -3,7 +3,14 @@ import { describe, expect, it } from 'vitest';
 import { AdvisorConversation } from '../apps/web/components/workspace/AdvisorConversation';
 import { AdvisorRail } from '../apps/web/components/workspace/AdvisorRail';
 import { AdvisorActionCard } from '../apps/web/components/workspace/AdvisorActivities';
+import {
+  AdvisorWorkspaceFrame,
+  advisorShellClassName,
+  workspaceOverlayClassName,
+} from '../apps/web/components/workspace/AdvisorWorkspaceFrame';
+import { WorkspaceLiveReplyBar } from '../apps/web/components/workspace/WorkspaceLiveReplyBar';
 import { WorkspaceView } from '../apps/web/components/workspace/WorkspaceView';
+import { hasNewAssistantReply, latestAssistantMessageId } from '../apps/web/lib/live-reply';
 
 const summaryTarget = (entityId: string) => ({ schemaVersion: 1 as const, viewType: 'course_summary' as const, workSetId: 'set-1', entityType: 'course', entityId, slot: 'summary' });
 
@@ -255,5 +262,93 @@ describe('advisor workspace UI', () => {
     expect(markup).toContain('Course types in this area');
     expect(markup).toContain('Choose course type');
     expect(markup).toContain('Focuses on algorithms and software.');
+  });
+
+  it('shows a dismiss control on the workspace when the compact overlay can close', () => {
+    const markup = renderToStaticMarkup(<WorkspaceView
+      workSets={[]}
+      workItems={[]}
+      workResults={[]}
+      target={{ schemaVersion: 1, viewType: 'home' }}
+      onDismiss={() => undefined}
+    />);
+    expect(markup).toContain('Back to chat');
+    expect(markup).toContain('workspace-dismiss');
+  });
+
+  it('renders compact chat-primary chrome with a closed or open workspace overlay', () => {
+    const closed = renderToStaticMarkup(<AdvisorWorkspaceFrame
+      compact
+      overlayOpen={false}
+      showLiveReply={false}
+      onReturnToChat={() => undefined}
+      workspace={<div>Workspace pane</div>}
+      rail={<div>Chat rail</div>}
+    />);
+    expect(closed).toContain('advisor-shell is-compact');
+    expect(closed).not.toContain('workspace-overlay-open');
+    expect(closed).toContain('workspace-overlay');
+    expect(closed).not.toContain('is-open');
+    expect(closed).toContain('aria-hidden="true"');
+    expect(closed).toContain('Chat rail');
+    expect(closed).toContain('Workspace pane');
+    expect(closed).not.toContain('Advisor replied');
+
+    const open = renderToStaticMarkup(<AdvisorWorkspaceFrame
+      compact
+      overlayOpen
+      showLiveReply
+      onReturnToChat={() => undefined}
+      workspace={<div>Workspace pane</div>}
+      rail={<div>Chat rail</div>}
+    />);
+    expect(open).toContain('advisor-shell is-compact workspace-overlay-open');
+    expect(open).toContain('workspace-overlay is-open');
+    expect(open).toContain('aria-hidden="false"');
+    expect(open).toContain('Advisor replied — back to chat');
+    expect(open).toContain('A new message is waiting in the conversation.');
+  });
+
+  it('keeps desktop side-by-side order without an overlay', () => {
+    const markup = renderToStaticMarkup(<AdvisorWorkspaceFrame
+      compact={false}
+      overlayOpen={false}
+      showLiveReply={false}
+      onReturnToChat={() => undefined}
+      workspace={<div id="ws">Workspace pane</div>}
+      rail={<div id="chat">Chat rail</div>}
+    />);
+    expect(markup).toContain('advisor-shell');
+    expect(markup).not.toContain('is-compact');
+    expect(markup).not.toContain('workspace-overlay');
+    expect(markup.indexOf('Workspace pane')).toBeLessThan(markup.indexOf('Chat rail'));
+  });
+
+  it('builds shell and overlay class names for compact auto-show states', () => {
+    expect(advisorShellClassName(false, true)).toBe('advisor-shell');
+    expect(advisorShellClassName(true, false)).toBe('advisor-shell is-compact');
+    expect(advisorShellClassName(true, true)).toBe('advisor-shell is-compact workspace-overlay-open');
+    expect(workspaceOverlayClassName(false)).toBe('workspace-overlay');
+    expect(workspaceOverlayClassName(true)).toBe('workspace-overlay is-open');
+  });
+
+  it('detects a newer assistant reply for the live overlay cue', () => {
+    expect(latestAssistantMessageId([])).toBeNull();
+    expect(latestAssistantMessageId([
+      { messageId: 'u1', role: 'user' },
+      { messageId: 'a1', role: 'assistant' },
+      { messageId: 'u2', role: 'user' },
+    ])).toBe('a1');
+    expect(hasNewAssistantReply(null, null)).toBe(false);
+    expect(hasNewAssistantReply('a1', 'a1')).toBe(false);
+    expect(hasNewAssistantReply('a2', 'a1')).toBe(true);
+    expect(hasNewAssistantReply('a1', null)).toBe(true);
+  });
+
+  it('renders the live reply bar copy as an inline return control', () => {
+    const markup = renderToStaticMarkup(<WorkspaceLiveReplyBar onReturn={() => undefined} />);
+    expect(markup).toContain('workspace-live-reply');
+    expect(markup).toContain('Advisor replied — back to chat');
+    expect(markup).toContain('Open');
   });
 });
