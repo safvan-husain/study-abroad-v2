@@ -8,6 +8,7 @@ import { AdvisorConversation } from './AdvisorConversation';
 export function AdvisorRail({
   connectionState,
   error,
+  agentThreadId,
   messages,
   turns,
   turnUpdates,
@@ -26,9 +27,11 @@ export function AdvisorRail({
   onRestoreRevision = async () => undefined,
   onConfirmSelection = async () => undefined,
   onEditConfirmedSelection = async () => undefined,
+  onResetGuest = () => undefined,
 }: {
   connectionState: string;
   error?: string;
+  agentThreadId?: string;
   messages: AdvisorMessage[];
   turns: AdvisorTurn[];
   turnUpdates: AdvisorTurnUpdate[];
@@ -47,9 +50,11 @@ export function AdvisorRail({
   onRestoreRevision?: (revision: bigint) => Promise<void>;
   onConfirmSelection?: () => Promise<void>;
   onEditConfirmedSelection?: () => Promise<void>;
+  onResetGuest?: () => void;
 }) {
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
+  const [threadCopied, setThreadCopied] = useState(false);
   const [editingInterests, setEditingInterests] = useState(false);
   const [interestDraft, setInterestDraft] = useState('');
   const submit = async () => {
@@ -62,6 +67,20 @@ export function AdvisorRail({
     if (!profile) return;
     await onUpdateProfile({ ...profile, studentPhrase: interestDraft.trim() });
     setEditingInterests(false);
+  };
+  const copyThreadId = async () => {
+    if (!agentThreadId) return;
+    try {
+      await navigator.clipboard.writeText(agentThreadId);
+      setThreadCopied(true);
+      window.setTimeout(() => setThreadCopied(false), 1600);
+    } catch {
+      window.prompt('Copy this thread ID for Agent Studio:', agentThreadId);
+    }
+  };
+  const resetGuest = () => {
+    if (!window.confirm('Start a fresh guest journey? This browser will disconnect from your current conversation and workspace data.')) return;
+    onResetGuest();
   };
   const provisional = (selection?.provisionalOfferingIds ?? []).flatMap((id) => {
     const course = catalogCourses.find((row) => row.courseId === id);
@@ -89,7 +108,19 @@ export function AdvisorRail({
     <aside className="advisor-rail" aria-label="Study advisor">
       <header className="advisor-header">
         <div className="advisor-avatar" aria-hidden="true">A</div>
-        <div><strong>Amelia</strong><span><i className={connectionState === 'ready' ? 'online' : ''} /> {connectionState === 'ready' ? 'Advisor online' : connectionState}</span></div>
+        <div className="advisor-header-meta">
+          <strong>Amelia</strong>
+          <span><i className={connectionState === 'ready' ? 'online' : ''} /> {connectionState === 'ready' ? 'Advisor online' : connectionState}</span>
+          {agentThreadId ? (
+            <div className="advisor-thread-id">
+              <span className="advisor-thread-label">Thread ID</span>
+              <code title={agentThreadId}>{agentThreadId}</code>
+              <button type="button" className="advisor-thread-copy" onClick={() => void copyThreadId()} aria-label="Copy thread ID">
+                {threadCopied ? 'Copied' : 'Copy'}
+              </button>
+            </div>
+          ) : null}
+        </div>
       </header>
       <div className="advisor-scroll">
         <AdvisorConversation messages={messages} turns={turns} turnUpdates={turnUpdates} uiActions={uiActions} onOpenAction={onOpenAction} />
@@ -158,6 +189,9 @@ export function AdvisorRail({
             </div>
           </section>
         ) : null}
+        <button type="button" className="guest-reset-button" onClick={resetGuest}>
+          Reset guest journey
+        </button>
         <p className="privacy-note">Your conversation is private and saved to this guest journey.</p>
       </div>
     </aside>

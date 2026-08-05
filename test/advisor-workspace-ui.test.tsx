@@ -28,6 +28,7 @@ describe('advisor workspace UI', () => {
     const welcome = renderToStaticMarkup(<AdvisorConversation messages={[]} turns={[]} />);
     const rail = renderToStaticMarkup(<AdvisorRail
       connectionState="ready"
+      agentThreadId="550e8400-e29b-41d4-a716-446655440000"
       messages={[]}
       turns={[]}
       turnUpdates={[]}
@@ -37,6 +38,9 @@ describe('advisor workspace UI', () => {
     expect(welcome).toContain('Tell me about your background and interests.');
     expect(rail).not.toContain('TRY ASKING');
     expect(rail).not.toContain('I am unsure what to study');
+    expect(rail).toContain('550e8400-e29b-41d4-a716-446655440000');
+    expect(rail).toContain('Copy thread ID');
+    expect(rail).toContain('Reset guest journey');
   });
 
   it('renders progressive activity labels from typed turn updates', () => {

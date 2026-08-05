@@ -4,9 +4,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { DbConnection } from '@study-abroad/spacetimedb-bindings';
 import type { DiscoveryProfilePatch, TurnUpdatePayload, UiActionActivation, UiActionStatus, UiTargetRef } from '@study-abroad/contracts';
 import { turnUpdatePayload, uiTargetRef } from '@study-abroad/contracts';
-import { getOrCreateGuestSessionId } from '../lib/guest-session';
-
-const TOKEN_KEY = 'study-abroad-spacetimedb-token';
+import {
+  getOrCreateGuestSessionId,
+  resetGuestAccount,
+  SPACETIMEDB_TOKEN_STORAGE_KEY,
+} from '../lib/guest-session';
 
 export type AdvisorMessage = { messageId: string; turnId: string; role: string; content: string; sequence: bigint; createdAtMicros: bigint };
 export type AdvisorTurn = { turnId: string; status: string; errorCode: string | null; attempt: number };
@@ -163,11 +165,11 @@ export function useAdvisorWorkspace() {
     const builder = DbConnection.builder()
       .withUri(spacetimeUri())
       .withDatabaseName(process.env.NEXT_PUBLIC_SPACETIME_DATABASE ?? 'study-abroad-coordinator')
-      .withToken(window.localStorage.getItem(TOKEN_KEY) ?? undefined)
+      .withToken(window.localStorage.getItem(SPACETIMEDB_TOKEN_STORAGE_KEY) ?? undefined)
       .onConnect((connection, _identity, token) => {
         if (disposed) return connection.disconnect();
         connectionRef.current = connection;
-        if (token) window.localStorage.setItem(TOKEN_KEY, token);
+        if (token) window.localStorage.setItem(SPACETIMEDB_TOKEN_STORAGE_KEY, token);
         setConnectionState('hydrating');
         void connection.reducers.ensureGuestJourney({ conversationId: id }).then(() => {
           const tables = [
@@ -322,6 +324,34 @@ export function useAdvisorWorkspace() {
     await connection.reducers.editConfirmedSelection({ conversationId, clientCommandId: commandId() });
   }, [connectionState, conversationId]);
 
+  const resetGuestJourney = useCallback(() => {
+    connectionRef.current?.disconnect();
+    catalogConnectionRef.current?.disconnect();
+    connectionRef.current = null;
+    catalogConnectionRef.current = null;
+    resetGuestAccount(window.localStorage, window.sessionStorage);
+    setMessages([]);
+    setTurns([]);
+    setDirective(undefined);
+    setWorkSets([]);
+    setWorkItems([]);
+    setWorkResults([]);
+    setUiActions([]);
+    setUserUiStates([]);
+    setTurnUpdates([]);
+    setProfile(undefined);
+    setCatalogCourses([]);
+    setCatalogFamilies([]);
+    setSelection(undefined);
+    setSelectionRevisions([]);
+    setDocumentRequirements([]);
+    setDocumentSubmissions([]);
+    setConversationId(undefined);
+    setError(undefined);
+    setConnectionState('connecting');
+    setReconnect((value) => value + 1);
+  }, []);
+
   const uploadDocument = useCallback(async (documentType: string, file: File) => {
     const connection = connectionRef.current;
     if (!connection || connectionState !== 'ready' || !conversationId) throw new Error('Advisor is not connected');
@@ -342,6 +372,6 @@ export function useAdvisorWorkspace() {
     documentRequirements, documentSubmissions, send, updateProfile, publishUiState,
     publishUiPresence, resolveAutoUiAction, openUiAction, removeProvisionalOffering, selectOffering,
     selectFamily, removeSelectedFamily,
-    restoreSelectionRevision, confirmSelection, editConfirmedSelection, uploadDocument,
+    restoreSelectionRevision, confirmSelection, editConfirmedSelection, uploadDocument, resetGuestJourney,
   };
 }

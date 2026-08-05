@@ -1,6 +1,9 @@
 export const GUEST_SESSION_STORAGE_KEY = 'study-abroad-guest-session-id';
+export const SPACETIMEDB_TOKEN_STORAGE_KEY = 'study-abroad-spacetimedb-token';
+export const UI_CLIENT_STORAGE_KEY = 'study-abroad-ui-client-id';
 
 type StorageLike = Pick<Storage, 'getItem' | 'setItem'>;
+type MutableStorageLike = StorageLike & Pick<Storage, 'removeItem'>;
 
 export function createGuestSessionId() {
   const webCrypto = globalThis.crypto;
@@ -26,4 +29,14 @@ export function getOrCreateGuestSessionId(
   const guestSessionId = createId();
   storage.setItem(GUEST_SESSION_STORAGE_KEY, guestSessionId);
   return guestSessionId;
+}
+
+/** Clears the browser guest identity and SpacetimeDB auth so the next connection starts fresh. */
+export function resetGuestAccount(
+  local: MutableStorageLike,
+  session?: MutableStorageLike,
+) {
+  local.removeItem(GUEST_SESSION_STORAGE_KEY);
+  local.removeItem(SPACETIMEDB_TOKEN_STORAGE_KEY);
+  session?.removeItem(UI_CLIENT_STORAGE_KEY);
 }

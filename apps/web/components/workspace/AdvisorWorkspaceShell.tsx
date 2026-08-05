@@ -4,13 +4,19 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { HOME_UI_TARGET, uiTargetsMatch } from '@study-abroad/contracts';
 import { useAdvisorWorkspace, type AdvisorUiAction } from '../../hooks/useAdvisorWorkspace';
 import { useWorkspaceNavigation } from '../../hooks/useWorkspaceNavigation';
-import { createGuestSessionId } from '../../lib/guest-session';
+import { createGuestSessionId, UI_CLIENT_STORAGE_KEY } from '../../lib/guest-session';
 import { workspaceTargetIsAvailable } from '../../lib/ui-targets';
 import { AdvisorRail } from './AdvisorRail';
 import { WorkspaceView } from './WorkspaceView';
 
-const UI_CLIENT_KEY = 'study-abroad-ui-client-id';
 const PRESENCE_INTERVAL_MS = 10_000;
+
+function ensureClientInstanceId() {
+  const stored = window.sessionStorage.getItem(UI_CLIENT_STORAGE_KEY);
+  const id = stored || createGuestSessionId();
+  if (!stored) window.sessionStorage.setItem(UI_CLIENT_STORAGE_KEY, id);
+  return id;
+}
 
 export function AdvisorWorkspaceShell() {
   const workspace = useAdvisorWorkspace();
@@ -20,11 +26,16 @@ export function AdvisorWorkspaceShell() {
   const appliedActions = useRef(new Set<string>());
 
   useEffect(() => {
-    const stored = window.sessionStorage.getItem(UI_CLIENT_KEY);
-    const id = stored || createGuestSessionId();
-    if (!stored) window.sessionStorage.setItem(UI_CLIENT_KEY, id);
-    setClientInstanceId(id);
+    setClientInstanceId(ensureClientInstanceId());
   }, []);
+
+  const resetGuest = useCallback(() => {
+    workspace.resetGuestJourney();
+    const id = createGuestSessionId();
+    window.sessionStorage.setItem(UI_CLIENT_STORAGE_KEY, id);
+    setClientInstanceId(id);
+    navigation.replaceTarget(HOME_UI_TARGET);
+  }, [navigation.replaceTarget, workspace]);
 
   useEffect(() => {
     if (!clientInstanceId || workspace.connectionState !== 'ready') return;
@@ -100,7 +111,8 @@ export function AdvisorWorkspaceShell() {
         onUploadDocument={workspace.uploadDocument}
       />
       <AdvisorRail
-        connectionState={workspace.connectionState} error={workspace.error} messages={workspace.messages}
+        connectionState={workspace.connectionState} error={workspace.error}
+        agentThreadId={workspace.conversationId} messages={workspace.messages}
         turns={workspace.turns} turnUpdates={workspace.turnUpdates} uiActions={workspace.uiActions}
         directive={workspace.directive} profile={workspace.profile} onSend={send}
         selection={workspace.selection} selectionRevisions={workspace.selectionRevisions}
@@ -110,6 +122,7 @@ export function AdvisorWorkspaceShell() {
         onRemoveSelectedFamily={workspace.removeSelectedFamily}
         onRestoreRevision={workspace.restoreSelectionRevision}
         onConfirmSelection={workspace.confirmSelection} onEditConfirmedSelection={workspace.editConfirmedSelection}
+        onResetGuest={resetGuest}
       />
     </div>
   );
