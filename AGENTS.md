@@ -7,12 +7,53 @@ The Version 1 implementation of this project is located at:
 
 When working on Version 1 or comparing behavior with the previous implementation, use the path matching the current operating system.
 
+## Local Dev Stack (fast iteration)
+
+For day-to-day coding, use the **host dev stack**: SpacetimeDB runs in Docker; web, API, AI worker, and Agent Server run on the host with hot reload. Copy `.env.example` to `.env` before the first run.
+
+```sh
+pnpm dev                 # SpacetimeDB (Docker) + publish coordinator + all host services
+pnpm dev:status          # show Docker + host service status
+pnpm dev:stop            # stop host services (SpacetimeDB container keeps running)
+pnpm dev:stop:docker     # stop host services and SpacetimeDB
+pnpm dev:reset-db        # wipe SpacetimeDB data volume and republish coordinator
+pnpm dev:republish       # rebuild/publish coordinator after Rust schema changes
+```
+
+**Restart only what changed** (from a second terminal while the stack is up):
+
+```sh
+pnpm dev:restart:web        # Next.js only
+pnpm dev:restart:api        # NestJS API only
+pnpm dev:restart:web-api    # web + API
+pnpm dev:restart:worker     # AI worker only
+pnpm dev:restart:agent      # LangGraph Agent Server only
+pnpm dev:restart            # all four host services
+```
+
+**Ports (host dev stack):**
+
+| Service | URL |
+|---------|-----|
+| Web | `http://localhost:3100` |
+| API | `http://localhost:3101/health` |
+| SpacetimeDB | `ws://localhost:3002` |
+| Agent Server | `http://localhost:2025` |
+
+After completing a feature or fix, verify in the browser at `http://localhost:3100`. Restart the affected service if the change is not picked up automatically (`dev:restart:agent` for graph/routing changes, `dev:restart:worker` for worker logic, `dev:restart:web` for UI). Coordinator Rust changes require `pnpm dev:republish` (and often `pnpm coordinator:build` on the host for regenerated bindings), then restart web/api/worker as needed.
+
+Logs are written under `.dev/logs/`. `pnpm dev` streams them in the foreground; Ctrl+C stops host services but leaves SpacetimeDB running for a fast `pnpm dev` restart.
+
 ## Docker And Browser Verification
 
-- The application runs entirely in Docker. There is no separately deployed module or external runtime to provision; use the repository's Docker Compose stack.
-- Build and start the current stack before browser testing: `docker compose -f docker-compose.production.yml up -d --build`.
-- The web application is published from container port `3000` on VPS host port `3010`. Use `http://localhost:3010/` on the VPS and `http://200.141.7.99:3010/` from an external machine.
-- After making application changes or fixing an issue, verify the result with the Playwright CLI against the Docker-hosted application. Always rebuild the Docker container before running Playwright.
+For a fully containerized production-like topology (no hot reload), use the Compose stack:
+
+- Build and start: `docker compose -f docker-compose.production.yml up -d --build`.
+- Web UI: `http://localhost:3010/` (host port `3010`, not `3000`).
+- Reset all persisted data: `docker compose -f docker-compose.production.yml down -v`.
+- After making application changes, rebuild the affected service before browser or Playwright verification, e.g. `docker compose -f docker-compose.production.yml up -d --build web`.
+
+Use Playwright against whichever stack you started (`3100` for `pnpm dev`, `3010` for Docker web).
 
 ## Realtime Advisor Architecture
 

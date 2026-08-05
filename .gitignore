@@ -1,4 +1,6 @@
 
+.dev/
+
 node_modules/
 .next/
 dist/
