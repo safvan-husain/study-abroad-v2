@@ -85,9 +85,9 @@ function emptyProfile(): DiscoveryProfilePatch {
 
 function emptySelection(): AgentSelectionContext {
   return {
-    presentedFamilyIds: [], presentedOfferingIds: [], provisionalOfferingIds: [],
-    suppressedOfferingIds: [], confirmedOfferingIds: [], revision: 0n,
-    comparisonCriterion: '',
+    presentedFamilyIds: [], selectedFamilyIds: [], presentedOfferingIds: [],
+    provisionalOfferingIds: [], suppressedOfferingIds: [], confirmedOfferingIds: [],
+    revision: 0n, comparisonCriterion: '',
   };
 }
 
