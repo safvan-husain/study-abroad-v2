@@ -1,18 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import { MIN_CATALOG_COURSES, processChatTurn } from '../src/services/process-chat-turn.js';
+import type { ChatTurn } from '../src/services/process-chat-turn.js';
 import { JobWorker } from '../src/services/job-worker.js';
 
-const turn = (overrides: Partial<{
-  conversationId: string;
-  turnId: string;
-  correlationId: string;
-  agentThreadId: string;
-  userMessageId: string;
-  userContent: string;
-  attempt: number;
-  baseUiRevision: bigint;
-  uiContext: { clientInstanceId: string; target: { schemaVersion: 1; viewType: 'home' }; navigationRevision: bigint; visible: boolean; lastSeenAtMicros: bigint };
-}> = {}) => ({
+const turn = (overrides: Partial<ChatTurn> = {}): ChatTurn => ({
   conversationId: 'c1',
   turnId: 't1',
   correlationId: 'corr1',
@@ -96,6 +87,85 @@ describe('AI worker chat turn', () => {
       ]),
     }));
     expect(upsertConversationProfile).toHaveBeenCalled();
+  });
+
+  it('uses enqueue-time selection and profile snapshots even when live catalog reads are empty', async () => {
+    const coordinator = {
+      claim: vi.fn().mockResolvedValue(1),
+      complete: vi.fn(),
+      retry: vi.fn(),
+      publishTurnUpdate: vi.fn(),
+      upsertConversationProfile: vi.fn(),
+    };
+    const agent = {
+      run: vi.fn().mockResolvedValue({
+        threadId: 'c1',
+        runId: 'r1',
+        content: 'Comparing the selected families.',
+        metadata: {},
+        advisor: {
+          assistantContent: 'Comparing Computer Science and Data Science.',
+          route: { intent: 'discovery', reason: 'Compare selected families', clarificationQuestion: '' },
+          scope: {
+            scope: 'compare_families', areaId: '', familyIds: ['computer-science', 'data-science'], offeringIds: [],
+            explanation: 'User asked to compare selected families', clarificationQuestion: '', comparisonCriterion: 'career fit',
+          },
+          proposal: { mode: 'none', offeringIds: [], rationale: '' },
+          presentedFamilyIds: ['computer-science', 'data-science'],
+          presentedOfferingIds: [],
+          directive: { type: 'discovery', awareness: 'Comparing selected families.' },
+          workItems: [],
+          workKind: '',
+          profilePatch: {
+            background: 'high school', courseInterests: 'programming', ambitions: 'software engineer',
+            primaryArea: 'computing', candidateAreas: ['computing'], studentPhrase: 'compare these', constraintsText: '',
+          },
+        },
+      }),
+    };
+    const emptyLiveCatalog = {
+      ...computingCatalog,
+      getProfile: () => undefined,
+      getSelection: () => undefined,
+    };
+    const pending = turn({
+      userContent: 'compare these',
+      selectionContext: {
+        presentedFamilyIds: ['computer-science', 'data-science'],
+        selectedFamilyIds: ['computer-science', 'data-science'],
+        presentedOfferingIds: [],
+        provisionalOfferingIds: [],
+        suppressedOfferingIds: [],
+        confirmedOfferingIds: [],
+        comparisonCriterion: '',
+        revision: 3n,
+      },
+      profile: {
+        background: 'high school',
+        courseInterests: 'programming',
+        ambitions: 'software engineer',
+        primaryArea: 'computing',
+        candidateAreas: ['computing'],
+        studentPhrase: 'compare these',
+        constraintsText: '',
+      },
+    });
+    await processChatTurn(pending, agent, coordinator, undefined, emptyLiveCatalog);
+    expect(agent.run).toHaveBeenCalledWith(
+      expect.any(Array),
+      expect.objectContaining({ turnId: 't1' }),
+      expect.objectContaining({
+        selectionContext: expect.objectContaining({
+          selectedFamilyIds: ['computer-science', 'data-science'],
+          presentedFamilyIds: ['computer-science', 'data-science'],
+          revision: 3n,
+        }),
+        profile: expect.objectContaining({
+          primaryArea: 'computing',
+          courseInterests: 'programming',
+        }),
+      }),
+    );
   });
 
   it('builds program_area_overview work items for areas_overview without shortlisting', async () => {
@@ -189,7 +259,7 @@ describe('AI worker chat turn', () => {
   });
 
   it('subscribes, deduplicates delivery, renews leases, and stops cleanly', async () => {
-    let deliver: ((turn: any) => void) | undefined;
+    let deliver: ((turn: ChatTurn) => void) | undefined;
     const coordinator = { claim: vi.fn().mockResolvedValue(1), renew: vi.fn().mockResolvedValue(undefined), complete: vi.fn(), retry: vi.fn() };
     const agent = { run: vi.fn().mockImplementation(() => new Promise(resolve => setTimeout(() => resolve({ threadId: 'c2', runId: 'r2', content: 'Hello', metadata: {} }), 30))) };
     const worker = new JobWorker({ agent, coordinator, leaseSeconds: 1, subscribe: callback => { deliver = callback; return () => { deliver = undefined; }; }, catalog: computingCatalog });

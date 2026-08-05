@@ -82,10 +82,59 @@ type WorkerPendingTurnRow = {
   attempt: number;
   baseUiRevision: bigint;
   baseContextRevision: bigint;
+  selectionRevision: bigint;
+  presentedFamilyIdsJson: string;
+  selectedFamilyIdsJson: string;
+  presentedOfferingIdsJson: string;
+  provisionalOfferingIdsJson: string;
+  suppressedOfferingIdsJson: string;
+  confirmedOfferingIdsJson: string;
+  comparisonCriterion: string;
+  profileBackground: string;
+  profileCourseInterests: string;
+  profileAmbitions: string;
+  profilePrimaryArea: string;
+  profileCandidateAreasJson: string;
+  profileStudentPhrase: string;
+  profileConstraintsText: string;
   uiClientInstanceId: string;
   uiTargetJson: string;
   uiNavigationRevision: bigint;
 };
+
+function parseIdListJson(value: string | undefined): string[] {
+  try {
+    const parsed = JSON.parse(value ?? '[]') as unknown;
+    return Array.isArray(parsed) ? parsed.map(String) : [];
+  } catch {
+    return [];
+  }
+}
+
+function selectionFromTurnRow(row: WorkerPendingTurnRow) {
+  return {
+    presentedFamilyIds: parseIdListJson(row.presentedFamilyIdsJson),
+    selectedFamilyIds: parseIdListJson(row.selectedFamilyIdsJson),
+    presentedOfferingIds: parseIdListJson(row.presentedOfferingIdsJson),
+    provisionalOfferingIds: parseIdListJson(row.provisionalOfferingIdsJson),
+    suppressedOfferingIds: parseIdListJson(row.suppressedOfferingIdsJson),
+    confirmedOfferingIds: parseIdListJson(row.confirmedOfferingIdsJson),
+    comparisonCriterion: String(row.comparisonCriterion ?? ''),
+    revision: BigInt(row.selectionRevision ?? 0n),
+  };
+}
+
+function profileFromTurnRow(row: WorkerPendingTurnRow) {
+  return {
+    background: String(row.profileBackground ?? ''),
+    courseInterests: String(row.profileCourseInterests ?? ''),
+    ambitions: String(row.profileAmbitions ?? ''),
+    primaryArea: String(row.profilePrimaryArea ?? ''),
+    candidateAreas: parseIdListJson(row.profileCandidateAreasJson),
+    studentPhrase: String(row.profileStudentPhrase ?? ''),
+    constraintsText: String(row.profileConstraintsText ?? ''),
+  };
+}
 
 type WorkerPendingWorkItemRow = {
   workItemId: string;
@@ -141,6 +190,8 @@ function rowToTurn(row: WorkerPendingTurnRow): ChatTurn | undefined {
     baseUiRevision: row.baseUiRevision,
     baseContextRevision: row.baseContextRevision,
     uiContext,
+    selectionContext: selectionFromTurnRow(row),
+    profile: profileFromTurnRow(row),
   };
 }
 
@@ -169,7 +220,6 @@ async function connect(config: ReturnType<typeof loadConfig>): Promise<DbConnect
               'SELECT * FROM catalog_course',
               'SELECT * FROM catalog_family',
               'SELECT * FROM worker_conversation_profiles',
-              'SELECT * FROM worker_conversation_selections',
               'SELECT * FROM worker_user_ui_states',
             ]);
           })
