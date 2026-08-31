@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Post, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Inject, Post, UploadedFile, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { mkdir, unlink, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
@@ -9,7 +9,7 @@ type UploadedDocument = { buffer: Buffer; size: number; mimetype: string; origin
 
 @Controller('documents')
 export class DocumentsController {
-  constructor(private readonly spacetime: SpacetimeUploadService) {}
+  constructor(@Inject(SpacetimeUploadService) private readonly spacetime: SpacetimeUploadService) {}
 
   @Post('upload')
   @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_DOCUMENT_BYTES, files: 1 } }))

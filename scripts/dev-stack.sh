@@ -1,13 +1,17 @@
 #!/usr/bin/env bash
-# Fast-iteration dev stack: SpacetimeDB in Docker, app services on the host with hot reload.
+# Fast-iteration dev stack: SpacetimeDB and app services on the host with hot reload.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-COMPOSE=(docker compose -f "${ROOT}/docker-compose.production.yml")
 STATE_DIR="${ROOT}/.dev"
 PID_DIR="${STATE_DIR}/pids"
 LOG_DIR="${STATE_DIR}/logs"
-SPACETIME_VOLUME="study-abroad-production_spacetimedb-advisor-data"
+SPACETIME_ROOT_DIR="${STATE_DIR}/spacetimedb"
+SPACETIME_DATA_DIR="${SPACETIME_ROOT_DIR}/data"
+SPACETIME_KEY_DIR="${SPACETIME_DATA_DIR}/keys"
+SPACETIME_CONFIG_DIR="${SPACETIME_ROOT_DIR}/config"
+SPACETIME_PID_FILE="${PID_DIR}/spacetimedb.pid"
+SPACETIME_LOG_FILE="${LOG_DIR}/spacetimedb.log"
 
 HOST_SERVICES=(agent api worker web)
 
@@ -177,14 +181,89 @@ stop_all_host_services() {
 }
 
 ensure_spacetime() {
-  echo "Starting SpacetimeDB (Docker) on host port 3002..."
-  "${COMPOSE[@]}" up -d --wait spacetimedb
+  if spacetime_cli server ping "${SPACETIME_URL}" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  local port="${SPACETIME_URL##*:}"
+  if [[ -n "$(port_listener_pids "${port}")" ]]; then
+    echo "Port ${port} is already in use and is not responding as SpacetimeDB at ${SPACETIME_URL}." >&2
+    return 1
+  fi
+
+  mkdir -p "${SPACETIME_KEY_DIR}"
+  if [[ ! -f "${SPACETIME_KEY_DIR}/id_ecdsa" ]]; then
+    openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:prime256v1 -out "${SPACETIME_KEY_DIR}/id_ecdsa"
+    openssl pkey -in "${SPACETIME_KEY_DIR}/id_ecdsa" -pubout -out "${SPACETIME_KEY_DIR}/id_ecdsa.pub"
+    chmod 600 "${SPACETIME_KEY_DIR}/id_ecdsa"
+    chmod 644 "${SPACETIME_KEY_DIR}/id_ecdsa.pub"
+  fi
+
+  echo "Starting SpacetimeDB on ${SPACETIME_URL}..."
+  (
+    cd "${ROOT}"
+    exec spacetime start \
+      --listen-addr "127.0.0.1:${port}" \
+      --data-dir "${SPACETIME_DATA_DIR}" \
+      --jwt-priv-key-path "${SPACETIME_KEY_DIR}/id_ecdsa" \
+      --jwt-pub-key-path "${SPACETIME_KEY_DIR}/id_ecdsa.pub" \
+      --non-interactive
+  ) >> "${SPACETIME_LOG_FILE}" 2>&1 &
+  local pid=$!
+  echo "${pid}" > "${SPACETIME_PID_FILE}"
+
+  for _ in $(seq 1 120); do
+    if spacetime_cli server ping "${SPACETIME_URL}" >/dev/null 2>&1; then
+      return 0
+    fi
+    if ! kill -0 "${pid}" 2>/dev/null; then
+      echo "SpacetimeDB exited during startup. Last log lines:" >&2
+      tail -n 40 "${SPACETIME_LOG_FILE}" >&2 || true
+      return 1
+    fi
+    sleep 0.25
+  done
+
+  echo "SpacetimeDB did not become ready. Last log lines:" >&2
+  tail -n 40 "${SPACETIME_LOG_FILE}" >&2 || true
+  return 1
+}
+
+spacetime_cli() {
+  XDG_CONFIG_HOME="${SPACETIME_CONFIG_DIR}" spacetime "$@"
+}
+
+ensure_spacetime_login() {
+  mkdir -p "${SPACETIME_CONFIG_DIR}"
+  if spacetime_cli login show >/dev/null 2>&1; then
+    return 0
+  fi
+  spacetime_cli login --server-issued-login "${SPACETIME_URL}" --no-browser
 }
 
 publish_coordinator() {
   echo "Building and publishing coordinator module..."
-  "${COMPOSE[@]}" build coordinator-publisher
-  "${COMPOSE[@]}" run --rm coordinator-publisher
+  ensure_spacetime_login
+  pnpm coordinator:build
+  spacetime_cli publish "${SPACETIME_DATABASE}" \
+    --server "${SPACETIME_URL}" \
+    --module-path coordinator/spacetimedb \
+    --yes \
+    --delete-data=on-conflict
+}
+
+stop_spacetime() {
+  if [[ ! -f "${SPACETIME_PID_FILE}" ]]; then
+    return 0
+  fi
+
+  local pid
+  pid="$(cat "${SPACETIME_PID_FILE}")"
+  if kill -0 "${pid}" 2>/dev/null; then
+    kill "${pid}" 2>/dev/null || true
+    wait "${pid}" 2>/dev/null || true
+  fi
+  rm -f "${SPACETIME_PID_FILE}"
 }
 
 print_urls() {
@@ -218,13 +297,14 @@ cmd_up() {
 }
 
 cmd_down() {
+  load_env
   stop_all_host_services
-  if [[ "${1:-}" == "--docker" ]]; then
-    echo "Stopping SpacetimeDB container..."
-    "${COMPOSE[@]}" stop spacetimedb
+  if [[ "${1:-}" == "--spacetimedb" ]]; then
+    echo "Stopping host SpacetimeDB..."
+    stop_spacetime
   else
-    echo "Host services stopped. SpacetimeDB container is still running."
-    echo "Stop it too with: pnpm dev:stop:docker"
+    echo "Host services stopped. SpacetimeDB is still running."
+    echo "Stop it too with: pnpm dev:stop:spacetimedb"
   fi
 }
 
@@ -271,10 +351,12 @@ cmd_restart() {
 }
 
 cmd_reset_db() {
-  echo "Resetting SpacetimeDB data volume..."
+  load_env
+  ensure_dirs
+  echo "Resetting host SpacetimeDB data..."
   stop_all_host_services
-  "${COMPOSE[@]}" stop spacetimedb || true
-  docker volume rm "${SPACETIME_VOLUME}" 2>/dev/null || true
+  stop_spacetime
+  rm -rf "${ROOT}/.dev/spacetimedb"
   ensure_spacetime
   publish_coordinator
   echo "Database reset and coordinator republished."
@@ -283,6 +365,7 @@ cmd_reset_db() {
 
 cmd_republish() {
   load_env
+  ensure_dirs
   ensure_spacetime
   publish_coordinator
   echo "Coordinator republished."
@@ -293,10 +376,10 @@ cmd_status() {
   load_env
   ensure_dirs
 
-  if "${COMPOSE[@]}" ps --status running spacetimedb 2>/dev/null | grep -q spacetimedb; then
-    echo "SpacetimeDB (Docker): running on ${SPACETIME_URL}"
+  if spacetime_cli server ping "${SPACETIME_URL}" >/dev/null 2>&1; then
+    echo "SpacetimeDB (host): running on ${SPACETIME_URL}"
   else
-    echo "SpacetimeDB (Docker): stopped"
+    echo "SpacetimeDB (host): stopped"
   fi
 
   local name
@@ -320,9 +403,9 @@ usage() {
 Usage: bash scripts/dev-stack.sh <command>
 
 Commands:
-  up                 Start SpacetimeDB, publish coordinator, run all host dev services
+  up                 Start host SpacetimeDB, publish coordinator, run all host dev services
   down               Stop host dev services (SpacetimeDB keeps running)
-  down --docker      Stop host services and the SpacetimeDB container
+  down --spacetimedb Stop host services and SpacetimeDB
   restart <target>   Restart web | api | web-api | worker | agent | all
   reset-db           Wipe SpacetimeDB data, republish coordinator
   republish          Rebuild and republish coordinator module

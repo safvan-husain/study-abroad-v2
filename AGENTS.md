@@ -9,14 +9,14 @@ When working on Version 1 or comparing behavior with the previous implementation
 
 ## Local Dev Stack (fast iteration)
 
-For day-to-day coding, use the **host dev stack**: SpacetimeDB runs in Docker; web, API, AI worker, and Agent Server run on the host with hot reload. Copy `.env.example` to `.env` before the first run.
+For day-to-day coding, use the **host dev stack**: SpacetimeDB, web, API, AI worker, and Agent Server all run on the host with hot reload. Copy `.env.example` to `.env` before the first run.
 
 ```sh
-pnpm dev                 # SpacetimeDB (Docker) + publish coordinator + all host services
-pnpm dev:status          # show Docker + host service status
-pnpm dev:stop            # stop host services (SpacetimeDB container keeps running)
-pnpm dev:stop:docker     # stop host services and SpacetimeDB
-pnpm dev:reset-db        # wipe SpacetimeDB data volume and republish coordinator
+pnpm dev                 # host SpacetimeDB + publish coordinator + all host services
+pnpm dev:status          # show host service status
+pnpm dev:stop            # stop host services (SpacetimeDB keeps running)
+pnpm dev:stop:spacetimedb # stop host services and SpacetimeDB
+pnpm dev:reset-db        # wipe local SpacetimeDB data and republish coordinator
 pnpm dev:republish       # rebuild/publish coordinator after Rust schema changes
 ```
 

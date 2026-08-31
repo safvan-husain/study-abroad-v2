@@ -8,7 +8,7 @@
   "scripts": {
     "dev": "bash scripts/dev-stack.sh up",
     "dev:stop": "bash scripts/dev-stack.sh down",
-    "dev:stop:docker": "bash scripts/dev-stack.sh down --docker",
+    "dev:stop:spacetimedb": "bash scripts/dev-stack.sh down --spacetimedb",
     "dev:status": "bash scripts/dev-stack.sh status",
     "dev:reset-db": "bash scripts/dev-stack.sh reset-db",
     "dev:republish": "bash scripts/dev-stack.sh republish",

@@ -1,4 +1,4 @@
-import { Injectable, OnApplicationShutdown, OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, OnApplicationShutdown, OnModuleInit } from '@nestjs/common';
 import { readdir, stat, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { SpacetimeUploadService } from './spacetime-upload.service.js';
@@ -8,7 +8,7 @@ const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1_000;
 @Injectable()
 export class DocumentCleanupService implements OnModuleInit, OnApplicationShutdown {
   private timer?: ReturnType<typeof setInterval>;
-  constructor(private readonly spacetime: SpacetimeUploadService) {}
+  constructor(@Inject(SpacetimeUploadService) private readonly spacetime: SpacetimeUploadService) {}
 
   onModuleInit() {
     void this.cleanup();
